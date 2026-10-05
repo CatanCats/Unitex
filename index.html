@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unitex Search</title>
+<meta name="description" content="One search box, your choice of engine. Pick Google, Bing, Yahoo, Ecosia, DuckDuckGo and more.">
+<link rel="search" type="application/opensearchdescription+xml" title="Unitex" href="opensearch.xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Unitex</h1>
+  <p class="tagline">One search box. You pick who searches.</p>
+
+  <form id="search" role="search" autocomplete="off">
+    <input id="q" name="q" type="search" placeholder="Search…" aria-label="Search query" autofocus>
+    <button type="submit">Search</button>
+  </form>
+
+  <fieldset class="group">
+    <legend>Search with</legend>
+    <div id="engines" class="chips" role="radiogroup"></div>
+  </fieldset>
+
+  <fieldset class="group">
+    <legend>Focus</legend>
+    <div id="focus" class="chips" role="radiogroup"></div>
+    <p id="focus-hint" class="hint"></p>
+  </fieldset>
+
+  <p class="hint keys">Tip: press <kbd>Tab</kbd> then <kbd>←</kbd>/<kbd>→</kbd> to switch engine, or type <kbd>!g</kbd>, <kbd>!b</kbd>, <kbd>!e</kbd>… at the start of a query.</p>
+</main>
+<footer>
+  Queries go straight from your browser to the engine you pick. Nothing is sent to or stored by Unitex.
+  · <a href="https://github.com/CatanCats/Unitex">Source</a>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
