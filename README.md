@@ -15,7 +15,7 @@ Pick Google, Bing, Yahoo, Ecosia, DuckDuckGo, Brave, Startpage, Qwant or Mojeek,
 
 ## Hosting
 
-`.github/workflows/pages.yml` deploys the site to GitHub Pages on every push to `main`. In the repository settings, set **Pages → Source** to **GitHub Actions** if the first run doesn't enable it.
+GitHub Pages serves the `main` branch directly at https://catancats.github.io/Unitex/.
 
 ## Adding an engine
 
