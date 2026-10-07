@@ -4,37 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unitex Search</title>
-<meta name="description" content="One search box, your choice of engine. Pick Google, Bing, Yahoo, Ecosia, DuckDuckGo and more.">
+<meta name="description" content="One search box, your choice of engine: Google, Bing, Ecosia, DuckDuckGo, Reddit, GitHub and 30+ more. With a live news panel.">
+<meta name="color-scheme" content="light dark">
 <link rel="search" type="application/opensearchdescription+xml" title="Unitex" href="opensearch.xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bd6'/%3E%3Cpath d='M10 9v9a6 6 0 0 0 12 0V9' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="glow" aria-hidden="true"></div>
+
+<header class="top">
+  <a class="brand" href="./"><span class="logo" aria-hidden="true">U</span>Unitex</a>
+  <button id="theme" class="icon-btn" type="button" aria-label="Toggle dark mode" title="Toggle theme">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+  </button>
+</header>
+
 <main>
-  <h1>Unitex</h1>
-  <p class="tagline">One search box. You pick who searches.</p>
+  <section class="hero">
+    <h1>Search anywhere.<br><span>You pick who answers.</span></h1>
 
-  <form id="search" role="search" autocomplete="off">
-    <input id="q" name="q" type="search" placeholder="Search…" aria-label="Search query" autofocus>
-    <button type="submit">Search</button>
-  </form>
+    <form id="search" class="searchbar" role="search" autocomplete="off">
+      <button id="engine-btn" class="engine-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="picker">
+        <span id="engine-icon" class="slot"></span>
+        <span id="engine-name"></span>
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+      </button>
+      <input id="q" type="search" placeholder="Search…" aria-label="Search query" autofocus>
+      <kbd class="slash" aria-hidden="true">/</kbd>
+      <button class="go" type="submit" aria-label="Search">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
+      </button>
 
-  <fieldset class="group">
-    <legend>Search with</legend>
-    <div id="engines" class="chips" role="radiogroup"></div>
-  </fieldset>
+      <div id="picker" class="picker" role="dialog" aria-label="Choose a search engine" hidden>
+        <input id="picker-filter" type="search" placeholder="Filter engines…" aria-label="Filter engines">
+        <div id="picker-groups"></div>
+      </div>
+    </form>
 
-  <fieldset class="group">
-    <legend>Focus</legend>
-    <div id="focus" class="chips" role="radiogroup"></div>
-    <p id="focus-hint" class="hint"></p>
-  </fieldset>
+    <div id="quick" class="quick" aria-label="Recent engines"></div>
 
-  <p class="hint keys">Tip: press <kbd>Tab</kbd> then <kbd>←</kbd>/<kbd>→</kbd> to switch engine, or type <kbd>!g</kbd>, <kbd>!b</kbd>, <kbd>!e</kbd>… at the start of a query.</p>
+    <div class="focus-row">
+      <div id="focus" class="segmented" role="radiogroup" aria-label="Focus"></div>
+      <p id="focus-hint" class="hint"></p>
+    </div>
+  </section>
+
+  <section class="news" aria-labelledby="news-title">
+    <div class="news-head">
+      <h2 id="news-title">News</h2>
+      <div id="news-tabs" class="tabs" role="tablist"></div>
+    </div>
+    <ul id="news-list" class="news-list" aria-live="polite"></ul>
+  </section>
 </main>
+
 <footer>
-  Queries go straight from your browser to the engine you pick. Nothing is sent to or stored by Unitex.
+  Queries go straight from your browser to the engine you pick. Unitex never sees them.
+  · Tip: type <kbd>!g</kbd>, <kbd>!r</kbd>, <kbd>!gh</kbd>… to switch engine for one search
   · <a href="https://github.com/CatanCats/Unitex">Source</a>
 </footer>
+
+<script src="engines.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
