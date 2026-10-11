@@ -6,7 +6,7 @@
 <title>Unitex Access Test</title>
 <meta name="description" content="Checks, from your own browser, which search engines and sites let Unitex read their results.">
 <meta name="color-scheme" content="light dark">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=8">
 <style>
   .test-wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
   .test-wrap h1 { font-size: 1.8rem; margin: 0 0 8px; letter-spacing: -0.02em; }
@@ -29,7 +29,8 @@
     <tbody id="rows"></tbody>
   </table>
 </main>
-<script src="helper.js?v=5"></script>
+<script src="helper.js?v=8"></script>
+<script src="listings.js?v=8"></script>
 <script>
 const Q = "3 bedroom house to rent brunswick";
 const SITES = [
@@ -40,21 +41,22 @@ const SITES = [
   ["Brave Search", "https://search.brave.com/search?q="],
   ["Ecosia", "https://www.ecosia.org/search?q="],
   ["Mojeek", "https://www.mojeek.com/search?q="],
-  ["realestate.com.au", "https://www.realestate.com.au/rent/in-brunswick,+vic+3056/list-1?q="],
-  ["domain.com.au", "https://www.domain.com.au/rent/brunswick-vic-3056/?q="],
+  ["realestate.com.au", "https://www.realestate.com.au/rent/in-brunswick,+vic+3056/list-1#", parseRealestate],
+  ["domain.com.au", "https://www.domain.com.au/rent/brunswick-vic-3056/#", parseDomain],
   // For comparison: sources Unitex already uses because they do allow it.
   ["Wikipedia (allows it)", "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srsearch="],
   ["Hacker News (allows it)", "https://hn.algolia.com/api/v1/search?query="],
 ];
 
 const rows = document.getElementById("rows");
-for (const [name, base] of SITES) {
+for (const [name, base, parse] of SITES) {
   const url = base + encodeURIComponent(Q);
   const tr = document.createElement("tr");
   const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener", textContent: "Open" });
   tr.append(Object.assign(document.createElement("td"), { textContent: name }), Object.assign(document.createElement("td"), { textContent: "Not tested yet" }), Object.assign(document.createElement("td"), { textContent: "" }));
   const td = document.createElement("td"); td.append(a); tr.append(td);
   tr.dataset.url = url;
+  tr.parse = parse;
   rows.append(tr);
 }
 
@@ -79,8 +81,14 @@ document.getElementById("run").onclick = async () => {
     try {
       const r = await fetch(tr.dataset.url, { signal: ctrl.signal });
       const text = await r.text();
-      cell.className = r.ok ? "ok" : "bad";
-      cell.textContent = r.ok ? `Readable (HTTP ${r.status}, ${Math.round(text.length / 1024)} KB)` : `Answered, but with HTTP ${r.status}`;
+      // For listing sites, check whether the reply really contains listings or is a bot-check page.
+      const listings = tr.parse && r.ok ? tr.parse(text).length : null;
+      const ok = r.ok && listings !== 0;
+      cell.className = ok ? "ok" : "bad";
+      cell.textContent = !r.ok ? `Readable, but it answered with an error (HTTP ${r.status})${botCheck(text) ? ": a bot-check page" : ""}`
+        : listings === null ? `Readable (HTTP ${r.status}, ${Math.round(text.length / 1024)} KB)`
+        : listings ? `Readable: ${listings} listings found`
+        : `Readable, but no listings in it${botCheck(text) ? ": it's a bot-check page" : ""}`;
     } catch (err) {
       cell.className = "bad";
       cell.textContent = err.name === "AbortError" ? "No answer within 10 seconds" : "Blocked by your browser: the site doesn't allow other websites to read it";

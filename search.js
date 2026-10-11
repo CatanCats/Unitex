@@ -119,6 +119,12 @@ for (const e of HELPER_ENGINES) {
 }
 SOURCES.duckduckgo.name = "DuckDuckGo Instant Answers";
 
+// Property sites that let other websites read them: searched directly on Houses searches in Australia.
+const directSites = () => topicId === "houses" && regionId === "AU" ? Object.keys(LISTING_SITES) : [];
+for (const id of Object.keys(LISTING_SITES)) {
+  SOURCES["listing_" + id] = { name: LISTING_SITES[id].name, group: "main", enabled: () => directSites().includes(id), run: q => searchListings(id, q) };
+}
+
 // Image sources return [{ thumb, url, title, via }].
 const IMAGE_SOURCES = {
   openverse: { name: "Openverse", async run(q) {
@@ -314,7 +320,7 @@ function renderSources(settled, sources, extraLocked = []) {
   const chips = settled.map(s => {
     const name = sources[s.n].name;
     if (s.err) {
-      const why = /CAPTCHA|JavaScript/.test(s.err.message) ? s.err.message : "couldn't be read right now";
+      const why = /CAPTCHA|JavaScript/.test(s.err.message) || s.n.startsWith("listing_") ? s.err.message : "couldn't be read right now";
       return el("span", { className: "src bad", title: why }, "✕ ", name, el("small", { textContent: " " + why }));
     }
     return el("span", { className: "src ok" }, "✓ ", name, el("small", { textContent: ` ${s.r.length}` }));
@@ -327,14 +333,14 @@ function renderSources(settled, sources, extraLocked = []) {
 function renderNotice() {
   fill($("notice"),
     el("strong", { textContent: "Unitex is only partly working in this browser." }),
-    el("p", { textContent: "Without Unitex Helper it can only search sites that let other websites read them directly, like Wikipedia, DuckDuckGo's instant answers, Reddit, Openverse and Open Library. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia, Mojeek, and sites like realestate.com.au can't be searched until you install it." }),
+    el("p", { textContent: "Without Unitex Helper it can only search sites that let other websites read them directly, like Wikipedia, DuckDuckGo's instant answers, Reddit, Openverse and Open Library. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia and Mojeek can't be searched until you install it." }),
     el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
   $("notice").hidden = !!helperVersion();
 }
 
 // ---------- topic box ----------
 
-function renderTopicSites(hits) {
+function renderTopicSites(hits, settled) {
   const box = $("topic-sites");
   const topic = topicById(topicId);
   const sites = topicSites(topic);
@@ -343,9 +349,18 @@ function renderTopicSites(hits) {
   const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
   region.onchange = () => { setRegion(region.value); go(); };
   const on = !!helperVersion();
+  const direct = directSites().map(id => LISTING_SITES[id].name);
+  // Before results arrive a directly-read site counts as searched; afterwards only if it returned listings.
+  const directOk = name => { const r = settled?.find(x => x.n === "listing_" + Object.keys(LISTING_SITES).find(id => LISTING_SITES[id].name === name)); return !r || !!r.r?.length; };
   fill(box,
     el("div", { className: "ts-head" }, el("h2", { textContent: `${topic.name}: ${sites.length} specialist sites` }), el("label", { className: "region" }, "in ", region)),
-    el("div", { className: "ts-chips" }, ...sites.map(s => el("span", { className: "src " + (on ? "ok" : "locked"), title: on ? "Searched" : "Needs Unitex Helper" }, on ? "" : "🔒 ", domainIcon(s.domain), " ", s.name))),
+    el("div", { className: "ts-chips" }, ...sites.map(s => {
+      const state = on || (direct.includes(s.domain) && directOk(s.domain)) ? "ok" : direct.includes(s.domain) ? "bad" : "locked";
+      return el("span", { className: "src " + state, title: { ok: "Searched", bad: "Tried directly, no listings came back", locked: "Needs Unitex Helper" }[state] }, { ok: "", bad: "✕ ", locked: "🔒 " }[state], domainIcon(s.domain), " ", s.name);
+    })),
+    !on && direct.length && el("p", { className: "hint", textContent: direct.every(directOk)
+      ? `${direct.join(" and ")} are read directly; the others need Unitex Helper.`
+      : `Unitex tried reading ${direct.join(" and ")} directly; see "Searched" below for what came back. The others need Unitex Helper.` }),
     on && el("p", { className: "hint", textContent: hits ? `Searched through ${HELPER_ENGINES.map(e => e.name).join(", ")}; their pages are in the results below.` : "The engines found no pages on these sites for this search. Try fewer words." }),
     regionId === "*" && el("p", { className: "hint", textContent: "Pick your country to add local sites." }));
   box.hidden = false;
@@ -472,13 +487,14 @@ async function go() {
   if (id !== runId) return;
 
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
-  const engineLists = HELPER_ENGINES.map(e => by["helper_" + e.id] || []);
+  const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
+  const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
   const otherLists = ["wikipedia", "duckduckgo", "marginalia", "reddit", "hackernews", "news"].map(n => by[n] || []);
   // On a topic, the engines' site-restricted listings come first; other sources follow.
   const main = topicId !== "all"
     ? [...fuse(engineLists), ...fuse(otherLists)].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
     : fuse([...engineLists, ...otherLists]);
-  if (topicId !== "all") renderTopicSites(engineLists.flat().length);
+  if (topicId !== "all") renderTopicSites(engineLists.flat().length, settled);
   renderSources(settled, MAIN_SOURCES, LOCKED_ENGINES());
 
   $("results").replaceChildren(...main.map(resultItem).filter(Boolean));
