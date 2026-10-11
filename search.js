@@ -294,6 +294,65 @@ const CODE_SOURCES = {
   }},
 };
 
+// ---------- more image and video sources (they let other websites read them) ----------
+
+Object.assign(IMAGE_SOURCES, {
+  nasa: { name: "NASA Image Library", async run(q) {
+    const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=image&page_size=16`);
+    return (d.collection?.items || []).filter(i => i.links?.[0]?.href).map(i => ({ thumb: i.links[0].href, full: i.links[0].href.replace("~thumb", "~medium"), url: `https://images.nasa.gov/details/${i.data?.[0]?.nasa_id}`, title: i.data?.[0]?.title, via: "NASA", creator: i.data?.[0]?.center, license: "Public domain (NASA)" }));
+  }},
+  artic: { name: "Art Institute of Chicago", async run(q) {
+    const d = await getJson(`https://api.artic.edu/api/v1/artworks/search?q=${encodeURIComponent(q)}&fields=id,title,image_id,artist_title,is_public_domain&limit=16`);
+    return (d.data || []).filter(a => a.image_id).map(a => ({ thumb: `https://www.artic.edu/iiif/2/${a.image_id}/full/400,/0/default.jpg`, full: `https://www.artic.edu/iiif/2/${a.image_id}/full/1200,/0/default.jpg`, url: `https://www.artic.edu/artworks/${a.id}`, title: a.title, via: "Art Institute of Chicago", creator: a.artist_title, license: a.is_public_domain ? "Public domain" : "" }));
+  }},
+  cleveland: { name: "Cleveland Museum of Art", async run(q) {
+    const d = await getJson(`https://openaccess-api.clevelandart.org/api/artworks/?q=${encodeURIComponent(q)}&has_image=1&limit=16`);
+    return (d.data || []).filter(a => a.images?.web?.url).map(a => ({ thumb: a.images.web.url, full: a.images.print?.url || a.images.web.url, url: a.url, title: a.title, via: "Cleveland Museum of Art", creator: a.creators?.[0]?.description, license: "CC0" }));
+  }},
+  europeana: { name: "Europeana", async run(q) {
+    const d = await getJson(`https://api.europeana.eu/record/v2/search.json?wskey=api2demo&query=${encodeURIComponent(q)}&media=true&qf=TYPE:IMAGE&rows=16`);
+    return (d.items || []).filter(i => i.edmPreview?.[0]).map(i => ({ thumb: i.edmPreview[0], full: i.edmIsShownBy?.[0] || i.edmPreview[0], url: i.guid, title: i.title?.[0], via: "Europeana", creator: i.dataProvider?.[0], license: (i.rights?.[0] || "").replace(/^https?:\/\//, "") }));
+  }},
+  inaturalist: { name: "iNaturalist (nature photos)", async run(q) {
+    const d = await getJson(`https://api.inaturalist.org/v1/observations?q=${encodeURIComponent(q)}&photos=true&quality_grade=research&per_page=16`);
+    return (d.results || []).filter(o => o.photos?.[0]?.url).map(o => ({ thumb: o.photos[0].url.replace("square", "medium"), full: o.photos[0].url.replace("square", "large"), url: o.uri, title: o.taxon?.preferred_common_name || o.taxon?.name || o.species_guess, via: "iNaturalist", creator: o.user?.login, license: (o.photos[0].license_code || "").toUpperCase() }));
+  }},
+  wikipedia: { name: "Wikipedia", async run(q) {
+    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrlimit=12&prop=pageimages&piprop=thumbnail|original&pithumbsize=400&format=json&origin=*`);
+    return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index).filter(p => p.thumbnail?.source)
+      .map(p => ({ thumb: p.thumbnail.source, full: p.original?.source, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`, title: p.title, via: "Wikipedia" }));
+  }},
+});
+
+// YouTube through Invidious and Piped (open front-ends that let other websites read them); each is tried
+// until one answers. Videos play in Unitex's player via youtube-nocookie.com.
+const INVIDIOUS = ["inv.nadeko.net", "invidious.nerdvpn.de", "iv.melmac.space", "invidious.privacyredirect.com", "yewtu.be"];
+const PIPED = ["pipedapi.kavin.rocks", "pipedapi.adminforge.de", "api.piped.private.coffee"];
+async function firstThatAnswers(hosts, fn) {
+  let last;
+  for (const h of hosts) { try { const r = await fn(h); if (r.length) return r; } catch (e) { last = e; } }
+  throw last || new Error("no server answered");
+}
+Object.assign(VIDEO_SOURCES, {
+  youtube: { name: "YouTube (via Invidious / Piped)", async run(q) {
+    try {
+      return await firstThatAnswers(INVIDIOUS, async h => (await getJson(`https://${h}/api/v1/search?q=${encodeURIComponent(q)}&type=video`, 6000)).filter(v => v.videoId).slice(0, 16).map(v => ({
+        title: v.title, url: `https://www.youtube.com/watch?v=${v.videoId}`, thumb: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`, secs: v.lengthSeconds, by: v.author, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${v.videoId}` })));
+    } catch {
+      return await firstThatAnswers(PIPED, async h => ((await getJson(`https://${h}/search?q=${encodeURIComponent(q)}&filter=videos`, 6000)).items || []).filter(v => v.url?.includes("watch?v=")).slice(0, 16).map(v => {
+        const id = v.url.split("v=")[1]; return { title: v.title, url: `https://www.youtube.com/watch?v=${id}`, thumb: v.thumbnail, secs: v.duration, by: v.uploaderName, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${id}` }; }));
+    }
+  }},
+  odysee: { name: "Odysee", async run(q) {
+    const d = await getJson(`https://lighthouse.odysee.tv/search?s=${encodeURIComponent(q)}&size=12&mediaType=video&include=channel,title,thumbnail_url,duration`);
+    return (Array.isArray(d) ? d : []).map(v => ({ title: v.title || v.name, url: `https://odysee.com/${v.name}:${v.claimId}`, thumb: v.thumbnail_url, secs: v.duration, by: v.channel, via: "Odysee", embed: `https://odysee.com/$/embed/${v.name}:${v.claimId}` }));
+  }},
+  nasa: { name: "NASA Video Library", async run(q) {
+    const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=video&page_size=12`);
+    return (d.collection?.items || []).map(i => ({ title: i.data?.[0]?.title, url: `https://images.nasa.gov/details/${i.data?.[0]?.nasa_id}`, thumb: i.links?.[0]?.href, by: i.data?.[0]?.center, via: "NASA", file: `https://images-assets.nasa.gov/video/${i.data?.[0]?.nasa_id}/${i.data?.[0]?.nasa_id}~mobile.mp4` }));
+  }},
+});
+
 // With the helper, each tab also searches the engines' own sections (Bing News, Google News, …).
 for (const [tabId, sources] of Object.entries({ news: NEWS_SOURCES, images: IMAGE_SOURCES, videos: VIDEO_SOURCES })) {
   for (const [id, src] of Object.entries(HELPER_VERTICALS[tabId])) sources["helper_" + id] = { ...src, enabled: () => !!helperVersion() };
@@ -303,6 +362,7 @@ const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filt
 // The tabs. "kind" picks how results are drawn.
 const TABS = [
   { id: "all",    name: "All",       kind: "web" },
+  { id: "ai",     name: "AI",        kind: "ai" },
   { id: "images", name: "Images",    kind: "images", sources: IMAGE_SOURCES, noun: "images" },
   { id: "videos", name: "Videos",    kind: "cards",  sources: VIDEO_SOURCES, noun: "videos" },
   { id: "news",   name: "News",      kind: "list",   sources: NEWS_SOURCES, noun: "news stories" },
@@ -509,6 +569,22 @@ const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ s
 const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
 const empty = text => el("li", { className: "empty", textContent: text });
 
+function mergeMain(settled) {
+  const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
+  const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
+  const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
+  const indexLists = ["searxng", "qwant", "mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
+  const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews", "news"].map(n => by[n] || []);
+  // On a topic, the engines' site-restricted listings come first; other sources follow.
+  const main = topicId !== "all"
+    ? [...fuse(engineLists), ...fuse([...indexLists, ...otherLists])].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
+    : fuse([...engineLists, ...indexLists, ...otherLists]);
+  return { main, engineLists };
+}
+
+// The strip of images on the All tab uses a few fast sources; the Images tab uses them all.
+const STRIP_SOURCES = Object.fromEntries(Object.entries(IMAGE_SOURCES).filter(([n]) => ["openverse", "commons", "wikipedia", "nasa", "helper_bing", "helper_google"].includes(n)));
+
 async function go() {
   const p = new URLSearchParams({ q: query });
   if (topicId !== "all") p.set("topic", topicId);
@@ -520,7 +596,7 @@ async function go() {
   renderTopics();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview", "tab-bar"]) $(id).hidden = true;
+  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
   document.body.classList.toggle("mode-on", modeOn && !!MODES[topicId] && tab === "all");
   $("results").replaceChildren();
@@ -528,6 +604,16 @@ async function go() {
   if (!query) { $("status").textContent = "Type something to search."; return; }
   const id = ++runId;
   const t = TABS.find(x => x.id === tab);
+
+  if (t.kind === "ai") {
+    $("status").textContent = "Searching, so the AI can read the results…";
+    const settled = await settle(MAIN_SOURCES, query);
+    if (id !== runId) return;
+    renderSources(settled, MAIN_SOURCES, LOCKED_ENGINES());
+    $("status").textContent = "";
+    renderAiTab(query, mergeMain(settled).main);
+    return;
+  }
 
   if (t.kind !== "web") {
     $("status").textContent = `Searching ${t.name.toLowerCase()}…`;
@@ -542,24 +628,16 @@ async function go() {
   }
 
   renderTopicSites();
-  renderAiOverviews(query);
+  aiOverviewStart();
   $("results").replaceChildren(...skeletons(5));
   $("status").textContent = "Searching…";
 
   const cardSource = CARD_SOURCES[topicId];
-  const [settled, images, cardSettled] = await Promise.all([settle(MAIN_SOURCES, query), settle(IMAGE_SOURCES, query), cardSource ? settle({ [topicId]: cardSource }, query) : []]);
+  const [settled, images, cardSettled] = await Promise.all([settle(MAIN_SOURCES, query), topicId === "all" ? settle(STRIP_SOURCES, query) : [], cardSource ? settle({ [topicId]: cardSource }, query) : []]);
   wikiAnswer(query).catch(() => {});
   if (id !== runId) return;
 
-  const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
-  const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
-  const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
-  const indexLists = ["searxng", "qwant", "mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
-  const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews", "news"].map(n => by[n] || []);
-  // On a topic, the engines' site-restricted listings come first; other sources follow.
-  const main = topicId !== "all"
-    ? [...fuse(engineLists), ...fuse([...indexLists, ...otherLists])].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
-    : fuse([...engineLists, ...indexLists, ...otherLists]);
+  const { main, engineLists } = mergeMain(settled);
   if (topicId !== "all") renderTopicSites(engineLists.flat().length, settled);
   renderSources([...cardSettled, ...settled], { ...(cardSource ? { [topicId]: cardSource } : {}), ...MAIN_SOURCES }, LOCKED_ENGINES());
 
@@ -568,6 +646,7 @@ async function go() {
   $("results").replaceChildren(...rest.map(resultItem).filter(Boolean));
   if (!main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
+  renderAiOverview(query, main);
   const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
   if (tiles.length && topicId === "all") {
     fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; go(); } }));

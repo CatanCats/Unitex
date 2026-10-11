@@ -195,6 +195,33 @@ const HELPER_VERTICALS = {
     }},
   },
   images: {
+    google: { name: "Google Images", async run(q) {
+      // Google's basic (no-JavaScript) image results.
+      const { doc, base } = await helperDoc(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=isch&gbv=1&hl=en`);
+      return [...doc.querySelectorAll("a[href] img[src^='http']")].map(img => {
+        const a = img.closest("a"); const url = unwrapLink(a.getAttribute("href"), base);
+        return url && !/google\./.test(new URL(url).hostname) && { thumb: img.getAttribute("src"), url, title: img.getAttribute("alt") || new URL(url).hostname, via: "Google Images" };
+      }).filter(Boolean).slice(0, 20);
+    }},
+    brave: { name: "Brave Images", async run(q) {
+      const { doc, base, html } = await helperDoc(`https://search.brave.com/images?q=${encodeURIComponent(q)}`);
+      const fromDom = [...doc.querySelectorAll("a[href] img[src^='http']")].map(img => {
+        const a = img.closest("a"); const url = unwrapLink(a.getAttribute("href"), base);
+        return url && !/brave\.com/.test(new URL(url).hostname) && { thumb: img.getAttribute("src"), url, title: img.getAttribute("alt") || new URL(url).hostname, via: "Brave Images" };
+      }).filter(Boolean);
+      if (fromDom.length) return fromDom.slice(0, 20);
+      // Brave also embeds results as JSON in the page.
+      const out = [];
+      for (const m of html.matchAll(/"url":"(https?:[^"]+)","thumbnail":\{"src":"(https?:[^"]+)"/g)) out.push({ url: m[1].replace(/\\u002F/g, "/"), thumb: m[2].replace(/\\u002F/g, "/"), title: "", via: "Brave Images" });
+      return out.slice(0, 20);
+    }},
+    mojeek: { name: "Mojeek Images", async run(q) {
+      const { doc, base } = await helperDoc(`https://www.mojeek.com/search?q=${encodeURIComponent(q)}&fmt=images`);
+      return [...doc.querySelectorAll("a[href] img[src]")].map(img => {
+        const a = img.closest("a"); const url = unwrapLink(a.getAttribute("href"), base); const src = unwrapLink(img.getAttribute("src"), base);
+        return url && src && !/mojeek\.com/.test(new URL(url).hostname) && { thumb: src, url, title: img.getAttribute("alt") || new URL(url).hostname, via: "Mojeek Images" };
+      }).filter(Boolean).slice(0, 20);
+    }},
     bing: { name: "Bing Images", async run(q) {
       const { doc } = await helperDoc(`https://www.bing.com/images/search?q=${encodeURIComponent(q)}&form=HDRSC2`);
       return [...doc.querySelectorAll("a.iusc[m]")].map(a => attrJson(a, "m")).filter(m => m?.turl && m?.purl)
@@ -202,6 +229,10 @@ const HELPER_VERTICALS = {
     }},
   },
   videos: {
+    google: { name: "Google Videos", async run(q) {
+      const res = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=vid&hl=en`);
+      return parseResultsPage(res.html, res.url, "Google Videos").map(r => ({ title: r.title, url: r.url, thumb: r.image, via: "Google Videos", by: r.domain, embed: ytEmbed(r.url) }));
+    }},
     bing: { name: "Bing Videos", async run(q) {
       const { doc, base } = await helperDoc(`https://www.bing.com/videos/search?q=${encodeURIComponent(q)}`);
       return [...doc.querySelectorAll("[vrhm], .mc_vtvc")].map(c => {

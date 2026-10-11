@@ -210,3 +210,16 @@ function openSavedDrawer() {
   theme.before(b);
   updateSavedButton();
 })();
+
+// Chrome only lets a page download its built-in AI right after a click or key press, so Unitex starts that
+// download on the first one (searching from the home page counts too). waitNano resolves when it's ready.
+var nanoReady;
+function aiWarmUp() {
+  if (!navigator.userActivation?.isActive) return;
+  for (const api of [globalThis.LanguageModel, globalThis.Summarizer].filter(Boolean)) {
+    const opts = api === globalThis.Summarizer ? { outputLanguage: "en" } : { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
+    api.availability(opts).then(a => { if (a === "downloadable" || a === "downloading") nanoReady ||= api.create(opts).then(x => x.destroy?.(), () => {}); }).catch(() => {});
+    break;
+  }
+}
+for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, aiWarmUp, { capture: true });
