@@ -151,7 +151,7 @@ function renderNews() {
   const list = $("news-list");
   const items = current.stories;
   if (!items.length) {
-    list.replaceChildren(...(current.pending ? Array.from({ length: 6 }, () => el("li", { className: "skeleton" })) : [el("li", { className: "empty", textContent: "No stories came back from the news sources. They may be blocking reads right now; Unitex will try again in a few minutes." })]));
+    list.replaceChildren(...(current.pending ? Array.from({ length: 6 }, () => el("li", { className: "skeleton" })) : [el("li", { className: "empty" }, "The news sources didn't answer this time. Unitex tries again in a few minutes. ", !helperVersion() || helperOutdated() ? el("a", { href: "install.html", textContent: "Get the latest Unitex Helper" }) : "")]));
   } else {
     // Lead with the first story that has a picture.
     const lead = items.findIndex(i => i.image);
@@ -162,18 +162,7 @@ function renderNews() {
   renderNewsStatus();
 }
 
-function renderNewsStatus() {
-  const r = current.report;
-  const engines = r.filter(x => !x.outlet && x.n).map(x => x.name);
-  const sites = r.filter(x => x.outlet && x.n).length, siteTotal = r.filter(x => x.outlet).length;
-  const failed = r.filter(x => x.err);
-  const box = $("news-status");
-  box.replaceChildren(
-    current.pending ? `Reading live from ${r.length} of ${r.length + current.pending} sources…` :
-      `Live from ${engines.join(", ") || "no news engines"}${siteTotal ? ` and ${sites} of ${siteTotal} news websites` : ""} · ${current.at ? ago(current.at / 1000) : ""} · refreshes by itself`,
-    failed.length > 0 && !current.pending ? el("span", { className: "hint", title: failed.map(f => `${f.name}: ${f.err}`).join("\n"), textContent: ` · ${failed.length} didn't answer` }) : "",
-    !helperVersion() ? el("span", {}, " · Google News, Bing News, Yahoo News and the news websites need ", el("a", { href: "install.html", textContent: "Unitex Helper" })) : "");
-}
+function renderNewsStatus() {}
 
 let loadSeq = 0;
 async function loadNews() {
@@ -193,7 +182,6 @@ async function loadNews() {
 }
 // Fresh stories every few minutes while the page is open, and when you come back to the tab.
 setInterval(() => { if (!document.hidden) loadNews(); }, NEWS_REFRESH_MS);
-setInterval(renderNewsStatus, 30000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - current.at > NEWS_REFRESH_MS) loadNews(); });
 
 // ---------- helper update banner ----------

@@ -2,8 +2,8 @@
 // browser every time the page opens (and every few minutes after): Google News, Bing News and
 // Yahoo News, plus each section's news websites' own feeds (listed in scripts/feeds.json). The same
 // story from several places becomes one tile that says which ones found it.
-// These feeds don't let other websites read them, so they come through Unitex Helper. Without it,
-// news comes from sources that do: GDELT (a live index of world news), Reddit and Hacker News.
+// These feeds don't let other websites read them, so they come through Unitex Helper, or through a
+// public feed relay when the helper can't. GDELT, Reddit and Hacker News are read directly.
 
 const NEWS_REFRESH_MS = 3 * 60 * 1000;
 const GN = { AU: ["en-AU", "AU"], NZ: ["en-NZ", "NZ"], UK: ["en-GB", "GB"], US: ["en-US", "US"], CA: ["en-CA", "CA"], "*": ["en-US", "US"] };
@@ -52,12 +52,36 @@ function parseFeed(xml, via, fallbackSource) {
   }).filter(Boolean);
 }
 
-const viaHelper = (url, via, source) => helperFetch(url, 15000).then(r => parseFeed(r.html, via, source));
+// Every read gives up after 10 seconds, so one slow website never holds the rest back.
+const SOURCE_TIMEOUT_MS = 10000;
+async function fetchT(url, init = {}, ms = SOURCE_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...init, signal: ctrl.signal }); }
+  catch (e) { throw new Error(e.name === "AbortError" ? "took too long" : "blocked or offline"); }
+  finally { clearTimeout(t); }
+}
+const withTimeout = (p, ms = SOURCE_TIMEOUT_MS) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("took too long")), ms))]);
+
+// Feeds are read through Unitex Helper. If it isn't installed, is too old for news, or the read fails,
+// public feed relays that let websites read RSS are tried instead (they only ever see the feed address).
+const RELAYS = [u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`];
+async function readFeed(url) {
+  let last;
+  if (helperVersion()) {
+    try { return (await withTimeout(helperFetch(url, SOURCE_TIMEOUT_MS))).html; } catch (e) { last = e; }
+  }
+  for (const relay of RELAYS) {
+    try { const r = await fetchT(relay(url)); if (r.ok) { const t = await r.text(); if (/<(rss|feed|rdf)/i.test(t.slice(0, 2000))) return t; } } catch (e) { last = e; }
+  }
+  throw last || new Error("couldn't be read");
+}
+const viaHelper = (url, via, source) => readFeed(url).then(xml => parseFeed(xml, via, source));
 
 let feedConfig = null;
 async function outletFeeds(section) {
   if (!feedConfig) {
-    try { feedConfig = await (await fetch("scripts/feeds.json", { cache: "no-cache" })).json(); } catch { feedConfig = {}; }
+    try { feedConfig = await (await fetchT("scripts/feeds.json", { cache: "no-cache" })).json(); } catch { feedConfig = null; return []; }
   }
   const pick = cid => (feedConfig[cid]?.feeds || []).filter(f => !f.aggregator);
   // Top takes a few websites from every section.
@@ -68,7 +92,7 @@ async function outletFeeds(section) {
 // Every source for a section: { name, run() → stories }.
 async function newsSourcesFor(section) {
   const out = [];
-  if (helperVersion()) {
+  {
     const g = section.googleSearch ? `https://news.google.com/rss/search?q=${encodeURIComponent(section.googleSearch)}&${gnParams()}`
       : section.google ? `https://news.google.com/rss/headlines/section/topic/${section.google}?${gnParams()}` : `https://news.google.com/rss?${gnParams()}`;
     out.push({ name: "Google News", run: () => viaHelper(g, "Google News") });
@@ -78,14 +102,14 @@ async function newsSourcesFor(section) {
   }
   // These let other websites read them, so they work with or without the helper.
   out.push({ name: "GDELT", run: async () => {
-    const r = await fetch(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(section.gdelt + " sourcelang:english")}&mode=artlist&maxrecords=40&format=json&sort=datedesc&timespan=6h`);
+    const r = await fetchT(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(section.gdelt + " sourcelang:english")}&mode=artlist&maxrecords=40&format=json&sort=datedesc&timespan=6h`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     return (d.articles || []).map(a => ({ title: a.title, url: a.url, source: a.domain, domain: hostOf(a.url), via: ["GDELT"], region: a.sourcecountry, image: a.socialimage || null, summary: "",
       published: a.seendate ? Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000 : null }));
   }});
   out.push({ name: "Reddit", run: async () => {
-    const r = await fetch(`https://www.reddit.com/r/${section.reddit}/hot.json?limit=30&raw_json=1`);
+    const r = await fetchT(`https://www.reddit.com/r/${section.reddit}/hot.json?limit=30&raw_json=1`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     return d.data.children.map(c => c.data).filter(p => !p.is_self && !p.stickied && /^https?:/.test(p.url) && !/reddit\.com|redd\.it|imgur|youtube/.test(p.url))
@@ -93,7 +117,7 @@ async function newsSourcesFor(section) {
         image: p.preview?.images?.[0]?.source?.url || (/^https?:/.test(p.thumbnail) ? p.thumbnail : null) }));
   }});
   if (section.hn) out.push({ name: "Hacker News", run: async () => {
-    const r = await fetch("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=30");
+    const r = await fetchT("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=30");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return (await r.json()).hits.filter(h => h.url && h.title).map(h => ({ title: h.title, url: h.url, source: hostOf(h.url), domain: hostOf(h.url), via: ["Hacker News"], published: h.created_at_i, summary: "", image: null }));
   }});
@@ -133,7 +157,7 @@ async function loadSection(section, onPartial) {
   const sources = await newsSourcesFor(section);
   const lists = [], report = [];
   let pending = sources.length;
-  await Promise.all(sources.map(src => src.run().then(list => {
+  await Promise.all(sources.map(src => withTimeout(Promise.resolve().then(() => src.run()), SOURCE_TIMEOUT_MS + 2000).then(list => {
     lists.push(list);
     report.push({ name: src.name, outlet: src.outlet, n: list.length });
   }, err => report.push({ name: src.name, outlet: src.outlet, err: err.message })).finally(() => {
