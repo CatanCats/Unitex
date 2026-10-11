@@ -1,11 +1,13 @@
 # Unitex
 
-One search box, your choice of engine — plus a live news panel.
+One search box for the whole web: Unitex's own results, every major engine and AI one click away, topic filters that search all the specialist sites at once, and news from everywhere.
 
 **Live:** https://catancats.github.io/Unitex/
 
 ## Features
 
+- **Unitex search** (`search.html`, the default) – results straight from open sources: Wikipedia, DuckDuckGo instant answers, Marginalia (independent web index), Reddit, Hacker News, Stack Overflow, GitHub and the news feed, merged into one list with an answer card. The same query is one click away on Google, Bing, DuckDuckGo, Ecosia, Brave, Startpage, ChatGPT, Claude, Perplexity and Google AI. (Google and Bing don't let a website show their results directly, so Unitex links to them instead.)
+- **"Looking for" topics** – Houses, Jobs, Cars, Second-hand, Shopping, Travel, Reviews, Recipes, Movies & TV, Events, Learn, Research and Open source. Each lists the specialist sites for your country (e.g. Houses in Australia: realestate.com.au, Domain, Allhomes, Homely, rent.com.au, Flatmates, view.com.au) with a direct search on each, plus one button that searches them all at once. The country is guessed from your browser and can be changed. Sites live in `topics.js`.
 - **44 engines in 6 groups** – Web (Google, Bing, DuckDuckGo, Ecosia, Yahoo, Brave, Startpage, Kagi, Qwant, Mojeek, …), AI (ChatGPT, Claude, Perplexity, Google AI, Copilot, Grok, Le Chat), Opinions & communities (Reddit, Hacker News, Lobsters, Stack Overflow, AlternativeTo), Open source & code (GitHub, GitLab, Codeberg, npm, PyPI, crates.io, …), Knowledge and Video & maps.
 - **Search and Ask AI rows** under the search bar – type, then click any engine or AI to send the query straight there. Click the engine in the search bar to pick from all of them.
 - **Open-source alternatives** – type things like "alternative to Photoshop", "slack alternative", "foss google drive" or just "Notion", and Unitex shows well-known open-source replacements with their licenses, plus links to AlternativeTo, GitHub, what people say, and Claude/ChatGPT. The curated list lives in `alternatives.js`.

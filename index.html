@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <div class="glow" aria-hidden="true"></div>
@@ -25,7 +25,7 @@
 
 <main>
   <section class="hero">
-    <h1>Search anywhere.<br><span>You pick who answers.</span></h1>
+    <h1>Search everywhere.<br><span>You pick who answers.</span></h1>
 
     <form id="search" class="searchbar" role="search" autocomplete="off">
       <button id="engine-btn" class="engine-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="picker">
@@ -49,6 +49,7 @@
 
     <div id="quick" class="quick" aria-label="Search engines"></div>
     <div id="quick-ai" class="quick" aria-label="AI assistants"></div>
+    <div id="topics" class="quick" aria-label="What are you looking for?"></div>
 
     <button id="find-alts" class="find-alts" type="button">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
@@ -74,8 +75,10 @@
   · <a href="https://github.com/CatanCats/Unitex">Source</a>
 </footer>
 
-<script src="engines.js"></script>
-<script src="alternatives.js"></script>
-<script src="app.js"></script>
+<script src="engines.js?v=3"></script>
+<script src="alternatives.js?v=3"></script>
+<script src="topics.js?v=3"></script>
+<script src="core.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

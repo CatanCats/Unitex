@@ -2,6 +2,7 @@
 // "web" engines accept site: filters, so the Focus modes apply to them.
 const ENGINE_GROUPS = [
   { name: "Web", web: true, engines: [
+    { id: "unitex",     name: "Unitex",     bang: "u",   local: true,                 url: "search.html?q={q}" },
     { id: "google",     name: "Google",     bang: "g",   domain: "google.com",        url: "https://www.google.com/search?q={q}" },
     { id: "bing",       name: "Bing",       bang: "b",   domain: "bing.com",          url: "https://www.bing.com/search?q={q}" },
     { id: "duckduckgo", name: "DuckDuckGo", bang: "d",   domain: "duckduckgo.com",    url: "https://duckduckgo.com/?q={q}" },

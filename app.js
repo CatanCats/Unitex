@@ -1,36 +1,14 @@
-const ENGINES = ENGINE_GROUPS.flatMap(g => g.engines.map(e => ({ ...e, web: !!g.web, ai: !!g.ai, group: g.name })));
-const AI_ENGINES = ENGINES.filter(e => e.ai);
-const byId = id => ENGINES.find(e => e.id === id);
-const $ = id => document.getElementById(id);
-const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter(Boolean)); return n; };
-
-const store = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
-};
-
-let engineId = byId(store.get("unitex.engine")) ? store.get("unitex.engine") : "google";
-let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit"]).filter(id => byId(id) && !byId(id).ai).slice(0, 5);
-
-const iconUrl = e => `https://icons.duckduckgo.com/ip3/${e.domain}.ico`;
-const domainIcon = d => el("img", { src: `https://icons.duckduckgo.com/ip3/${d}.ico`, alt: "", width: 16, height: 16, loading: "lazy", onerror() { this.style.visibility = "hidden"; } });
-
-function icon(e) {
-  const img = document.createElement("img");
-  img.src = iconUrl(e);
-  img.alt = "";
-  img.width = img.height = 18;
-  img.loading = "lazy";
-  img.onerror = () => { img.replaceWith(el("span", { className: "letter", textContent: e.name[0] })); };
-  return img;
-}
+// Home page: search bar, engine/AI/topic rows, open-source alternatives, news.
+let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit"]).filter(id => byId(id) && !byId(id).ai && !byId(id).local).slice(0, 5);
+let topicId = topicById(store.get("unitex.topic")).id;
 
 // ---------- engine selection ----------
 
 function selectEngine(id) {
   engineId = id;
   store.set("unitex.engine", id);
-  if (!byId(id).ai) {
+  const e = byId(id);
+  if (!e.ai && !e.local) {
     recent = [id, ...recent.filter(r => r !== id)].slice(0, 5);
     store.set("unitex.recent", recent);
   }
@@ -53,11 +31,30 @@ function renderEngine() {
   const e = byId(engineId);
   $("engine-icon").replaceChildren(icon(e));
   $("engine-name").textContent = e.name;
-  $("q").placeholder = e.ai ? `Ask ${e.name}…` : `Search ${e.name}…`;
+  const topic = topicById(topicId);
+  $("q").placeholder = topic.id !== "all" ? topic.hint : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
 
-  $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), ...recent.map(id => chip(byId(id))),
+  $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), chip(byId("unitex")), ...recent.map(id => chip(byId(id))),
     el("button", { type: "button", className: "chip more", textContent: `All ${ENGINES.length}`, onclick: openPicker }));
   $("quick-ai").replaceChildren(el("span", { className: "row-label", textContent: "Ask AI" }), ...AI_ENGINES.map(chip));
+}
+
+// ---------- topics ----------
+
+function renderTopics() {
+  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Looking for" }), ...TOPICS.map(t => {
+    const b = el("button", { type: "button", className: "chip topic" + (t.id === topicId ? " active" : ""), textContent: t.name });
+    b.setAttribute("aria-pressed", t.id === topicId);
+    b.onclick = () => {
+      topicId = t.id;
+      store.set("unitex.topic", t.id);
+      renderTopics();
+      renderEngine();
+      if (t.id !== "all" && $("q").value.trim()) $("search").requestSubmit();
+      else $("q").focus();
+    };
+    return b;
+  }));
 }
 
 // ---------- picker ----------
@@ -103,118 +100,22 @@ document.addEventListener("keydown", e => {
 
 // ---------- search ----------
 
-function buildUrl(rawQuery, opts = {}) {
-  let query = rawQuery.trim();
-  let engine = byId(opts.engine || engineId);
-
-  // "!r cats" or "cats !r" overrides the engine for this one search.
-  const bang = query.match(/(?:^|\s)!(\w+)(?=\s|$)/);
-  if (bang) {
-    const hit = ENGINES.find(e => e.bang === bang[1].toLowerCase());
-    if (hit) { engine = hit; query = query.replace(bang[0], " ").trim(); }
-  }
-
-  if (engine.web && opts.sites && query) {
-    query += " (" + opts.sites.map(s => "site:" + s).join(" OR ") + ")";
-  }
-  return engine.url.replace("{q}", encodeURIComponent(query));
-}
+// A topic always goes through Unitex search, which fans out to that topic's sites.
+const searchUrl = q => buildUrl(q, topicId !== "all" ? { engine: "unitex", topic: topicId } : {});
 
 $("search").addEventListener("submit", e => {
   e.preventDefault();
   const q = $("q").value;
-  if (q.trim()) location.href = buildUrl(q);
+  if (q.trim()) location.href = searchUrl(q);
 });
 
-// ---------- open-source alternatives ----------
-
-const norm = s => s.toLowerCase().replace(/[^a-z0-9.+ ]/g, "").replace(/\s+/g, " ").trim();
-// Product names too generic to trigger the hint when typed on their own.
-const TOO_GENERIC = new Set(["x", "make", "office", "word", "pages", "numbers", "things", "teams", "mint", "adobe", "google", "kit", "box", "render", "spark", "arc", "copilot", "unity", "maya", "edge", "opera", "bear", "mural", "excel", "audition", "linear", "keeper", "threads"]);
-
-function findProduct(product) {
-  const p = norm(product);
-  let best = null, bestLen = 0;
-  for (const entry of ALTERNATIVES) {
-    for (const name of entry.names) {
-      const n = norm(name);
-      if (n === p) return { entry, name };
-      if (n.length > bestLen && n.length >= 4 && new RegExp(`(^| )${n.replace(/[.+]/g, "\\$&")}( |$)`).test(p)) { best = { entry, name }; bestLen = n.length; }
-    }
-  }
-  return best;
-}
-
-function detectAlternatives(q) {
-  const s = q.trim().replace(/\s+/g, " ").replace(/(?:^|\s)!\w+(?=\s|$)/g, "").trim();
-  if (!s) return null;
-  for (const re of ALT_PATTERNS) {
-    const m = s.match(re);
-    if (m) {
-      const product = m[1].replace(/^(?:the|an?)\s+/i, "").trim();
-      if (product.length < 2) continue;
-      return { product, explicit: true, match: findProduct(product) };
-    }
-  }
-  const match = findProduct(s);
-  if (match && norm(match.name) === norm(s) && !TOO_GENERIC.has(norm(s))) return { product: match.name, explicit: false, match };
-  return null;
-}
-
-function altLinks(product) {
-  const ask = `What are the best open-source alternatives to ${product}? Compare them on features, license, maturity, and what users say.`;
-  return [
-    ["AlternativeTo", "alternativeto.net", `https://alternativeto.net/browse/search/?q=${encodeURIComponent(product)}`],
-    ["GitHub", "github.com", `https://github.com/search?q=${encodeURIComponent(product + " alternative")}&type=repositories&s=stars&o=desc`],
-    ["What people say", "reddit.com", buildUrl(`open source alternative to ${product}`, { engine: "google", sites: OPINION_SITES })],
-    ["Ask Claude", "claude.ai", byId("claude").url.replace("{q}", encodeURIComponent(ask))],
-    ["Ask ChatGPT", "chatgpt.com", byId("chatgpt").url.replace("{q}", encodeURIComponent(ask))],
-  ];
-}
-
-function renderAlternatives() {
-  const box = $("alts");
-  const found = detectAlternatives($("q").value);
-  if (!found) { box.hidden = true; box.replaceChildren(); return; }
-
-  const product = found.match ? found.match.name : found.product;
-  const alts = found.match ? found.match.entry.alts : [];
-  const head = el("div", { className: "alts-head" },
-    el("span", { className: "badge", textContent: "Open source" }),
-    el("h2", { textContent: found.explicit || !alts.length ? `Alternatives to ${product}` : `Want to replace ${product}?` }));
-
-  const list = alts.length && el("ul", { className: "alts-list" }, ...alts.map(([name, url, desc, license]) =>
-    el("li", {}, el("a", { href: url, target: "_blank", rel: "noopener" },
-      domainIcon(new URL(url).hostname),
-      el("span", { className: "alt-text" }, el("strong", { textContent: name }), el("small", { textContent: desc })),
-      el("span", { className: "license", textContent: license })))));
-
-  const more = el("div", { className: "alts-more" }, el("span", { textContent: alts.length ? "Find more:" : "Find them on:" }),
-    ...altLinks(product).map(([label, domain, href]) => el("a", { href, target: "_blank", rel: "noopener" }, domainIcon(domain), label)));
-
-  box.replaceChildren(head, list, more);
-  box.hidden = false;
-}
-
-$("q").addEventListener("input", renderAlternatives);
+$("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));
 $("find-alts").onclick = () => {
   const q = $("q").value.trim();
   if (q && !detectAlternatives(q)?.explicit) $("q").value = `open source alternatives to ${q}`;
   else if (!q) $("q").value = "open source alternatives to ";
   $("q").focus();
-  renderAlternatives();
-};
-
-// ---------- theme ----------
-
-const savedTheme = store.get("unitex.theme");
-if (savedTheme) document.documentElement.dataset.theme = savedTheme;
-$("theme").onclick = () => {
-  const dark = document.documentElement.dataset.theme
-    ? document.documentElement.dataset.theme === "dark"
-    : matchMedia("(prefers-color-scheme: dark)").matches;
-  document.documentElement.dataset.theme = dark ? "light" : "dark";
-  store.set("unitex.theme", document.documentElement.dataset.theme);
+  renderAlternatives($("alts"), $("q").value);
 };
 
 // ---------- news ----------
@@ -280,7 +181,7 @@ function card(i, featured) {
   const main = el("a", { className: "card-main", href: i.url, target: "_blank", rel: "noopener" },
     img, el("div", { className: "card-body" }, meta, el("h3", { textContent: i.title }), i.summary && el("p", { textContent: i.summary })));
   const actions = el("div", { className: "card-actions" },
-    el("a", { href: buildUrl(i.title.slice(0, 140), { sites: OPINION_SITES }), target: "_blank", rel: "noopener", textContent: "What people think" }),
+    el("a", { href: buildUrl(i.title.slice(0, 140), { engine: webEngine(), sites: OPINION_SITES }), target: "_blank", rel: "noopener", textContent: "What people think" }),
     el("a", { href: `https://news.google.com/search?q=${encodeURIComponent(i.title.slice(0, 140))}`, target: "_blank", rel: "noopener", textContent: "Other coverage" }));
   return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
 }
@@ -322,9 +223,10 @@ async function loadNews() {
 // ?q=... lets Unitex be the browser's default search engine.
 const initial = new URLSearchParams(location.search).get("q");
 if (initial && initial !== "%s") {
-  location.replace(buildUrl(initial));
+  location.replace(searchUrl(initial));
 } else {
   renderEngine();
-  renderAlternatives();
+  renderTopics();
+  renderAlternatives($("alts"), $("q").value);
   loadNews();
 }
