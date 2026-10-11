@@ -59,13 +59,19 @@ function topicSites(topic) {
     .filter(s => !seen.has(s.domain) && seen.add(s.domain));
 }
 
-// The web engine used for site: searches: the current one if it's a web engine, else your most recent, else Google.
+// Engine used to search the topic sites (site:domain). Google by default; changeable on the results page.
+const SITE_ENGINES = ["google", "bing", "duckduckgo", "ecosia", "brave", "startpage"];
 function webEngine() {
-  const e = byId(engineId);
-  if (e.web && !e.local) return e.id;
-  const recent = store.get("unitex.recent", []).find(id => byId(id)?.web && !byId(id).local);
-  return recent || "google";
+  const saved = store.get("unitex.siteEngine");
+  return SITE_ENGINES.includes(saved) ? saved : "google";
 }
+
+// Optional keys people can add in Settings on the results page; stored only in this browser.
+const keys = {
+  get claude() { return store.get("unitex.key.claude", ""); },
+  get google() { return store.get("unitex.key.google", ""); },
+  get googleCx() { return store.get("unitex.key.googleCx", ""); },
+};
 
 function siteSearchUrl(site, q) {
   return site.url ? site.url.replace("{q}", encodeURIComponent(q)) : buildUrl(`site:${site.domain} ${q}`, { engine: webEngine() });
