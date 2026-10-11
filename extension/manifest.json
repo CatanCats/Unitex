@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Unitex Helper",
+  "version": "1.0.0",
+  "description": "Lets Unitex show results from Google, Bing, DuckDuckGo, Yahoo, Brave, Ecosia and Mojeek by loading their result pages in your own browser.",
+  "host_permissions": [
+    "https://www.google.com/*",
+    "https://www.bing.com/*",
+    "https://html.duckduckgo.com/*",
+    "https://search.yahoo.com/*",
+    "https://search.brave.com/*",
+    "https://www.ecosia.org/*",
+    "https://www.mojeek.com/*"
+  ],
+  "background": { "service_worker": "background.js", "scripts": ["background.js"] },
+  "content_scripts": [{
+    "matches": ["https://catancats.github.io/Unitex/*", "http://localhost/*"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "browser_specific_settings": { "gecko": { "id": "unitex-helper@catancats.github.io", "strict_min_version": "121.0" } }
+}

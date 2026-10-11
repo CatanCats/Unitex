@@ -6,7 +6,7 @@
 <title>Unitex Access Test</title>
 <meta name="description" content="Checks, from your own browser, which search engines and sites let Unitex read their results.">
 <meta name="color-scheme" content="light dark">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <style>
   .test-wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
   .test-wrap h1 { font-size: 1.8rem; margin: 0 0 8px; letter-spacing: -0.02em; }
@@ -22,13 +22,14 @@
 <body>
 <main class="test-wrap">
   <h1>Can Unitex read these sites from your browser?</h1>
-  <p class="hint">This page asks your browser to read each site's search results in the background, the way Unitex would, and shows what your browser allows. "Blocked" means the site loads fine when you visit it, but it doesn't allow other websites to read it, so your browser refuses to hand the page to Unitex.</p>
+  <p class="hint">With <a href="install.html">Unitex Helper</a> installed, the third column shows each engine working through it. This page asks your browser to read each site's search results in the background, the way Unitex would, and shows what your browser allows. "Blocked" means the site loads fine when you visit it, but it doesn't allow other websites to read it, so your browser refuses to hand the page to Unitex.</p>
   <button id="run" class="btn-primary" type="button" style="border:0;cursor:pointer;margin-top:12px">Run the test</button>
   <table class="test-table">
-    <thead><tr><th>Site</th><th>Result in your browser</th><th>Open it yourself</th></tr></thead>
+    <thead><tr><th>Site</th><th>Website on its own</th><th>With Unitex Helper</th><th>Open it yourself</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
 </main>
+<script src="helper.js?v=5"></script>
 <script>
 const Q = "3 bedroom house to rent brunswick";
 const SITES = [
@@ -51,14 +52,26 @@ for (const [name, base] of SITES) {
   const url = base + encodeURIComponent(Q);
   const tr = document.createElement("tr");
   const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener", textContent: "Open" });
-  tr.append(Object.assign(document.createElement("td"), { textContent: name }), Object.assign(document.createElement("td"), { textContent: "Not tested yet" }));
+  tr.append(Object.assign(document.createElement("td"), { textContent: name }), Object.assign(document.createElement("td"), { textContent: "Not tested yet" }), Object.assign(document.createElement("td"), { textContent: "" }));
   const td = document.createElement("td"); td.append(a); tr.append(td);
   tr.dataset.url = url;
   rows.append(tr);
 }
 
+const engineFor = name => HELPER_ENGINES.find(e => name.startsWith(e.name === "Brave" ? "Brave" : e.name));
+
 document.getElementById("run").onclick = async () => {
   for (const tr of rows.children) {
+    const viaHelper = tr.children[2];
+    const engine = engineFor(tr.children[0].textContent);
+    if (!engine) viaHelper.textContent = "Not needed";
+    else if (!helperVersion()) viaHelper.innerHTML = 'Not installed · <a href="install.html">install</a>';
+    else {
+      viaHelper.className = ""; viaHelper.textContent = "Testing…";
+      helperSearch(engine, Q).then(
+        r => { viaHelper.className = r.length ? "ok" : "bad"; viaHelper.textContent = r.length ? `Works: ${r.length} results` : "Loaded, but no results found on the page"; },
+        e => { viaHelper.className = "bad"; viaHelper.textContent = "Didn't work: " + e.message; });
+    }
     const cell = tr.children[1];
     cell.className = ""; cell.textContent = "Testing…";
     const ctrl = new AbortController();

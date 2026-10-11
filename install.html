@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Unitex Helper</title>
+<meta name="description" content="Unitex Helper lets Unitex show results from Google, Bing, DuckDuckGo, Yahoo, Brave, Ecosia and Mojeek, loaded in your own browser.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bd6'/%3E%3Cpath d='M10 9v9a6 6 0 0 0 12 0V9' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=5">
+<style>
+  .install { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  .install h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0 0 8px; letter-spacing: -0.02em; }
+  .install h2 { font-size: 1.1rem; margin: 32px 0 10px; }
+  .install ol { padding-left: 22px; line-height: 1.8; }
+  .install code { font: 0.88em ui-monospace, Menlo, monospace; padding: 2px 6px; border-radius: 6px; background: var(--card-2); }
+  .install a:not(.btn-primary) { color: var(--accent); }
+  .status-box { margin: 20px 0; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); font-weight: 600; }
+  .status-box.on { border-color: #1f8a4c; }
+  .install .btn-primary { margin-top: 8px; }
+</style>
+</head>
+<body>
+<main class="install">
+  <a class="brand" href="./" style="margin-bottom:24px"><span class="logo" aria-hidden="true">U</span>Unitex</a>
+  <h1>Install Unitex Helper</h1>
+  <p class="hint">Browsers don't let one website read another website's pages, which is how your email and bank stay private from other sites. Unitex Helper is a tiny browser extension that loads search results from Google, Bing, DuckDuckGo, Yahoo, Brave, Ecosia and Mojeek in your own browser, with your cookies, so Unitex can show them all on one page. It can't load anything else, and only Unitex pages can use it.</p>
+
+  <div id="status" class="status-box">Checking…</div>
+
+  <a class="btn-primary" href="unitex-helper.zip" download>Download Unitex Helper (.zip)</a>
+
+  <h2>Chrome, Edge, Brave, Opera, Vivaldi</h2>
+  <ol>
+    <li>Download the zip above and unzip it. You'll get a folder called <code>unitex-helper</code>.</li>
+    <li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>).</li>
+    <li>Turn on <strong>Developer mode</strong> (top right; in Edge it's on the left).</li>
+    <li>Click <strong>Load unpacked</strong> and choose the <code>unitex-helper</code> folder.</li>
+    <li>Come back to this page and refresh. The box above turns green.</li>
+  </ol>
+
+  <h2>Firefox</h2>
+  <ol>
+    <li>Download and unzip as above.</li>
+    <li>Open <code>about:debugging#/runtime/this-firefox</code> and click <strong>Load Temporary Add-on…</strong>.</li>
+    <li>Choose <code>manifest.json</code> inside the <code>unitex-helper</code> folder.</li>
+  </ol>
+  <p class="hint">Firefox removes add-ons loaded this way when it restarts, until Unitex Helper is published on Firefox Add-ons.</p>
+
+  <h2>Phones</h2>
+  <p class="hint">Mobile Chrome and Safari don't support extensions. On Android, Firefox, Kiwi, Yandex or Edge Canary can load extensions; on iPhone, Unitex works without the helper.</p>
+
+  <h2>What it does, exactly</h2>
+  <p class="hint">The whole extension is three short files you can read in <a href="https://github.com/CatanCats/Unitex/tree/main/extension">extension/</a>. When you search on Unitex, the page asks the helper for each engine's result page; the helper fetches it and hands back the HTML; Unitex picks out the results and shows each one with its website and the engines that found it. Nothing is sent anywhere else.</p>
+  <p class="hint">Want to check what your browser blocks without it? <a href="test.html">Run the access test</a>.</p>
+</main>
+<script>
+const v = document.documentElement.dataset.unitexHelper;
+const box = document.getElementById("status");
+box.textContent = v ? `Unitex Helper ${v} is installed and working on this browser.` : "Unitex Helper isn't installed in this browser yet.";
+box.classList.toggle("on", !!v);
+</script>
+</body>
+</html>

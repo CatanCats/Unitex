@@ -121,6 +121,12 @@ const SOURCES = {
   }},
 };
 
+// With Unitex Helper installed, every major engine is searched directly in your browser.
+for (const e of HELPER_ENGINES) {
+  SOURCES["helper_" + e.id] = { name: e.name, group: "main", enabled: () => !!helperVersion(), run: q => helperSearch(e, withSites(q, topicDomains())) };
+}
+SOURCES.duckduckgo.name = "DuckDuckGo Instant Answers";
+
 // Image sources return [{ thumb, url, title, via }].
 const IMAGE_SOURCES = {
   google: { name: "Google Images", enabled: () => keys.google && keys.googleCx, async run(q) {
@@ -162,6 +168,26 @@ function interleave(lists) {
   return out;
 }
 
+// Metasearch ranking: a page that several engines rank highly comes first (reciprocal rank fusion).
+function fuse(lists) {
+  const byKey = new Map();
+  for (const list of lists) {
+    list.forEach((r, pos) => {
+      if (!r || !safeUrl(r.url)) return;
+      const k = urlKey(r.url);
+      const seen = byKey.get(k);
+      const score = 1 / (pos + 3);
+      if (seen) {
+        seen.score += score;
+        if (!seen.via.includes(r.via)) seen.via.push(r.via);
+        seen.image ||= r.image;
+        if ((r.snippet || "").length > (seen.snippet || "").length) seen.snippet = r.snippet;
+      } else byKey.set(k, { ...r, via: [r.via], score });
+    });
+  }
+  return [...byKey.values()].sort((a, b) => b.score - a.score);
+}
+
 function resultItem(r) {
   const url = safeUrl(r.url);
   if (!url) return null;
@@ -172,7 +198,7 @@ function resultItem(r) {
         el("span", { className: "r-site", textContent: host(url) + (path.length > 1 ? path.slice(0, 40) : "") })),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
       r.snippet && el("p", { className: "r-snippet", textContent: r.snippet }),
-      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "via " + r.via.join(" · ") }), r.meta && el("span", { textContent: r.meta }))),
+      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + r.via.join(" · ") }), r.meta && el("span", { textContent: r.meta }))),
     r.image && el("img", { className: "r-thumb", src: r.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
 
@@ -328,7 +354,7 @@ function renderTopicSites(googleHits) {
   engineSel.onchange = () => { store.set("unitex.siteEngine", engineSel.value); renderTopicSites(googleHits); };
 
   const engine = byId(webEngine());
-  const live = keys.google && keys.googleCx;
+  const live = helperVersion() || (keys.google && keys.googleCx);
   fill(box,
     el("div", { className: "ts-head" },
       el("h2", { textContent: `${topic.name}: ${sites.length} sites` }),
@@ -337,13 +363,20 @@ function renderTopicSites(googleHits) {
       domainIcon(s.domain, 20), el("span", { className: "ts-text" }, el("strong", { textContent: s.name }), el("small", { textContent: s.url ? "Search this site" : `Search via ${engine.name}` })))))),
     el("a", { className: "btn-primary", href: buildUrl(query, { engine: engine.id, sites: sites.map(s => s.domain).slice(0, 14) }), rel: "noopener" },
       `Search all ${Math.min(sites.length, 14)} at once on ${engine.name}`),
-    live ? (googleHits === 0 && el("p", { className: "hint", textContent: "Google found no matching pages on these sites. If your search engine (cx) is limited to certain sites, add these domains to it." }))
+    live ? (googleHits === 0 && el("p", { className: "hint", textContent: "The search engines found no matching pages on these sites. Try fewer words." }))
       : el("p", { className: "hint ts-note" },
-          "Want listings from all these sites shown right here? Sites like these block other websites from reading them, so Unitex gets them through Google's search API: ",
-          el("button", { type: "button", className: "linklike", textContent: "add a free Google key in Settings", onclick: openSettings }), "."),
+          "Want the listings from all these sites shown right here? ",
+          el("a", { href: "install.html", textContent: "Install Unitex Helper" }), " (one minute) and Unitex searches them through Google, Bing, DuckDuckGo and more in your own browser."),
     regionId === "*" && el("p", { className: "hint", textContent: "Pick your country to add local sites." }));
   box.hidden = false;
 }
+
+// ---------- helper banner ----------
+
+function renderHelperBanner() {
+  $("helper-banner").hidden = !!helperVersion() || store.get("unitex.hideHelperBanner", false);
+}
+$("helper-banner-close").onclick = () => { store.set("unitex.hideHelperBanner", true); $("helper-banner").hidden = true; };
 
 // ---------- rows & tabs ----------
 
@@ -432,12 +465,13 @@ async function go() {
   if (id !== runId) return;
 
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
-  // On a topic, Google's site-restricted listings come first.
-  const order = ["google", "wikipedia", "duckduckgo", "marginalia", "reddit", "hackernews", "news"];
-  const main = topicId !== "all" ? interleave([by.google || [], ...order.slice(1).map(n => by[n] || [])]).sort((a, b) => (b.via.includes("Google") ? 1 : 0) - (a.via.includes("Google") ? 1 : 0))
-                                 : interleave(order.map(n => by[n] || []));
+  const engineLists = [...HELPER_ENGINES.map(e => by["helper_" + e.id] || []), by.google || []];
+  const otherLists = ["wikipedia", "duckduckgo", "marginalia", "reddit", "hackernews", "news"].map(n => by[n] || []);
+  // On a topic, the engines' site-restricted listings come first; extra sources follow.
+  const main = topicId !== "all" ? [...fuse(engineLists), ...fuse(otherLists)].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
+                                 : fuse([...engineLists, ...otherLists]);
   const code = interleave(["github", "stackoverflow"].map(n => by[n] || []));
-  if (topicId !== "all") renderTopicSites((by.google || []).length);
+  if (topicId !== "all") renderTopicSites(engineLists.flat().length);
 
   $("results").replaceChildren(...main.map(resultItem).filter(Boolean));
   if (!main.length) $("results").replaceChildren(el("li", { className: "empty", textContent: "No results from these sources. Try one of the engines above." }));
@@ -450,6 +484,7 @@ async function go() {
     $("image-strip").hidden = false;
   }
 
+  renderHelperBanner();
   renderAiPrompt(main);
   $("status").textContent = statusLine(settled, SOURCES, main.length + code.length, "results");
 }
@@ -463,7 +498,8 @@ function interleaveImages(lists) {
 
 function statusLine(settled, sources, count, noun) {
   const ok = settled.filter(s => s.r && s.r.length).map(s => sources[s.n].name);
-  const failed = settled.filter(s => s.err).map(s => sources[s.n].name);
+  // Say why an engine failed when it's something the person can act on (CAPTCHA, needs JavaScript).
+  const failed = settled.filter(s => s.err).map(s => sources[s.n].name + (/CAPTCHA|JavaScript/.test(s.err.message) ? ` (${s.err.message})` : ""));
   return `${count} ${noun} from ${ok.join(", ") || "no sources"}` + (failed.length ? ` · unavailable: ${failed.join(", ")}` : "");
 }
 

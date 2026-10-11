@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body class="results-page">
 
@@ -42,6 +42,14 @@
 
 <main class="rmain">
   <div class="rcol">
+    <section id="helper-banner" class="helper-banner" hidden>
+      <div>
+        <strong>See results from Google, Bing, DuckDuckGo, Yahoo, Brave, Ecosia and Mojeek right here.</strong>
+        <p>Browsers don't let websites read other sites. The free Unitex Helper extension does it in your own browser. Install it once, in about a minute.</p>
+      </div>
+      <a class="btn-primary" href="install.html">Install Unitex Helper</a>
+      <button id="helper-banner-close" class="icon-btn" type="button" aria-label="Dismiss">✕</button>
+    </section>
     <section id="ai" class="ai-card" hidden></section>
     <section id="topic-sites" class="topic-sites" hidden></section>
     <p id="status" class="hint status"></p>
@@ -82,14 +90,15 @@
 </dialog>
 
 <footer>
-  Every result says which search engine or source found it. Unitex asks them directly from your browser (Wikipedia, DuckDuckGo, Marginalia, Reddit, Hacker News, Stack Overflow, GitHub, Openverse, Wikimedia Commons, our news feed, and Google or Claude if you add keys in Settings). Nothing goes through a Unitex server.
+  Every result shows its website and which search engines found it. Unitex asks them directly from your browser (Google, Bing, DuckDuckGo, Yahoo, Brave, Ecosia and Mojeek through Unitex Helper; Wikipedia, DuckDuckGo, Marginalia, Reddit, Hacker News, Stack Overflow, GitHub, Openverse, Wikimedia Commons, our news feed, and Google or Claude if you add keys in Settings). Nothing goes through a Unitex server.
   · <a href="./">Home</a> · <a href="https://github.com/CatanCats/Unitex">Source</a>
 </footer>
 
-<script src="engines.js?v=4"></script>
-<script src="alternatives.js?v=4"></script>
-<script src="topics.js?v=4"></script>
-<script src="core.js?v=4"></script>
-<script src="search.js?v=4"></script>
+<script src="engines.js?v=5"></script>
+<script src="alternatives.js?v=5"></script>
+<script src="topics.js?v=5"></script>
+<script src="core.js?v=5"></script>
+<script src="helper.js?v=5"></script>
+<script src="search.js?v=5"></script>
 </body>
 </html>
