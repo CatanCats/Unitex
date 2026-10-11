@@ -165,130 +165,90 @@ $("theme").onclick = () => {
 };
 
 // ---------- news ----------
+// news.json is rebuilt hourly by .github/workflows/news.yml from ~50 outlets
+// worldwide (scripts/feeds.json). Read it from raw GitHub first so it's fresh
+// even before Pages redeploys.
+
+const NEWS_URLS = [
+  `https://raw.githubusercontent.com/CatanCats/Unitex/main/news.json?t=${Math.floor(Date.now() / 300000)}`,
+  "news.json",
+];
 
 const ago = t => {
-  const s = (Date.now() - t) / 1000;
+  const s = Date.now() / 1000 - t;
   if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
   return `${Math.round(s / 86400)}d ago`;
 };
-const text = html => new DOMParser().parseFromString(html, "text/html").body.textContent.trim();
-const ymd = d => d.toISOString().slice(0, 10).split("-").join("/");
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter(Boolean)); return n; };
 
-const FEEDS = [
-  { id: "world", name: "World", source: "Wikipedia · In the news", async load() {
-      // Today's feed can be empty early in the UTC day, so fall back to yesterday.
-      for (const offset of [0, 1]) {
-        const d = new Date(Date.now() - offset * 86400000);
-        const r = await fetch(`https://en.wikipedia.org/api/rest_v1/feed/featured/${ymd(d)}`);
-        if (!r.ok) continue;
-        const data = await r.json();
-        if (!data.news?.length) continue;
-        return data.news.map(n => {
-          const main = n.links.find(l => n.story.includes(l.titles?.canonical)) || n.links[0];
-          return {
-            title: text(n.story),
-            url: main?.content_urls?.desktop?.page,
-            thumb: n.links.find(l => l.thumbnail)?.thumbnail?.source,
-            meta: main?.titles?.normalized,
-          };
-        });
-      }
-      return [];
-  }},
-  { id: "tech", name: "Tech", source: "Hacker News front page", async load() {
-      const r = await fetch("https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=20");
-      const { hits } = await r.json();
-      return hits.sort((a, b) => b.points - a.points).map(h => ({
-        title: h.title,
-        url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
-        discuss: `https://news.ycombinator.com/item?id=${h.objectID}`,
-        meta: `${h.points} points · ${h.num_comments} comments · ${ago(h.created_at_i * 1000)}${h.url ? " · " + new URL(h.url).hostname.replace(/^www\./, "") : ""}`,
-      }));
-  }},
-  { id: "oss", name: "Open source", source: "Fastest-rising new GitHub repos this week", async load() {
-      const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const r = await fetch(`https://api.github.com/search/repositories?q=created:>${since}&sort=stars&order=desc&per_page=20`);
-      if (!r.ok) throw new Error("GitHub rate limit, try again in a minute");
-      const { items } = await r.json();
-      return items.map(i => ({
-        title: i.full_name + (i.description ? " — " + i.description : ""),
-        url: i.html_url,
-        thumb: i.owner.avatar_url + "&s=96",
-        meta: `★ ${i.stargazers_count.toLocaleString()}${i.language ? " · " + i.language : ""}${i.license?.spdx_id && i.license.spdx_id !== "NOASSERTION" ? " · " + i.license.spdx_id : ""}`,
-      }));
-  }},
-];
+let news = null;
+let feedId = store.get("unitex.feed", "all");
 
-let feedId = FEEDS.some(f => f.id === store.get("unitex.feed")) ? store.get("unitex.feed") : "world";
+async function fetchNews() {
+  for (const url of NEWS_URLS) {
+    try {
+      const r = await fetch(url, { cache: "no-cache" });
+      if (r.ok) return await r.json();
+    } catch {}
+  }
+  throw new Error("news unavailable");
+}
+
+function tabsFor(data) {
+  const all = data.categories.flatMap(c => c.items.map(i => ({ ...i, category: c.name })))
+    .sort((a, b) => (b.published || 0) - (a.published || 0));
+  // "Top" mixes every category but keeps any one source from dominating.
+  const perSource = {};
+  const top = all.filter(i => (perSource[i.source] = (perSource[i.source] || 0) + 1) <= 3).slice(0, 60);
+  return [{ id: "all", name: "Top", items: top }, ...data.categories];
+}
 
 function renderTabs() {
-  $("news-tabs").replaceChildren(...FEEDS.map(f => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.role = "tab";
-    b.textContent = f.name;
-    b.setAttribute("aria-selected", f.id === feedId);
-    b.onclick = () => { feedId = f.id; store.set("unitex.feed", f.id); renderTabs(); loadFeed(); };
+  const tabs = tabsFor(news);
+  if (!tabs.some(t => t.id === feedId)) feedId = "all";
+  $("news-tabs").replaceChildren(...tabs.map(t => {
+    const b = el("button", { type: "button", role: "tab", textContent: t.name });
+    b.setAttribute("aria-selected", t.id === feedId);
+    b.onclick = () => { feedId = t.id; store.set("unitex.feed", t.id); renderTabs(); renderNews(); };
     return b;
   }));
 }
 
-async function loadFeed() {
-  const feed = FEEDS.find(f => f.id === feedId);
+function card(i, featured) {
+  const img = i.image && el("img", { src: i.image, alt: "", loading: "lazy", className: "card-img", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
+  const fav = el("img", { src: `https://icons.duckduckgo.com/ip3/${i.domain}.ico`, alt: "", width: 14, height: 14, className: "fav", onerror() { this.remove(); } });
+  const meta = el("div", { className: "card-meta" }, fav, el("strong", { textContent: i.source }),
+    i.region && el("span", { textContent: i.region }), i.published && el("span", { textContent: ago(i.published) }));
+  const main = el("a", { className: "card-main", href: i.url, target: "_blank", rel: "noopener" },
+    img, el("div", { className: "card-body" }, meta, el("h3", { textContent: i.title }), i.summary && el("p", { textContent: i.summary })));
+  const actions = el("div", { className: "card-actions" },
+    el("a", { href: buildUrl(i.title.slice(0, 140), { focus: "opinions" }), target: "_blank", rel: "noopener", textContent: "What people think" }),
+    el("a", { href: `https://news.google.com/search?q=${encodeURIComponent(i.title.slice(0, 140))}`, target: "_blank", rel: "noopener", textContent: "Other coverage" }));
+  return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
+}
+
+function renderNews() {
+  const tab = tabsFor(news).find(t => t.id === feedId);
   const list = $("news-list");
-  list.replaceChildren(...Array.from({ length: 6 }, () => Object.assign(document.createElement("li"), { className: "skeleton" })));
-
-  const cacheKey = "unitex.news." + feed.id;
-  let items;
-  try {
-    const cached = JSON.parse(sessionStorage.getItem(cacheKey) || "null");
-    if (cached && Date.now() - cached.t < 15 * 60000) items = cached.items;
-  } catch {}
-
-  try {
-    if (!items) {
-      items = (await feed.load()).filter(i => i.title && i.url).slice(0, 18);
-      try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), items })); } catch {}
-    }
-  } catch (err) {
-    if (feedId !== feed.id) return;
-    list.replaceChildren(Object.assign(document.createElement("li"), { className: "empty", textContent: `Couldn't load ${feed.name.toLowerCase()} news. ${err.message || ""}` }));
+  if (!tab.items.length) {
+    list.replaceChildren(el("li", { className: "empty", textContent: "Nothing here right now." }));
     return;
   }
-  if (feedId !== feed.id) return;
+  list.replaceChildren(...tab.items.map((i, n) => card(i, n === 0)));
+  $("news-status").textContent = `${news.sources.length} sources worldwide · updated ${ago(news.generated)}`;
+}
 
-  if (!items.length) {
-    list.replaceChildren(Object.assign(document.createElement("li"), { className: "empty", textContent: "Nothing here right now." }));
+async function loadNews() {
+  $("news-list").replaceChildren(...Array.from({ length: 6 }, () => el("li", { className: "skeleton" })));
+  try {
+    news = await fetchNews();
+  } catch {
+    $("news-list").replaceChildren(el("li", { className: "empty", textContent: "Couldn't load the news right now. Try again in a minute." }));
     return;
   }
-
-  list.replaceChildren(...items.map(i => {
-    const li = document.createElement("li");
-    li.className = "card";
-    const a = document.createElement("a");
-    a.className = "card-main";
-    a.href = i.url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    if (i.thumb) a.append(Object.assign(document.createElement("img"), { src: i.thumb, alt: "", loading: "lazy", className: "thumb" }));
-    const body = document.createElement("div");
-    body.append(Object.assign(document.createElement("h3"), { textContent: i.title }));
-    if (i.meta) body.append(Object.assign(document.createElement("p"), { textContent: i.meta }));
-    a.append(body);
-
-    const actions = document.createElement("div");
-    actions.className = "card-actions";
-    const opinions = Object.assign(document.createElement("a"), {
-      href: buildUrl(i.title.split(" — ")[0].slice(0, 120), { focus: "opinions" }),
-      target: "_blank", rel: "noopener", textContent: "What people think",
-    });
-    actions.append(opinions);
-    if (i.discuss) actions.append(Object.assign(document.createElement("a"), { href: i.discuss, target: "_blank", rel: "noopener", textContent: "HN thread" }));
-
-    li.append(a, actions);
-    return li;
-  }), Object.assign(document.createElement("li"), { className: "source", textContent: "Source: " + feed.source }));
+  renderTabs();
+  renderNews();
 }
 
 // ---------- start ----------
@@ -300,6 +260,5 @@ if (initial && initial !== "%s") {
 } else {
   renderEngine();
   renderFocus();
-  renderTabs();
-  loadFeed();
+  loadNews();
 }
