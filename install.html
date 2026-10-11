@@ -32,10 +32,11 @@
 
   <h2>Chrome, Edge, Brave, Opera, Vivaldi</h2>
   <ol>
-    <li>Download the zip above and unzip it. You'll get a folder called <code>unitex-helper</code>.</li>
+    <li>Download the zip above, right-click it and choose <strong>Extract All…</strong> (Mac: double-click it). You'll get a folder called <code>unitex-helper</code>.</li>
+    <li>Open that folder and check you can see <code>manifest.json</code>, <code>background.js</code> and <code>content.js</code> in it. That's the folder to pick in step 5. (If you see another <code>unitex-helper</code> folder instead, you downloaded an older zip: pick the inner one.)</li>
     <li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>).</li>
     <li>Turn on <strong>Developer mode</strong> (top right; in Edge it's on the left).</li>
-    <li>Click <strong>Load unpacked</strong> and choose the <code>unitex-helper</code> folder.</li>
+    <li>Click <strong>Load unpacked</strong> and choose the folder that has <code>manifest.json</code> in it.</li>
     <li>Come back to this page and refresh. The box above turns green.</li>
   </ol>
 
@@ -43,9 +44,17 @@
   <ol>
     <li>Download and unzip as above.</li>
     <li>Open <code>about:debugging#/runtime/this-firefox</code> and click <strong>Load Temporary Add-on…</strong>.</li>
-    <li>Choose <code>manifest.json</code> inside the <code>unitex-helper</code> folder.</li>
+    <li>Choose the <code>manifest.json</code> file inside the extracted folder.</li>
   </ol>
   <p class="hint">Firefox removes add-ons loaded this way when it restarts, until Unitex Helper is published on Firefox Add-ons.</p>
+
+  <h2>"Manifest file is missing or unreadable"?</h2>
+  <ul class="hint" style="line-height:1.8">
+    <li>You picked a folder that doesn't directly contain <code>manifest.json</code>. Open the folder you chose: if it only contains another folder, pick that one.</li>
+    <li>You picked the <code>.zip</code> itself, or a folder still inside the zip. Extract it first (right-click → Extract All).</li>
+    <li>The folder is in <strong>OneDrive</strong> and its files are "online-only" (a cloud icon next to them). Right-click the folder → <strong>Always keep on this device</strong>, or extract it somewhere outside OneDrive, such as <code>C:\Users\you\unitex-helper</code>.</li>
+    <li>On a <strong>school or work computer</strong>, IT settings may block Developer mode or unpacked extensions. If the Developer mode switch is greyed out, or Chrome says extensions are blocked by your administrator, it can't be installed on that computer.</li>
+  </ul>
 
   <h2>Phones</h2>
   <p class="hint">Mobile Chrome and Safari don't support extensions. On Android, Firefox, Kiwi, Yandex or Edge Canary can load extensions; on iPhone, Unitex works without the helper.</p>
