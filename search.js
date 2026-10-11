@@ -90,11 +90,15 @@ const SOURCES = {
   duckduckgo: { name: "DuckDuckGo", group: "main", async run(q) {
     const d = await jsonp(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1&t=unitex`);
     showDuckAnswer(d);
-    const out = (d.Results || []).map(r => ({ title: strip(r.Text) || host(r.FirstURL), url: r.FirstURL, snippet: "Official site", via: "DuckDuckGo", domain: host(r.FirstURL) }));
-    for (const t of (d.RelatedTopics || []).flatMap(t => t.Topics || [t]).slice(0, 4)) {
-      if (t.FirstURL && t.Text) out.push({ title: t.Text.split(" - ")[0], url: t.FirstURL, snippet: short(t.Text), via: "DuckDuckGo", domain: host(t.FirstURL) });
+    // Real websites only: the official site, the page the summary came from, and any websites in the
+    // infobox. ("Related topics" link back to DuckDuckGo's own pages, so they're left out.)
+    const out = (d.Results || []).map(r => ({ title: `${d.Heading || strip(r.Text) || host(r.FirstURL)} – official website`, url: r.FirstURL, snippet: short(strip(d.AbstractText)) || "Official website", via: "DuckDuckGo", domain: host(r.FirstURL) }));
+    if (d.AbstractURL && d.AbstractText) out.push({ title: `${d.Heading || q} – ${d.AbstractSource || host(d.AbstractURL)}`, url: d.AbstractURL, snippet: short(strip(d.AbstractText)), via: "DuckDuckGo", domain: host(d.AbstractURL) });
+    for (const c of d.Infobox?.content || []) {
+      const v = String(c.value || "");
+      if (c.data_type === "official_website" || /^https?:\/\//.test(v)) out.push({ title: `${d.Heading || q} – ${c.label || "website"}`, url: /^https?:/.test(v) ? v : "https://" + v, snippet: c.label || "", via: "DuckDuckGo", domain: host(/^https?:/.test(v) ? v : "https://" + v) });
     }
-    return out;
+    return out.filter(r => !/(^|\.)duckduckgo\.com$/.test(host(r.url)));
   }},
   reddit: { name: "Reddit", group: "main", async run(q) {
     const d = await getJson(`https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&limit=8&raw_json=1`);
@@ -142,7 +146,7 @@ const SOURCES = {
 for (const e of HELPER_ENGINES) {
   SOURCES["helper_" + e.id] = { name: e.name, group: "main", enabled: () => !!helperVersion(), run: q => helperSearch(e, withSites(q, topicDomains())) };
 }
-SOURCES.duckduckgo.name = "DuckDuckGo Instant Answers";
+SOURCES.duckduckgo.name = "DuckDuckGo (summaries & official sites)";
 
 // Property sites that let other websites read them: searched directly on Houses searches in Australia.
 const directSites = () => topicId === "houses" && regionId === "AU" ? Object.keys(LISTING_SITES) : [];
