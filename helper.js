@@ -44,6 +44,7 @@ const HELPER_ENGINES = [
   { id: "bing",       name: "Bing",       url: (q, P = 0) => `https://www.bing.com/search?q=${encodeURIComponent(q)}${P ? `&first=${P * 10 + 1}` : ""}` },
   { id: "brave",      name: "Brave",      url: (q, P = 0) => `https://search.brave.com/search?q=${encodeURIComponent(q)}&source=web${P ? `&offset=${P}` : ""}` },
   { id: "mojeek",     name: "Mojeek",     url: (q, P = 0) => `https://www.mojeek.com/search?q=${encodeURIComponent(q)}${P ? `&s=${P * 10 + 1}` : ""}` },
+  { id: "yandex",     name: "Yandex",     url: (q, P = 0) => `https://yandex.com/search/?text=${encodeURIComponent(q)}${P ? `&p=${P}` : ""}` },
   { id: "searxng",    name: "SearXNG",    url: (q, P = 0, host = SEARX_HOSTS[0]) => `https://${host}/search?q=${encodeURIComponent(q)}&categories=general&language=all${P ? `&pageno=${P + 1}` : ""}` },
 ];
 
@@ -87,9 +88,13 @@ function unwrapLink(href, base) {
   return /^https?:$/.test(u.protocol) ? u.href : null;
 }
 
-const ENGINE_DOMAINS = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|yahoo\.com|brave\.com|ecosia\.org|mojeek\.com|microsoft\.com\/en-us\/bing|gstatic\.com|youtube\.com\/results)$/;
-const AD_SELECTOR = ".result--ad, .b_ad, .ads, #tads, #bottomads, [data-text-ad], .ad, .sponsored, [data-testid*='ad']";
-const SNIPPET_SELECTOR = ".result__snippet, .b_caption p, .b_lineclamp2, .b_lineclamp3, .b_lineclamp4, .compText, p.s, .snippet-description, .generic-snippet, .VwiC3b, [data-sncf], .result__description, .web-result-description";
+const ENGINE_DOMAINS = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|yahoo\.com|brave\.com|ecosia\.org|mojeek\.com|microsoft\.com\/en-us\/bing|gstatic\.com|youtube\.com\/results|yandex\.[a-z.]+|ya\.ru)$/;
+// Ads are never shown: ad blocks on each engine's page, ad-click links, and results labelled "Ad"/"Sponsored".
+const AD_SELECTOR = ".result--ad, .b_ad, .b_adTop, .b_adBottom, .b_adLastChild, .ads, #tads, #tadsb, #bottomads, #taw [data-text-ad], [data-text-ad], .uEierd, [aria-label='Ads'], .commercial-unit-desktop-top, .ad, .sponsored, [data-testid*='ad-'], [data-type='ad'], .ad-result, [data-fast-name='direct'], .serp-adv-item, .Label_theme_direct";
+const AD_LINK = /(^|\.)(googleadservices\.com|doubleclick\.net|googlesyndication\.com|yabs\.yandex\.[a-z.]+|an\.yandex\.ru)$|\/(aclk|pagead)\b|[?&](msclkid|gclid|gad_source|yclid)=/;
+const AD_LABEL = /^(ad|ads|sponsored|sponsored results?|promoted|реклама|anzeige|annonce|publicité|patrocinado)$/i;
+const isAdBox = box => [...box.querySelectorAll("span, div, b, small")].some(n => n.children.length === 0 && AD_LABEL.test(n.textContent.trim().replace(/[·•:]/g, "").trim()));
+const SNIPPET_SELECTOR = ".OrganicText, .TextContainer, .result__snippet, .b_caption p, .b_lineclamp2, .b_lineclamp3, .b_lineclamp4, .compText, p.s, .snippet-description, .generic-snippet, .VwiC3b, [data-sncf], .result__description, .web-result-description";
 
 // Reads results out of any engine's page: links whose text is a heading (h2/h3) are results on
 // every engine. The snippet is taken from the result's container.
@@ -105,9 +110,9 @@ function parseResultsPage(html, base, engineName) {
   for (const t of doc.querySelectorAll(".title, .snippet-title")) { const a = t.closest("a[href]"); if (a) anchors.add(a); } // Brave
 
   for (const a of anchors) {
-    if (a.closest(AD_SELECTOR)) continue;
+    if (a.closest(AD_SELECTOR) || AD_LINK.test(a.getAttribute("href") || "")) continue;
     const url = unwrapLink(a.getAttribute("href"), base);
-    if (!url) continue;
+    if (!url || AD_LINK.test(url)) continue;
     let host;
     try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { continue; }
     if (ENGINE_DOMAINS.test(host) || seen.has(url)) continue;
@@ -121,6 +126,7 @@ function parseResultsPage(html, base, engineName) {
       if (up === doc.body || [...anchors].some(o => o !== a && up.contains(o))) break;
       box = up;
     }
+    if (isAdBox(box)) continue;
     let snippet = box.querySelector(SNIPPET_SELECTOR)?.textContent || "";
     if (!snippet) {
       snippet = box.textContent.replace(title, "");
@@ -136,7 +142,7 @@ function parseResultsPage(html, base, engineName) {
 
   if (!out.length) {
     const text = doc.body?.textContent?.toLowerCase() || "";
-    if (/captcha|unusual traffic|are you a robot|verify you are human|challenge/.test(text)) throw new Error("asked for a CAPTCHA (open it once yourself to clear it)");
+    if (/captcha|unusual traffic|are you a robot|not a robot|verify you are human|challenge/.test(text) || /showcaptcha/.test(base)) throw new Error("asked for a CAPTCHA (open it once yourself to clear it)");
     if (/enable javascript|turn on javascript|javascript is disabled|noscript/.test(text) || doc.querySelector("noscript meta[http-equiv=refresh]")) throw new Error("needs JavaScript, can't be read in the background");
   }
   return out;
@@ -230,7 +236,7 @@ function parsePriced(doc, base, via, skipHost) {
     if (n.children.length > 2 || !PRICE_TEXT.test(n.textContent) || n.textContent.length > 30) continue;
     let box = n;
     for (let i = 0; i < 7 && box.parentElement && !(box.querySelector("img") && box.querySelector("a[href]")); i++) box = box.parentElement;
-    if (!box.querySelector("img") || seen.has(box) || box.textContent.length > 700) continue;
+    if (!box.querySelector("img") || seen.has(box) || box.textContent.length > 700 || box.closest(AD_SELECTOR) || isAdBox(box)) continue;
     seen.add(box);
     const a = [...box.querySelectorAll("a[href]")].find(x => { const u = unwrapLink(x.getAttribute("href"), base); return u && !skipHost.test(new URL(u).hostname); }) || box.querySelector("a[href]");
     const url = a && unwrapLink(a.getAttribute("href"), base);

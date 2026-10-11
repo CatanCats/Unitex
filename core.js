@@ -224,3 +224,98 @@ function aiWarmUp() {
   }
 }
 for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, aiWarmUp, { capture: true });
+
+// ---------- settings ----------
+// Stored only in this browser. Keys are sent only to the company they belong to, straight from the browser.
+
+const SETTINGS_DEFAULT = { ai: true, overview: "google", keys: {}, models: { openai: "gpt-5-mini", gemini: "gemini-2.5-flash" } };
+const settings = { ...SETTINGS_DEFAULT, ...store.get("unitex.settings", {}) };
+settings.keys = { ...settings.keys };
+settings.models = { ...SETTINGS_DEFAULT.models, ...settings.models };
+const saveSettings = () => store.set("unitex.settings", settings);
+const aiEnabled = () => settings.ai !== false;
+
+// Who writes the AI overview. "engine" ones are read from the engine's own page (needs Unitex Helper);
+// "online" ones are free through Puter (sign in once); "key" ones use your own API key; "local" run on this computer.
+const AI_PROVIDER_LIST = [
+  { id: "google", name: "Google AI Overview", group: "From the search engines (needs Unitex Helper)" },
+  { id: "bing", name: "Bing Copilot", group: "From the search engines (needs Unitex Helper)" },
+  { id: "brave", name: "Brave AI summary", group: "From the search engines (needs Unitex Helper)" },
+  { id: "puter-chatgpt", name: "ChatGPT", model: "openai/gpt-5.4-nano", group: "Online AI, free (sign in to Puter once)" },
+  { id: "puter-claude", name: "Claude", model: "anthropic/claude-sonnet-5", group: "Online AI, free (sign in to Puter once)" },
+  { id: "puter-gemini", name: "Gemini", model: "google/gemini-2.5-flash", group: "Online AI, free (sign in to Puter once)" },
+  { id: "puter-deepseek", name: "DeepSeek", model: "deepseek/deepseek-chat", group: "Online AI, free (sign in to Puter once)" },
+  { id: "puter-grok", name: "Grok", model: "x-ai/grok-4", group: "Online AI, free (sign in to Puter once)" },
+  { id: "puter-llama", name: "Llama", model: "meta-llama/llama-4-maverick", group: "Online AI, free (sign in to Puter once)" },
+  { id: "puter-mistral", name: "Mistral", model: "mistralai/mistral-large", group: "Online AI, free (sign in to Puter once)" },
+  { id: "key-claude", name: "Claude Opus 5.5 (your Anthropic key)", group: "Online AI with your own API key" },
+  { id: "key-openai", name: "ChatGPT (your OpenAI key)", group: "Online AI with your own API key" },
+  { id: "key-gemini", name: "Gemini (your Google AI key)", group: "Online AI with your own API key" },
+  { id: "nano", name: "Gemini Nano (built into Chrome)", group: "On this computer (private)" },
+  { id: "llama1", name: "Llama 3.2 1B", group: "On this computer (private)" },
+  { id: "qwen", name: "Qwen3 1.7B", group: "On this computer (private)" },
+  { id: "gemma", name: "Gemma 2 2B", group: "On this computer (private)" },
+  { id: "llama3", name: "Llama 3.2 3B", group: "On this computer (private)" },
+];
+const providerName = id => AI_PROVIDER_LIST.find(p => p.id === id)?.name || id;
+
+function providerSelect(value, onchange, filter = () => true) {
+  const groups = [...new Set(AI_PROVIDER_LIST.filter(filter).map(p => p.group))];
+  const s = el("select", { className: "f-input", ariaLabel: "AI" }, ...groups.map(g => el("optgroup", { label: g },
+    ...AI_PROVIDER_LIST.filter(p => p.group === g && filter(p)).map(p => el("option", { value: p.id, textContent: p.name, selected: p.id === value })))));
+  s.onchange = () => onchange(s.value);
+  return s;
+}
+
+function openSettings() {
+  let d = $("settings");
+  if (!d) {
+    d = el("dialog", { id: "settings", className: "viewer settings" });
+    d.addEventListener("click", e => { if (e.target === d) d.close(); });
+    document.body.append(d);
+  }
+  const draft = JSON.parse(JSON.stringify(settings));
+  const keyInput = (k, label, hint) => el("label", { className: "set-field" }, el("span", { textContent: label }),
+    el("input", { type: "password", autocomplete: "off", placeholder: hint, value: draft.keys[k] || "", oninput() { draft.keys[k] = this.value.trim(); } }));
+  const modelInput = (k, label) => el("label", { className: "set-field small" }, el("span", { textContent: label }),
+    el("input", { type: "text", value: draft.models[k] || "", oninput() { draft.models[k] = this.value.trim(); } }));
+  const region = el("select", { className: "f-input", ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
+  const theme = el("select", { className: "f-input", ariaLabel: "Theme" }, ...[["", "Match my device"], ["light", "Light"], ["dark", "Dark"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (store.get("unitex.theme") || "") === v })));
+  const aiBox = el("input", { type: "checkbox", checked: draft.ai !== false, onchange() { draft.ai = this.checked; aiRest.hidden = !this.checked; } });
+  const aiRest = el("div", { className: "set-group", hidden: draft.ai === false },
+    el("label", { className: "set-field" }, el("span", { textContent: "AI overview by" }), providerSelect(draft.overview, v => { draft.overview = v; })),
+    el("p", { className: "hint", textContent: "Google's AI Overview is read from Google's own results page with Unitex Helper. If Google doesn't show one, Unitex tries Bing and Brave, then an AI on this computer. Online AI through Puter is free but asks you to sign in to Puter once; with your own key, the question and the search results go straight from your browser to that company." }),
+    el("h3", { textContent: "Your own API keys (optional)" }),
+    keyInput("anthropic", "Anthropic (Claude)", "sk-ant-…"),
+    keyInput("openai", "OpenAI (ChatGPT)", "sk-…"), modelInput("openai", "OpenAI model"),
+    keyInput("gemini", "Google AI Studio (Gemini)", "AIza…"), modelInput("gemini", "Gemini model"),
+    el("p", { className: "hint", textContent: "Keys stay in this browser and are only sent to the company they belong to. Use is billed to your own account." }));
+  fill(d,
+    el("div", { className: "viewer-head" }, el("h2", { textContent: "Settings" }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
+    el("div", { className: "set-body" },
+      el("h3", { textContent: "AI" }),
+      el("label", { className: "f-check set-check" }, aiBox, " Show AI (the AI overview and the AI tab)"),
+      aiRest,
+      el("h3", { textContent: "Search" }),
+      el("label", { className: "set-field" }, el("span", { textContent: "Country (for local stores and sites)" }), region),
+      el("label", { className: "set-field" }, el("span", { textContent: "Theme" }), theme),
+      el("button", { type: "button", className: "chip", textContent: "Switch all sources back on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All sources are on ✓"; } }),
+      el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed.` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ", el("a", { href: "install.html", textContent: "Unitex Helper" }))),
+    el("div", { className: "set-actions" },
+      el("button", { type: "button", className: "btn-ghost", textContent: "Cancel", onclick: () => d.close() }),
+      el("button", { type: "button", className: "btn-primary", textContent: "Save", onclick() {
+        Object.assign(settings, draft);
+        saveSettings();
+        setRegion(region.value);
+        if (theme.value) store.set("unitex.theme", theme.value); else try { localStorage.removeItem("unitex.theme"); } catch {}
+        location.reload();
+      } })));
+  if (!d.open) d.showModal();
+}
+
+// The ⚙ Settings button sits next to ♡ Saved.
+(() => {
+  const theme = document.getElementById("theme");
+  if (!theme) return;
+  theme.before(el("button", { id: "settings-btn", type: "button", className: "icon-btn", ariaLabel: "Settings", title: "Settings", textContent: "⚙", onclick: openSettings }));
+})();

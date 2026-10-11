@@ -12,7 +12,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import feedparser
 
@@ -50,7 +50,7 @@ def image_of(e):
 
 
 def summary_of(e, feed):
-    if feed.get("aggregator"):
+    if feed.get("aggregator") and feed["source"] == "Google News":
         return ""
     s = clean(e.get("summary"), 220)
     # Link aggregators (HN, Lobsters) put only URLs or "Comments" in the summary.
@@ -67,6 +67,21 @@ def published_of(e):
     return None
 
 
+def real_link(link):
+    """Bing News RSS links go through bing.com/news/apiclick.aspx?url=…; return the article itself."""
+    u = urlparse(link)
+    if u.hostname and u.hostname.endswith("bing.com"):
+        target = parse_qs(u.query).get("url")
+        if target:
+            return target[0]
+    return link
+
+
+def outlet_of(e):
+    src = e.get("source") or {}
+    return src.get("title") or e.get("news_source") or e.get("source_title")
+
+
 def fetch(feed):
     try:
         req = urllib.request.Request(feed["url"], headers={"User-Agent": UA, "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"})
@@ -80,18 +95,24 @@ def fetch(feed):
         title, link = clean(e.get("title")), e.get("link")
         if not title or not link:
             continue
+        link = real_link(link)
         source = feed["source"]
         if feed.get("aggregator"):
             # Google News titles end in " - Outlet"; credit the real outlet.
-            outlet = (e.get("source") or {}).get("title")
+            outlet = outlet_of(e)
             if outlet and title.endswith(" - " + outlet):
                 title = title[: -len(outlet) - 3]
             source = outlet or source
+        host = urlparse(link).hostname or ""
+        if host.endswith("news.google.com"):
+            host = urlparse((e.get("source") or {}).get("href") or link).hostname or host
         items.append({
             "title": title,
             "url": link,
             "source": source,
-            "domain": urlparse((e.get("source") or {}).get("href") or link).hostname or "",
+            # Which news feed found it: Google News, Bing News, Yahoo News, or the outlet's own feed.
+            "via": [feed["source"]],
+            "domain": host.removeprefix("www."),
             "region": feed["region"] if not feed.get("aggregator") else "",
             "published": published_of(e),
             "image": image_of(e),
@@ -123,8 +144,23 @@ def main():
             pool.extend(items)
 
         pool.sort(key=lambda i: i["published"] or 0, reverse=True)
+        # The same story from several feeds becomes one item that credits each of them.
+        by_key = {}
+        for item in pool:
+            first = by_key.setdefault(norm(item["title"]), item)
+            if first is not item:
+                for v in item["via"]:
+                    if v not in first["via"]:
+                        first["via"].append(v)
+                first["image"] = first["image"] or item["image"]
+                if len(item["summary"]) > len(first["summary"]):
+                    first["summary"] = item["summary"]
+                if "news.google.com" in first["url"] and "news.google.com" not in item["url"]:
+                    first["url"], first["domain"] = item["url"], item["domain"]
         per_source, kept = {}, []
         for item in pool:
+            if by_key.get(norm(item["title"])) is not item:
+                continue
             if item["published"] and now - item["published"] > MAX_AGE_H * 3600:
                 continue
             key = norm(item["title"])

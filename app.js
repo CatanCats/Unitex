@@ -17,30 +17,6 @@ function selectEngine(id) {
   renderEngine();
 }
 
-// Clicking a chip picks that engine; if something is already typed, it searches right away.
-function chip(e) {
-  const b = el("button", { type: "button", className: "chip" + (e.id === engineId ? " active" : "") }, icon(e), e.name);
-  b.setAttribute("aria-pressed", e.id === engineId);
-  b.onclick = () => {
-    selectEngine(e.id);
-    if ($("q").value.trim()) $("search").requestSubmit();
-    else $("q").focus();
-  };
-  return b;
-}
-
-// The big "Search everywhere" button: picks Unitex, which searches many sources at once.
-function everywhere() {
-  const b = el("button", { type: "button", className: "chip everywhere" + (engineId === "unitex" ? " active" : "") }, el("span", { className: "logo mini", textContent: "U" }), "Search everywhere with Unitex");
-  b.setAttribute("aria-pressed", engineId === "unitex");
-  b.onclick = () => {
-    selectEngine("unitex");
-    if ($("q").value.trim()) $("search").requestSubmit();
-    else $("q").focus();
-  };
-  return b;
-}
-
 function renderEngine() {
   const e = byId(engineId);
   $("engine-icon").replaceChildren(icon(e));
@@ -48,15 +24,12 @@ function renderEngine() {
   const name = HOME_TABS.find(([id]) => id === homeTab)[1];
   $("q").placeholder = homeTab !== "all" ? (homeTab === "shopping" ? "Search every store with Unitex…" : `Search ${name.toLowerCase()} with Unitex…`) : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
 
-  $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), everywhere(), ...recent.map(id => chip(byId(id))),
-    el("button", { type: "button", className: "chip more", textContent: `All ${ENGINES.length}`, onclick: openPicker }));
-  $("quick-ai").replaceChildren(el("span", { className: "row-label", textContent: "Ask AI" }), everywhere(), ...AI_ENGINES.map(chip));
 }
 
 // ---------- what to search for (Unitex tabs) ----------
 
 function renderTopics() {
-  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Search for" }), ...HOME_TABS.map(([id, name]) => {
+  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Search for" }), ...HOME_TABS.filter(([id]) => id !== "ai" || aiEnabled()).map(([id, name]) => {
     const b = el("button", { type: "button", className: "chip topic" + (id === homeTab ? " active" : ""), textContent: name });
     b.setAttribute("aria-pressed", id === homeTab);
     b.onclick = () => {
@@ -106,7 +79,7 @@ $("picker-filter").oninput = e => renderPicker(e.target.value);
 $("picker-filter").onkeydown = e => {
   if (e.key === "Enter") { e.preventDefault(); $("picker").querySelector(".pitem")?.click(); }
 };
-document.addEventListener("click", e => { if (!e.target.closest("#picker, #engine-btn, .chip.more")) closePicker(); });
+document.addEventListener("click", e => { if (!e.target.closest("#picker, #engine-btn")) closePicker(); });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closePicker();
   if (e.key === "/" && !e.target.matches("input, textarea")) { e.preventDefault(); $("q").focus(); }
@@ -187,17 +160,23 @@ function renderTabs() {
   }));
 }
 
-function card(i, featured) {
-  const img = i.image && el("img", { src: i.image, alt: "", loading: "lazy", className: "card-img", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
-  const fav = el("img", { src: `https://icons.duckduckgo.com/ip3/${i.domain}.ico`, alt: "", width: 14, height: 14, className: "fav", onerror() { this.remove(); } });
-  const meta = el("div", { className: "card-meta" }, fav, el("strong", { textContent: i.source }),
-    i.region && el("span", { textContent: i.region }), i.published && el("span", { textContent: ago(i.published) }));
-  const main = el("a", { className: "card-main", href: i.url, target: "_blank", rel: "noopener" },
-    img, el("div", { className: "card-body" }, meta, el("h3", { textContent: i.title }), i.summary && el("p", { textContent: i.summary })));
-  const actions = el("div", { className: "card-actions" },
-    el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
-    el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }));
-  return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
+// Each story is drawn like a Unitex search result: the website, the headline, a summary, and which
+// news feeds found it (Google News, Bing News, Yahoo News, or the outlet's own feed).
+function newsResult(i) {
+  const via = (i.via || [i.source]).filter(v => v !== i.source);
+  const thumb = i.image && el("img", { className: "r-thumb", src: i.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
+  return el("li", { className: "result news-result" },
+    el("div", { className: "r-body" },
+      el("div", { className: "r-src" }, domainIcon(i.domain), el("strong", { textContent: i.source }), i.domain && el("span", { className: "r-site", textContent: i.domain })),
+      el("a", { className: "r-title", href: i.url, target: "_blank", rel: "noopener", textContent: i.title }),
+      i.summary && el("p", { className: "r-snippet", textContent: i.summary }),
+      el("p", { className: "r-meta" },
+        via.length > 0 && el("span", { className: "via", textContent: "found by " + via.join(" · ") }),
+        i.published && el("span", { textContent: ago(i.published) }),
+        i.region && el("span", { textContent: i.region }),
+        el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
+        el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }))),
+    thumb);
 }
 
 function renderNews() {
@@ -207,17 +186,16 @@ function renderNews() {
     list.replaceChildren(el("li", { className: "empty", textContent: "Nothing here right now." }));
     return;
   }
-  // Lead with the first story that has a picture.
-  const lead = tab.items.findIndex(i => i.image);
-  const items = lead > 0 ? [tab.items[lead], ...tab.items.filter((_, n) => n !== lead)] : tab.items;
-  list.replaceChildren(...items.slice(0, shown).map((i, n) => card(i, n === 0)));
+  const items = tab.items;
+  list.replaceChildren(...items.slice(0, shown).map(newsResult));
   if (items.length > shown) {
-    list.append(el("li", { className: "more-row" }, el("button", {
-      type: "button", className: "chip more", textContent: `Show more (${items.length - shown})`,
+    list.append(el("li", { className: "more-li" }, el("button", {
+      type: "button", className: "show-more", textContent: "Show more news",
       onclick() { shown += PAGE; renderNews(); },
     })));
   }
-  $("news-status").textContent = `${news.sources.length} sources worldwide · updated ${ago(news.generated)}`;
+  const feeds = [...new Set(news.categories.flatMap(c => c.items.flatMap(i => i.via || [])))].filter(v => /News$/.test(v) && /Google|Bing|Yahoo/.test(v));
+  $("news-status").textContent = `From ${feeds.join(", ") || "news feeds"} and ${news.sources.length} news websites · updated ${ago(news.generated)}`;
 }
 
 async function loadNews() {

@@ -725,3 +725,23 @@ body.mode-on .rmain { grid-template-columns: minmax(0, 1fr) !important; }
 .list-panel { margin: 0 0 14px; padding: 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow); }
 .list-panel .compare-wrap { margin-top: 10px; }
 body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+/* ---------- Settings ---------- */
+.settings { width: min(560px, calc(100vw - 32px)); }
+.set-body { display: grid; gap: 10px; padding: 4px 18px 8px; max-height: 70vh; overflow: auto; }
+.set-body h3 { margin: 10px 0 0; font-size: 0.95rem; }
+.set-group { display: grid; gap: 10px; }
+.set-field { display: grid; gap: 4px; font-size: 0.85rem; font-weight: 600; }
+.set-field input, .set-field select { padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: inherit; font: inherit; font-weight: 400; }
+.set-field.small input { max-width: 260px; }
+.set-check { font-weight: 600; }
+.set-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 18px; }
+.set-actions button { border: 0; cursor: pointer; }
+#settings-btn { font-size: 1.05rem; }
+.ai-note { margin: 8px 0 0; font-size: 0.78rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ai-model select { max-width: 240px; }
+
+/* ---------- Home news, drawn like search results ---------- */
+.news-results { display: grid; gap: 18px; padding: 0; list-style: none; }
+.news-results .result { max-width: 760px; }
+.news-results .r-meta a { color: var(--accent); font-weight: 600; text-decoration: none; }

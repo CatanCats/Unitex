@@ -24,13 +24,20 @@ function blockAfterHeading(doc, re) {
 
 const AI_SOURCES = {
   google: { name: "Google AI Overview", async run(q) {
+    if (!helperVersion()) throw new Error("needs Unitex Helper");
     const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "google").url(q));
     const doc = new DOMParser().parseFromString(res.html, "text/html");
-    const text = blockAfterHeading(doc, /^AI Overview/i);
-    if (!text) throw new Error(/enable javascript|turn on javascript/i.test(res.html) ? "Google needs JavaScript, so its AI Overview can't be read" : "no AI Overview in Google's page this time");
+    let text = blockAfterHeading(doc, /^AI Overview/i);
+    if (!text) {
+      // Google's AI Mode page (udm=50) answers every question, not just some.
+      const mode = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&udm=50&hl=en`).catch(() => null);
+      if (mode) text = blockAfterHeading(new DOMParser().parseFromString(mode.html, "text/html"), /^(AI Mode|AI Overview|AI response)/i);
+    }
+    if (!text) throw new Error(/enable javascript|turn on javascript/i.test(res.html) ? "Google needs JavaScript, so its AI Overview can't be read" : "Google didn't show an AI Overview for this search");
     return { text };
   }},
-  bing: { name: "Bing (Copilot)", async run(q) {
+  bing: { name: "Bing Copilot", async run(q) {
+    if (!helperVersion()) throw new Error("needs Unitex Helper");
     const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "bing").url(q));
     const doc = new DOMParser().parseFromString(res.html, "text/html");
     const box = doc.querySelector("#b_genserp_container, .b_genserp, [data-tag='copilot-answer'], .b_ans .rwrl, .b_ans .b_paractl, .b_ans .b_focusTextLarge, .b_ans .b_focusTextMedium");
@@ -39,6 +46,7 @@ const AI_SOURCES = {
     return { text };
   }},
   brave: { name: "Brave AI summary", async run(q) {
+    if (!helperVersion()) throw new Error("needs Unitex Helper");
     const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "brave").url(q));
     const key = res.html.match(/summarizer["']?\s*:\s*\{[^}]*?["']?key["']?\s*:\s*["']([^"']+)["']/i)?.[1];
     if (!key) throw new Error("Brave didn't offer an AI summary for this search");
@@ -216,46 +224,152 @@ function modelSelect(avail, current, onchange) {
   return s;
 }
 
-// ---------- AI overview on the All tab ----------
+// ---------- online AI: Puter (free) and your own API keys ----------
 
+const ANTHROPIC_SDK = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.133.0/+esm";
+let puterLoading;
+function loadPuter() {
+  puterLoading ||= new Promise((resolve, reject) => {
+    if (globalThis.puter) return resolve(globalThis.puter);
+    const sc = el("script", { src: "https://js.puter.com/v2/" });
+    sc.onload = () => resolve(globalThis.puter);
+    sc.onerror = () => { puterLoading = null; reject(new Error("couldn't load Puter")); };
+    document.head.append(sc);
+  });
+  return puterLoading;
+}
+class NeedsSignIn extends Error {}
+
+// Reads a text/event-stream response; onData gets each JSON payload.
+async function readSse(res, onData) {
+  if (!res.ok) { let msg = `HTTP ${res.status}`; try { const j = await res.json(); msg = j.error?.message || msg; } catch {} throw new Error(msg); }
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (data && data !== "[DONE]") { try { onData(JSON.parse(data)); } catch {} }
+    }
+  }
+}
+
+// Runs one provider. messages: [{ role: "system"|"user"|"assistant", content }]. Returns the full text.
+async function runProvider(id, q, messages, onText, onProgress) {
+  const p = AI_PROVIDER_LIST.find(x => x.id === id);
+  if (AI_SOURCES[id]) { const { text } = await AI_SOURCES[id].run(q); onText(text); return text; }
+  if (id.startsWith("puter-")) {
+    const puter = await loadPuter();
+    if (!puter.auth.isSignedIn()) throw new NeedsSignIn("sign in to Puter to use it");
+    const resp = await puter.ai.chat(messages, { model: p.model, stream: true });
+    let out = "";
+    for await (const part of resp) { out += part?.text || ""; onText(out); }
+    return out;
+  }
+  const system = messages.find(m => m.role === "system")?.content || "";
+  const turns = messages.filter(m => m.role !== "system");
+  if (id === "key-claude") {
+    if (!settings.keys.anthropic) throw new Error("add your Anthropic key in Settings");
+    const { default: Anthropic } = await import(ANTHROPIC_SDK);
+    const client = new Anthropic({ apiKey: settings.keys.anthropic, dangerouslyAllowBrowser: true });
+    const stream = client.beta.messages.stream({
+      model: "claude-opus-5-5", max_tokens: 16000, output_config: { effort: "low" },
+      betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
+      system, messages: turns,
+    });
+    let out = "";
+    for await (const ev of stream) if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") { out += ev.delta.text; onText(out); }
+    const final = await stream.finalMessage();
+    if (final.stop_reason === "refusal") throw new Error("Claude declined to answer this one");
+    return out;
+  }
+  if (id === "key-openai") {
+    if (!settings.keys.openai) throw new Error("add your OpenAI key in Settings");
+    const res = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.keys.openai}` },
+      body: JSON.stringify({ model: settings.models.openai || "gpt-5-mini", stream: true, messages }) });
+    let out = "";
+    await readSse(res, d => { out += d.choices?.[0]?.delta?.content || ""; onText(out); });
+    return out;
+  }
+  if (id === "key-gemini") {
+    if (!settings.keys.gemini) throw new Error("add your Google AI key in Settings");
+    const model = settings.models.gemini || "gemini-2.5-flash";
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(settings.keys.gemini)}`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: turns.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) }) });
+    let out = "";
+    await readSse(res, d => { out += (d.candidates?.[0]?.content?.parts || []).map(x => x.text || "").join(""); onText(out); });
+    return out;
+  }
+  const m = aiModel(id);
+  if (!m) throw new Error("unknown AI");
+  return aiGenerate(m, messages, onText, onProgress);
+}
+
+// The order to try: the chosen one, then (without asking) the engines, AI with your keys and AI on this computer.
+async function providerChain(first) {
+  const { tries } = aiEnabled() ? await pickModel() : { tries: [] };
+  const keyed = [settings.keys.anthropic && "key-claude", settings.keys.openai && "key-openai", settings.keys.gemini && "key-gemini"].filter(Boolean);
+  const engines = helperVersion() ? ["google", "bing", "brave"] : [];
+  return [...new Set([first, ...engines, ...keyed, ...tries])];
+}
+
+function signInButton(id, then) {
+  return el("button", { type: "button", className: "btn-primary", textContent: `Sign in to Puter to use ${providerName(id)} (free)`, async onclick() {
+    try { const puter = await loadPuter(); await puter.auth.signIn(); then(); } catch (e) { this.textContent = "Sign-in didn't finish: " + (e.message || "try again"); }
+  } });
+}
+
+// ---------- AI overview on the All tab ----------
 
 // Shown as soon as a search starts, so it's clear the overview is coming.
 function aiOverviewStart() {
-  if (cur().kind !== "web") return;
+  if (cur().kind !== "web" || !aiEnabled()) return;
   fill($("ai-overview"), el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("span", { className: "hint", textContent: "Generating…" })),
     el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: "Generating…" })));
   $("ai-overview").hidden = false;
 }
 
-async function renderAiOverview(q, results) {
+async function renderAiOverview(q, results, chosen = settings.overview || "google") {
   const box = $("ai-overview");
   const id = runId;
-  if (!q || cur().kind !== "web" || !results.length) { box.hidden = true; return; }
+  if (!q || cur().kind !== "web" || !aiEnabled()) { box.hidden = true; return; }
   const ctx = aiContext(results);
   const body = el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: "Generating…" }));
   const bar = progressBar();
-  const engineBox = el("div", { className: "ai-engines" });
-  const status = el("span", { className: "hint", textContent: "Generating…" });
-  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), status), bar.box, body, engineBox);
+  const note = el("p", { className: "hint ai-note" });
+  const pick = providerSelect(chosen, v => { settings.overview = v; saveSettings(); renderAiOverview(q, results, v); });
+  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("label", { className: "ai-model" }, "by ", pick)), bar.box, body, note);
   box.hidden = false;
-  if (helperVersion()) engineOverviews(q, engineBox, () => {});
 
-  const { tries } = await pickModel();
+  const chain = await providerChain(chosen);
   if (id !== runId) return;
-  if (!tries.length) { fill(body, el("p", { className: "hint", textContent: "AI overviews need a browser that can run AI on this computer: a recent Chrome or Edge on a laptop or desktop." })); status.textContent = ""; return; }
-  try {
-    const { model } = await aiGenerateAny(tries, [systemPrompt(q, ctx), { role: "user", content: q }],
-      t => { if (id === runId) fill(body, aiRich(t, ctx)); }, (v, t) => bar.set(v, t), m => { status.textContent = `Generating with ${m.name}…`; });
-    if (id !== runId) return;
-    bar.set(0, "");
-    status.textContent = `by ${model.name} · from the results below`;
-    body.append(el("p", { className: "ai-foot hint" }, "Written on this computer from the results below · check important facts · ",
-      el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } })));
-  } catch (e) {
-    if (id !== runId) return;
-    bar.set(0, ""); status.textContent = "";
-    fill(body, el("p", { className: "hint", textContent: `Couldn't generate an overview: ${e.message}` }));
+  const failed = [];
+  for (const pid of chain) {
+    fill(body, el("p", { className: "hint ai-gen", textContent: `Generating with ${providerName(pid)}…` }));
+    try {
+      await runProvider(pid, q, [systemPrompt(q, ctx), { role: "user", content: q }], t => { if (id === runId) fill(body, aiRich(t, ctx)); }, (v, t) => bar.set(v, t));
+      if (id !== runId) return;
+      bar.set(0, "");
+      pick.value = pid;
+      fill(note, failed.length ? `${failed.map(f => `${providerName(f.id)}: ${f.why}`).join(" · ")}. This one is by ${providerName(pid)}. ` : `By ${providerName(pid)}${AI_SOURCES[pid] ? ", from its own results page" : ", from the results below"} · check important facts · `,
+        el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } }));
+      return;
+    } catch (e) {
+      if (id !== runId) return;
+      bar.set(0, "");
+      if (e instanceof NeedsSignIn && pid === chosen) { fill(body, signInButton(pid, () => renderAiOverview(q, results, chosen)), el("p", { className: "hint", textContent: "Puter gives free access to ChatGPT, Claude, Gemini and more. Or pick another AI above." })); return; }
+      failed.push({ id: pid, why: e.message });
+    }
   }
+  fill(body, el("p", { className: "hint", textContent: `No AI could write an overview: ${failed.map(f => `${providerName(f.id)}: ${f.why}`).join(" · ") || "this browser can't run AI on this computer"}. Pick another AI above, or add a key in ⚙ Settings.` }));
+  fill(note);
 }
 
 // The AI answers in the engines' own result pages (with Unitex Helper). Only shown when one is found.
@@ -275,45 +389,45 @@ async function engineOverviews(q, box, show) {
 // ---------- the AI tab ----------
 
 let aiThread = { q: "", turns: [] };
+const chatCapable = p => !AI_SOURCES[p.id];
 async function renderAiTab(q, results) {
   const box = $("ai-chat");
   const id = runId;
   const ctx = aiContext(results, 10);
   if (aiThread.q !== q) aiThread = { q, turns: [] };
-  const { id: modelId, tries, avail } = await pickModel();
-  if (id !== runId) return;
-  let current = modelId;
+  let current = store.get("unitex.ai.chat", "") || (chatCapable({ id: settings.overview }) ? settings.overview : "puter-chatgpt");
   const thread = el("div", { className: "ai-thread" });
   const bar = progressBar();
   const input = el("input", { type: "text", placeholder: "Ask a follow-up…", ariaLabel: "Ask a follow-up" });
-  const sel = modelSelect(avail, current, v => { current = v; });
+  const sel = providerSelect(current, v => { current = v; store.set("unitex.ai.chat", v); }, chatCapable);
   const form = el("form", { className: "ai-ask" }, input, el("button", { type: "submit", className: "btn-primary", textContent: "Ask" }));
   let busy = false;
+  const others = ["puter-chatgpt", "puter-claude", "puter-gemini", "nano", "llama1"];
 
   const turnEl = t => t.role === "user"
     ? el("div", { className: "ai-msg user" }, el("p", { textContent: t.content }))
     : el("div", { className: "ai-msg bot" }, el("div", { className: "ai-who" }, el("span", { className: "ai-badge", textContent: "AI" }), t.model),
         t.el || aiRich(t.content, ctx),
-        !t.el && el("div", { className: "ai-msg-actions" }, ...AI_MODELS.filter(m => m.name !== t.model && avail[m.id].state !== "no").slice(0, 3)
-          .map(m => el("button", { type: "button", className: "chip", textContent: `Ask ${m.name} too`, onclick: () => ask(t.question, m.id) }))));
+        !t.el && el("div", { className: "ai-msg-actions" }, ...others.filter(o => providerName(o) !== t.model).slice(0, 3)
+          .map(o => el("button", { type: "button", className: "chip", textContent: `Ask ${providerName(o)} too`, onclick: () => ask(t.question, o) }))));
   const draw = () => fill(thread, ...aiThread.turns.map(turnEl));
 
-  async function ask(question, mid = current) {
-    if (busy || !mid) return;
+  async function ask(question, pid = current) {
+    if (busy) return;
     busy = true;
-    let m = aiModel(mid);
     const history = aiThread.turns.filter(t => t.content).map(t => ({ role: t.role, content: t.content }));
     if (!aiThread.turns.some(t => t.role === "user" && t.content === question)) aiThread.turns.push({ role: "user", content: question });
-    const answer = { role: "assistant", model: m.name, question, content: "", el: el("p", { className: "hint ai-gen", textContent: "Generating…" }) };
+    const answer = { role: "assistant", model: providerName(pid), question, content: "", el: el("p", { className: "hint ai-gen", textContent: `Generating with ${providerName(pid)}…` }) };
     aiThread.turns.push(answer);
     draw();
     try {
-      const order = [mid, ...tries.filter(x => x !== mid)];
-      const r = await aiGenerateAny(order, [systemPrompt(q, ctx), ...history, { role: "user", content: question }], t => { answer.el = aiRich(t, ctx); draw(); }, (v, t) => bar.set(v, t),
-        mm => { m = mm; answer.model = mm.name; answer.el = el("p", { className: "hint ai-gen", textContent: `Generating with ${mm.name}…` }); draw(); });
-      answer.content = r.text;
-      answer.el = answer.content.trim() ? null : el("p", { className: "hint", textContent: `${m.name} didn't write anything. Try again or pick another model.` });
-    } catch (e) { answer.el = el("p", { className: "hint", textContent: `${m.name} couldn't answer: ${e.message}` }); answer.content = ""; }
+      answer.content = await runProvider(pid, question, [systemPrompt(q, ctx), ...history, { role: "user", content: question }], t => { answer.el = aiRich(t, ctx); draw(); }, (v, t) => bar.set(v, t));
+      answer.el = answer.content.trim() ? null : el("p", { className: "hint", textContent: `${providerName(pid)} didn't write anything. Try again or pick another AI.` });
+    } catch (e) {
+      answer.content = "";
+      answer.el = e instanceof NeedsSignIn ? el("div", {}, signInButton(pid, () => { aiThread.turns = aiThread.turns.filter(t => t !== answer); busy = false; ask(question, pid); }))
+        : el("p", { className: "hint", textContent: `${providerName(pid)} couldn't answer: ${e.message}` });
+    }
     bar.set(0, "");
     busy = false;
     draw();
@@ -321,15 +435,13 @@ async function renderAiTab(q, results) {
   form.onsubmit = e => { e.preventDefault(); const v = input.value.trim(); if (v) { input.value = ""; ask(v); } };
 
   fill(box,
-    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "Model ", sel)),
-    el("p", { className: "hint", textContent: "Runs on this computer, so your questions and results never leave your browser. Answers come from the search results listed below and cite them; check important facts." }),
-    bar.box, thread,
-    current ? form : el("p", { className: "hint", textContent: `This browser can't run AI on this computer (${AI_MODELS.map(m => avail[m.id].why).find(Boolean)}). Try a recent Chrome or Edge on a laptop or desktop.` }),
+    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "AI ", sel)),
+    el("p", { className: "hint", textContent: "Answers come from the search results listed below and cite them; check important facts. On-computer AI keeps everything in your browser; online AI sends your question and the results to that service." }),
+    bar.box, thread, form,
     ctx.length && el("details", { className: "ai-sources" }, el("summary", { textContent: `Sources the AI reads (${ctx.length})` }),
       el("ol", {}, ...ctx.map(c => el("li", {}, el("a", { href: c.url, rel: "noopener", textContent: c.title }), el("span", { className: "hint", textContent: " · " + c.site }))))));
   box.hidden = false;
   draw();
-  if (!current) return;
   if (!aiThread.turns.length) ask(q);
   if (helperVersion()) { const eb = el("div", { className: "ai-engines" }); box.append(eb); engineOverviews(q, eb, () => {}); }
 }

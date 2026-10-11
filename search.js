@@ -474,7 +474,7 @@ const TABS = [
   { id: "travel",   name: "Travel",   kind: "web", topic: "travel", more: true },
   { id: "code",     name: "Code",     kind: "list", sources: CODE_SOURCES, noun: "results", more: true, subs: [
     { id: "all", name: "Code" }, { id: "opensource", name: "Open source", kind: "web", topic: "opensource" }] },
-];
+].filter(t => t.id !== "ai" || aiEnabled());
 if (!TABS.some(t => t.id === tab)) tab = "all";
 // The current tab with its sub-filter applied.
 function cur() {
@@ -611,7 +611,7 @@ function renderNotice() {
   if (helperOutdated()) { $("notice").replaceWith(Object.assign(helperUpdateBanner(), { id: "notice" })); return; }
   fill($("notice"),
     el("strong", { textContent: "Unitex is only partly working in this browser." }),
-    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, Brave and Mojeek can't be searched until you install it." }),
+    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, Brave, Mojeek and Yandex can't be searched until you install it." }),
     el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
   $("notice").hidden = !!helperVersion();
 }

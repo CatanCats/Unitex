@@ -279,6 +279,30 @@
         "source": "NZ Herald",
         "region": "New Zealand",
         "url": "https://www.nzherald.co.nz/arc/outboundfeeds/rss/curated/78/?outputType=xml"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=world+news&format=rss",
+        "aggregator": true
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=top+stories&format=rss",
+        "aggregator": true
+      },
+      {
+        "source": "Yahoo News",
+        "region": "Global",
+        "url": "https://www.yahoo.com/news/rss/world",
+        "aggregator": true
+      },
+      {
+        "source": "Yahoo News",
+        "region": "Global",
+        "url": "https://www.yahoo.com/news/rss",
+        "aggregator": true
       }
     ]
   },
@@ -335,6 +359,18 @@
         "source": "ABC News Business",
         "region": "Australia",
         "url": "https://www.abc.net.au/news/feed/51892/rss.xml"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=business+news&format=rss",
+        "aggregator": true
+      },
+      {
+        "source": "Yahoo News",
+        "region": "Global",
+        "url": "https://finance.yahoo.com/news/rssindex",
+        "aggregator": true
       }
     ]
   },
@@ -426,6 +462,18 @@
         "source": "TechRadar",
         "region": "UK",
         "url": "https://www.techradar.com/rss"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=technology+news&format=rss",
+        "aggregator": true
+      },
+      {
+        "source": "Yahoo News",
+        "region": "Global",
+        "url": "https://www.yahoo.com/tech/rss",
+        "aggregator": true
       }
     ]
   },
@@ -492,6 +540,18 @@
         "source": "Live Science",
         "region": "US",
         "url": "https://www.livescience.com/feeds/all"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=science+news&format=rss",
+        "aggregator": true
+      },
+      {
+        "source": "Yahoo News",
+        "region": "Global",
+        "url": "https://www.yahoo.com/news/rss/science",
+        "aggregator": true
       }
     ]
   },
@@ -543,6 +603,12 @@
         "source": "The Guardian Football",
         "region": "UK",
         "url": "https://www.theguardian.com/football/rss"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=sports+news&format=rss",
+        "aggregator": true
       }
     ]
   },
@@ -614,6 +680,18 @@
         "source": "The Guardian Books",
         "region": "UK",
         "url": "https://www.theguardian.com/books/rss"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=entertainment+news&format=rss",
+        "aggregator": true
+      },
+      {
+        "source": "Yahoo News",
+        "region": "Global",
+        "url": "https://www.yahoo.com/entertainment/rss",
+        "aggregator": true
       }
     ]
   },
@@ -694,6 +772,12 @@
         "source": "Free Software Foundation",
         "region": "Community",
         "url": "https://www.fsf.org/static/fsforg/rss/news.xml"
+      },
+      {
+        "source": "Bing News",
+        "region": "Global",
+        "url": "https://www.bing.com/news/search?q=open+source+software&format=rss",
+        "aggregator": true
       }
     ]
   }
