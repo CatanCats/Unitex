@@ -24,11 +24,13 @@
   <h1>Can Unitex read these sites from your browser?</h1>
   <p class="hint">With <a href="install.html">Unitex Helper</a> installed, the third column shows each engine working through it. This page asks your browser to read each site's search results in the background, the way Unitex would, and shows what your browser allows. "Blocked" means the site loads fine when you visit it, but it doesn't allow other websites to read it, so your browser refuses to hand the page to Unitex.</p>
   <button id="run" class="btn-primary" type="button" style="border:0;cursor:pointer;margin-top:12px">Run the test</button>
+  <div id="update-slot"></div>
   <table class="test-table">
     <thead><tr><th>Site</th><th>Website on its own</th><th>With Unitex Helper</th><th>Open it yourself</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
 </main>
+<script src="version.js?v=15"></script>
 <script src="helper.js?v=11"></script>
 <script src="listings.js?v=11"></script>
 <script>
@@ -64,6 +66,7 @@ for (const [name, base, parse] of SITES) {
   rows.append(tr);
 }
 
+if (helperOutdated()) document.getElementById("update-slot").append(helperUpdateBanner());
 const engineFor = name => HELPER_ENGINES.find(e => name.startsWith(e.name === "Brave" ? "Brave" : e.name));
 
 document.getElementById("run").onclick = async () => {

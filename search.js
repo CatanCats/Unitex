@@ -406,6 +406,7 @@ function renderSources(settled, sources, extraLocked = []) {
 }
 
 function renderNotice() {
+  if (helperOutdated()) { $("notice").replaceWith(Object.assign(helperUpdateBanner(), { id: "notice" })); return; }
   fill($("notice"),
     el("strong", { textContent: "Unitex is only partly working in this browser." }),
     el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, Brave and Mojeek can't be searched until you install it." }),

@@ -602,3 +602,9 @@ body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(240px, 1f
 .map-box { position: sticky; top: 90px; display: flex; flex-direction: column; gap: 4px; }
 .map-frame { width: 100%; height: 60vh; border: 1px solid var(--border); border-radius: 14px; background: var(--card-2); }
 @media (max-width: 900px) { .places-wrap { grid-template-columns: 1fr; } .map-box { position: static; order: -1; } .map-frame { height: 45vh; } }
+
+/* ---------- helper update notice ---------- */
+.notice.update { border-color: #60a5fa; background: color-mix(in srgb, #60a5fa 12%, var(--card)); }
+.home-update { position: relative; z-index: 1; max-width: 720px; margin: 8px auto 0; }
+.home-update[hidden] { display: none; }
+.home-update .notice { max-width: none; margin: 0; }

@@ -230,6 +230,10 @@ async function loadNews() {
   renderNews();
 }
 
+// ---------- helper update banner ----------
+
+if (helperOutdated()) { $("helper-update").append(helperUpdateBanner()); $("helper-update").hidden = false; }
+
 // ---------- start ----------
 
 // ?q=... lets Unitex be the browser's default search engine.
