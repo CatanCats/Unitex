@@ -81,9 +81,9 @@
         "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
       },
       {
-        "source": "CBC",
+        "source": "Global News",
         "region": "Canada",
-        "url": "https://www.cbc.ca/webfeed/rss/rss-world"
+        "url": "https://globalnews.ca/world/feed/"
       },
       {
         "source": "DW",
