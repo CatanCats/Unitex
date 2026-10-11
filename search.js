@@ -70,12 +70,29 @@ function jsonp(url, ms = 8000) {
 // ---------- sources ----------
 // Each web source returns [{ title, url, snippet, via, domain, meta, image }].
 
-const topicDomains = () => topicSites(topicById(topicId)).map(s => s.domain).slice(0, 14);
+// Specialist sites and sources the person switched off in the Sources panel.
+let offSources = new Set(store.get("unitex.off", []));
+let offSites = new Set(store.get("unitex.offsites", []));
+const topicDomains = () => topicSites(topicById(topicId)).map(s => s.domain).filter(d => !offSites.has(d)).slice(0, 14);
+const siteOff = r => offSites.size && [...offSites].some(d => { const h = host(r.url); return h === d || h.endsWith("." + d) || (h + new URL(r.url).pathname).startsWith(d); });
+
+// "found by Amazon" on an amazon.com page says nothing, so a source that is the site itself isn't shown.
+const nameKey = s => String(s || "").toLowerCase().replace(/\(through searxng\)/, "").replace(/\b(images?|videos?|news|shopping|books|search page|video library|image library|\(.*\))\b/g, "").replace(/[^a-z0-9]/g, "");
+const SELF_ALIAS = { hacker: "ycombinator", wikimediacommons: "wikimedia", internetarchive: "archive", projectgutenberg: "gutenberg", unitex: "", libraryofcongress: "loc" };
+function siteRoot(u) {
+  const parts = host(u).split(".");
+  return parts.length >= 3 && parts[parts.length - 2].length <= 3 ? parts[parts.length - 3] : parts[parts.length - 2] || "";
+}
+function isSelf(via, url, site) {
+  const v = nameKey(via), k = SELF_ALIAS[v] ?? v, root = siteRoot(url), s = nameKey(site);
+  return !!k && ((root.length >= 3 && (k === root || k.includes(root) || root.includes(k))) || (s && (s === v || s.includes(k))));
+}
+const viaLabel = (via, url, site) => viaText([].concat(via).filter(v => !isSelf(v, url, site)));
 const withSites = (q, domains) => domains.length ? `${q} (${domains.map(d => "site:" + d).join(" OR ")})` : q;
 
 const SOURCES = {
-  wikipedia: { name: "Wikipedia", group: "main", async run(q) {
-    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&format=json&origin=*`);
+  wikipedia: { paged: true, name: "Wikipedia", group: "main", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&sroffset=${P * 5}&format=json&origin=*`);
     return d.query.search.map(r => ({
       title: r.title, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
       snippet: strip(r.snippet) + "…", via: "Wikipedia", domain: "wikipedia.org",
@@ -83,11 +100,11 @@ const SOURCES = {
   }},
   // SearXNG metasearch: public servers that allow other websites to read their results (format=json).
   // Each result lists the engines that found it, so they get the credit.
-  searxng: { name: "SearXNG (direct)", group: "main", async run(q) {
+  searxng: { paged: true, name: "SearXNG (direct)", group: "main", async run(q, { page: P = 0 } = {}) {
     const reasons = [];
     for (const server of SEARX_HOSTS) {
       try {
-        const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=general&language=all`, 6000);
+        const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=general&pageno=${P + 1}&language=all`, 6000);
         const out = (d.results || []).flatMap(r => (r.engines?.length ? r.engines : ["SearXNG"]).map(e => ({
           title: strip(r.title) || host(r.url), url: r.url, snippet: short(strip(r.content)), via: e === "SearXNG" ? e : `${engineName(e)} (through SearXNG)`, domain: host(r.url) })));
         if (out.length) return out;
@@ -95,8 +112,8 @@ const SOURCES = {
     }
     throw new Error(reasons.every(r => r === reasons[0]) && reasons[0] ? `public servers: ${reasons[0]}` : "no public server answered");
   }},
-  qwant: { name: "Qwant", group: "main", async run(q) {
-    const d = await getJson(`https://api.qwant.com/v3/search/web?q=${encodeURIComponent(q)}&count=10&offset=0&locale=en_GB&device=desktop`);
+  qwant: { paged: true, name: "Qwant", group: "main", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.qwant.com/v3/search/web?q=${encodeURIComponent(q)}&count=10&offset=${P * 10}&locale=en_GB&device=desktop`);
     const main = d.data?.result?.items?.mainline || [];
     return main.filter(b => b.type === "web").flatMap(b => b.items || []).map(r => ({ title: strip(r.title) || host(r.url), url: r.url, snippet: short(strip(r.desc)), via: "Qwant", domain: host(r.url) }));
   }},
@@ -141,14 +158,14 @@ const SOURCES = {
       meta: `${p.subreddit_name_prefixed} · ${p.score} points · ${p.num_comments} comments · ${ago(p.created_utc)}`,
     }));
   }},
-  hackernews: { name: "Hacker News", group: "main", async run(q) {
-    const d = await getJson(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=6`);
+  hackernews: { paged: true, name: "Hacker News", group: "main", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=6&page=${P}`);
     return d.hits.filter(h => h.title).map(h => ({
       title: h.title, url: `https://news.ycombinator.com/item?id=${h.objectID}`, snippet: h.url ? `Discussion of ${host(h.url)}` : "", via: "Hacker News", domain: "news.ycombinator.com",
       meta: `${h.points} points · ${h.num_comments} comments · ${ago(h.created_at_i)}`,
     }));
   }},
-  news: { name: "Unitex News", group: "main", async run(q) {
+  news: { paged: true, name: "Unitex News", group: "main", async run(q, { page: P = 0 } = {}) {
     const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     if (!words.length) return [];
     let d;
@@ -157,18 +174,18 @@ const SOURCES = {
     const seen = new Set();
     return d.categories.flatMap(c => c.items)
       .filter(i => { const t = (i.title + " " + i.summary).toLowerCase(); return words.every(w => t.includes(w)) && !seen.has(i.url) && seen.add(i.url); })
-      .slice(0, 6)
+      .slice(P * 6, P * 6 + 6)
       .map(i => ({ title: i.title, url: i.url, snippet: i.summary, via: "Unitex News", domain: i.domain, image: i.image, meta: `${i.source}${i.published ? " · " + ago(i.published) : ""}` }));
   }},
-  github: { name: "GitHub", group: "code", async run(q) {
-    const d = await getJson(`https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&per_page=5`);
+  github: { paged: true, name: "GitHub", group: "code", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&per_page=5&page=${P + 1}`);
     return d.items.map(r => ({
       title: r.full_name, url: r.html_url, snippet: short(r.description), via: "GitHub", domain: "github.com",
       meta: `★ ${r.stargazers_count.toLocaleString()}${r.language ? " · " + r.language : ""}`,
     }));
   }},
-  stackoverflow: { name: "Stack Overflow", group: "code", async run(q) {
-    const d = await getJson(`https://api.stackexchange.com/2.3/search/excerpts?order=desc&sort=relevance&q=${encodeURIComponent(q)}&site=stackoverflow&pagesize=5`);
+  stackoverflow: { paged: true, name: "Stack Overflow", group: "code", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.stackexchange.com/2.3/search/excerpts?order=desc&sort=relevance&q=${encodeURIComponent(q)}&site=stackoverflow&pagesize=5&page=${P + 1}`);
     return d.items.filter(i => i.item_type === "question").map(i => ({
       title: strip(i.title), url: `https://stackoverflow.com/q/${i.question_id}`, snippet: short(strip(i.excerpt)), via: "Stack Overflow", domain: "stackoverflow.com",
       meta: `${i.score} votes${i.is_answered ? " · answered" : ""}`,
@@ -178,7 +195,7 @@ const SOURCES = {
 
 // With Unitex Helper installed, every major engine is searched directly in your browser.
 for (const e of HELPER_ENGINES) {
-  SOURCES["helper_" + e.id] = { name: e.name, group: "main", enabled: () => !!helperVersion(), run: q => helperSearch(e, withSites(q, topicDomains())) };
+  SOURCES["helper_" + e.id] = { name: e.name, group: "main", paged: true, enabled: () => !!helperVersion(), run: (q, o = {}) => helperSearch(e, withSites(q, topicDomains()), o.page || 0) };
 }
 SOURCES.duckduckgo.name = "DuckDuckGo (summaries & official sites)";
 
@@ -190,12 +207,12 @@ for (const id of Object.keys(LISTING_SITES)) {
 
 // Image sources return [{ thumb, url, title, via }].
 const IMAGE_SOURCES = {
-  openverse: { name: "Openverse", async run(q) {
-    const d = await getJson(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=20`);
+  openverse: { paged: true, name: "Openverse", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=20&page=${P + 1}`);
     return (d.results || []).map(i => ({ thumb: i.thumbnail || i.url, full: i.url, url: i.foreign_landing_url || i.url, title: i.title, via: "Openverse", license: [i.license?.toUpperCase(), i.license_version].filter(Boolean).join(" "), creator: i.creator, site: i.source }));
   }},
-  commons: { name: "Wikimedia Commons", async run(q) {
-    const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=16&gsrsearch=${encodeURIComponent(q)}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
+  commons: { paged: true, name: "Wikimedia Commons", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=16&gsroffset=${P * 16}&gsrsearch=${encodeURIComponent(q)}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
     return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index)
       .filter(p => p.imageinfo?.[0]?.thumburl && !/\.(pdf|djvu|ogg|webm|tif)$/i.test(p.title))
       .map(p => ({ thumb: p.imageinfo[0].thumburl, full: p.imageinfo[0].url, url: p.imageinfo[0].descriptionurl, title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), via: "Wikimedia Commons", license: "Free licence (see page)" }));
@@ -210,21 +227,21 @@ const mins = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padSta
 const year = d => d ? String(d).slice(0, 4) : "";
 
 const VIDEO_SOURCES = {
-  peertube: { name: "PeerTube (Sepia Search)", async run(q) {
-    const d = await getJson(`https://sepiasearch.org/api/v1/search/videos?search=${encodeURIComponent(q)}&count=16`);
+  peertube: { paged: true, name: "PeerTube (Sepia Search)", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://sepiasearch.org/api/v1/search/videos?search=${encodeURIComponent(q)}&count=16&start=${P * 16}`);
     return (d.data || []).map(v => ({ title: v.name, url: v.url, thumb: v.thumbnailUrl, via: "PeerTube", secs: v.duration, by: v.account?.displayName || v.channel?.displayName,
       embed: v.embedUrl || (v.uuid && v.url ? new URL(v.url).origin + "/videos/embed/" + v.uuid : null), meta: [v.account?.displayName || v.channel?.displayName, mins(v.duration)].filter(Boolean).join(" · ") }));
   }},
-  dailymotion: { name: "Dailymotion", async run(q) {
-    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&fields=id,title,url,thumbnail_360_url,duration,owner.screenname`);
+  dailymotion: { paged: true, name: "Dailymotion", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&page=${P + 1}&fields=id,title,url,thumbnail_360_url,duration,owner.screenname`);
     return (d.list || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail_360_url, via: "Dailymotion", secs: v.duration, by: v["owner.screenname"], embed: `https://www.dailymotion.com/embed/video/${v.id}`, meta: [v["owner.screenname"], mins(v.duration)].filter(Boolean).join(" · ") }));
   }},
-  archive: { name: "Internet Archive", async run(q) {
-    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(movies)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=16&output=json`);
+  archive: { paged: true, name: "Internet Archive", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(movies)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=16&page=${P + 1}&output=json`);
     return (d.response?.docs || []).map(v => ({ title: v.title, url: `https://archive.org/details/${v.identifier}`, thumb: `https://archive.org/services/img/${v.identifier}`, via: "Internet Archive", by: [].concat(v.creator || [])[0], embed: `https://archive.org/embed/${v.identifier}`, meta: [[].concat(v.creator || [])[0], v.year].filter(Boolean).join(" · ") }));
   }},
-  commons: { name: "Wikimedia Commons", async run(q) {
-    const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=${encodeURIComponent(q + " filetype:video")}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
+  commons: { paged: true, name: "Wikimedia Commons", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=12&gsroffset=${P * 12}&gsrsearch=${encodeURIComponent(q + " filetype:video")}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
     return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index).filter(p => p.imageinfo?.[0]?.thumburl)
       .map(p => ({ title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), url: p.imageinfo[0].descriptionurl, thumb: p.imageinfo[0].thumburl, via: "Wikimedia Commons", file: p.imageinfo[0].url }));
   }},
@@ -245,43 +262,43 @@ const NEWS_SOURCES = {
     const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=25&format=json&sort=datedesc`);
     return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
   }},
-  hackernews: { name: "Hacker News", async run(q) {
-    const d = await getJson(`https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=10`);
+  hackernews: { paged: true, name: "Hacker News", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=10&page=${P}`);
     return d.hits.filter(h => h.title).map(h => ({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, via: "Hacker News", outlet: h.url ? host(h.url) : "Hacker News", region: "Community", ts: h.created_at_i, meta: `${h.points} points · ${ago(h.created_at_i)}` }));
   }},
 };
 
 const BOOK_SOURCES = {
-  openlibrary: { name: "Open Library", async run(q) {
-    const d = await getJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=12&fields=key,title,author_name,first_publish_year,cover_i,ebook_access`);
+  openlibrary: { paged: true, name: "Open Library", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=12&page=${P + 1}&fields=key,title,author_name,first_publish_year,cover_i,ebook_access`);
     return (d.docs || []).map(b => ({ title: b.title, url: `https://openlibrary.org${b.key}`, thumb: b.cover_i && `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`, via: "Open Library",
       author: b.author_name?.slice(0, 2).join(", "), year: b.first_publish_year, free: b.ebook_access === "public", borrow: b.ebook_access === "borrowable", meta: [b.author_name?.slice(0, 2).join(", "), b.first_publish_year].filter(Boolean).join(" · ") }));
   }},
-  googlebooks: { name: "Google Books", async run(q) {
-    const d = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12`);
+  googlebooks: { paged: true, name: "Google Books", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12&startIndex=${P * 12}`);
     return (d.items || []).map(({ volumeInfo: v, accessInfo: a }) => ({ title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180),
       author: v.authors?.slice(0, 2).join(", "), year: +year(v.publishedDate) || undefined, free: a?.viewability === "ALL_PAGES" || a?.epub?.isAvailable && a?.accessViewStatus === "FULL_PUBLIC_DOMAIN", meta: [v.authors?.slice(0, 2).join(", "), year(v.publishedDate)].filter(Boolean).join(" · ") }));
   }},
-  gutenberg: { name: "Project Gutenberg (free e-books)", async run(q) {
-    const d = await getJson(`https://gutendex.com/books/?search=${encodeURIComponent(q)}`);
-    return (d.results || []).slice(0, 10).map(b => ({ title: b.title, url: `https://www.gutenberg.org/ebooks/${b.id}`, thumb: b.formats?.["image/jpeg"], via: "Project Gutenberg", author: b.authors?.[0]?.name, free: true, read: b.formats?.["text/html"], meta: ["Free e-book", b.authors?.[0]?.name].filter(Boolean).join(" · ") }));
+  gutenberg: { paged: true, name: "Project Gutenberg (free e-books)", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://gutendex.com/books/?page=${P + 1}&search=${encodeURIComponent(q)}`);
+    return (d.results || []).map(b => ({ title: b.title, url: `https://www.gutenberg.org/ebooks/${b.id}`, thumb: b.formats?.["image/jpeg"], via: "Project Gutenberg", author: b.authors?.[0]?.name, free: true, read: b.formats?.["text/html"], meta: ["Free e-book", b.authors?.[0]?.name].filter(Boolean).join(" · ") }));
   }},
 };
 
 const PAPER_SOURCES = {
-  openalex: { name: "OpenAlex", async run(q) {
-    const d = await getJson(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=12`);
+  openalex: { paged: true, name: "OpenAlex", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=12&page=${P + 1}`);
     return (d.results || []).map(w => ({ title: w.display_name, url: w.open_access?.oa_url || w.primary_location?.landing_page_url || w.doi || w.id, via: "OpenAlex",
       authors: w.authorships?.map(a => a.author?.display_name).filter(Boolean) || [], venue: w.primary_location?.source?.display_name, year: w.publication_year, cites: w.cited_by_count, free: !!w.open_access?.is_oa, doi: w.doi,
       meta: [w.authorships?.slice(0, 3).map(a => a.author?.display_name).join(", "), w.primary_location?.source?.display_name, w.publication_year, `cited ${w.cited_by_count}×`, w.open_access?.is_oa && "free to read"].filter(Boolean).join(" · ") }));
   }},
-  crossref: { name: "Crossref", async run(q) {
-    const d = await getJson(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=10&select=DOI,title,author,issued,container-title,URL`);
+  crossref: { paged: true, name: "Crossref", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=10&offset=${P * 10}&select=DOI,title,author,issued,container-title,URL`);
     return (d.message?.items || []).filter(w => w.title?.[0]).map(w => ({ title: w.title[0], url: w.URL, via: "Crossref",
       authors: (w.author || []).map(a => [a.given, a.family].filter(Boolean).join(" ")), venue: w["container-title"]?.[0], year: w.issued?.["date-parts"]?.[0]?.[0], doi: w.DOI && "https://doi.org/" + w.DOI,
       meta: [w.author?.slice(0, 3).map(a => [a.given, a.family].filter(Boolean).join(" ")).join(", "), w["container-title"]?.[0], w.issued?.["date-parts"]?.[0]?.[0]].filter(Boolean).join(" · ") }));
   }},
-  wikipedia: { name: "Wikipedia", async run(q) { return SOURCES.wikipedia.run(q); } },
+  wikipedia: { paged: true, name: "Wikipedia", async run(q, o) { return SOURCES.wikipedia.run(q, o); } },
 };
 
 const PLACE_SOURCES = {
@@ -295,8 +312,8 @@ const PLACE_SOURCES = {
 const CODE_SOURCES = {
   github: SOURCES.github,
   stackoverflow: SOURCES.stackoverflow,
-  npm: { name: "npm", async run(q) {
-    const d = await getJson(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=6`);
+  npm: { paged: true, name: "npm", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=6&from=${P * 6}`);
     return (d.objects || []).map(({ package: p }) => ({ title: p.name, url: p.links?.npm || `https://www.npmjs.com/package/${p.name}`, snippet: short(p.description), via: "npm", meta: `v${p.version}` }));
   }},
 };
@@ -304,28 +321,28 @@ const CODE_SOURCES = {
 // ---------- more image and video sources (they let other websites read them) ----------
 
 Object.assign(IMAGE_SOURCES, {
-  nasa: { name: "NASA Image Library", async run(q) {
-    const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=image&page_size=16`);
+  nasa: { paged: true, name: "NASA Image Library", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=image&page_size=16&page=${P + 1}`);
     return (d.collection?.items || []).filter(i => i.links?.[0]?.href).map(i => ({ thumb: i.links[0].href, full: i.links[0].href.replace("~thumb", "~medium"), url: `https://images.nasa.gov/details/${i.data?.[0]?.nasa_id}`, title: i.data?.[0]?.title, via: "NASA", creator: i.data?.[0]?.center, license: "Public domain (NASA)" }));
   }},
-  artic: { name: "Art Institute of Chicago", async run(q) {
-    const d = await getJson(`https://api.artic.edu/api/v1/artworks/search?q=${encodeURIComponent(q)}&fields=id,title,image_id,artist_title,is_public_domain&limit=16`);
+  artic: { paged: true, name: "Art Institute of Chicago", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.artic.edu/api/v1/artworks/search?q=${encodeURIComponent(q)}&fields=id,title,image_id,artist_title,is_public_domain&limit=16&page=${P + 1}`);
     return (d.data || []).filter(a => a.image_id).map(a => ({ thumb: `https://www.artic.edu/iiif/2/${a.image_id}/full/400,/0/default.jpg`, full: `https://www.artic.edu/iiif/2/${a.image_id}/full/1200,/0/default.jpg`, url: `https://www.artic.edu/artworks/${a.id}`, title: a.title, via: "Art Institute of Chicago", creator: a.artist_title, license: a.is_public_domain ? "Public domain" : "" }));
   }},
-  cleveland: { name: "Cleveland Museum of Art", async run(q) {
-    const d = await getJson(`https://openaccess-api.clevelandart.org/api/artworks/?q=${encodeURIComponent(q)}&has_image=1&limit=16`);
+  cleveland: { paged: true, name: "Cleveland Museum of Art", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://openaccess-api.clevelandart.org/api/artworks/?q=${encodeURIComponent(q)}&has_image=1&limit=16&skip=${P * 16}`);
     return (d.data || []).filter(a => a.images?.web?.url).map(a => ({ thumb: a.images.web.url, full: a.images.print?.url || a.images.web.url, url: a.url, title: a.title, via: "Cleveland Museum of Art", creator: a.creators?.[0]?.description, license: "CC0" }));
   }},
-  europeana: { name: "Europeana", async run(q) {
-    const d = await getJson(`https://api.europeana.eu/record/v2/search.json?wskey=api2demo&query=${encodeURIComponent(q)}&media=true&qf=TYPE:IMAGE&rows=16`);
+  europeana: { paged: true, name: "Europeana", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.europeana.eu/record/v2/search.json?wskey=api2demo&query=${encodeURIComponent(q)}&media=true&qf=TYPE:IMAGE&rows=16&start=${P * 16 + 1}`);
     return (d.items || []).filter(i => i.edmPreview?.[0]).map(i => ({ thumb: i.edmPreview[0], full: i.edmIsShownBy?.[0] || i.edmPreview[0], url: i.guid, title: i.title?.[0], via: "Europeana", creator: i.dataProvider?.[0], license: (i.rights?.[0] || "").replace(/^https?:\/\//, "") }));
   }},
-  inaturalist: { name: "iNaturalist (nature photos)", async run(q) {
-    const d = await getJson(`https://api.inaturalist.org/v1/observations?q=${encodeURIComponent(q)}&photos=true&quality_grade=research&per_page=16`);
+  inaturalist: { paged: true, name: "iNaturalist (nature photos)", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.inaturalist.org/v1/observations?q=${encodeURIComponent(q)}&photos=true&quality_grade=research&per_page=16&page=${P + 1}`);
     return (d.results || []).filter(o => o.photos?.[0]?.url).map(o => ({ thumb: o.photos[0].url.replace("square", "medium"), full: o.photos[0].url.replace("square", "large"), url: o.uri, title: o.taxon?.preferred_common_name || o.taxon?.name || o.species_guess, via: "iNaturalist", creator: o.user?.login, license: (o.photos[0].license_code || "").toUpperCase() }));
   }},
-  wikipedia: { name: "Wikipedia", async run(q) {
-    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrlimit=12&prop=pageimages&piprop=thumbnail|original&pithumbsize=400&format=json&origin=*`);
+  wikipedia: { paged: true, name: "Wikipedia", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrlimit=12&gsroffset=${P * 12}&prop=pageimages&piprop=thumbnail|original&pithumbsize=400&format=json&origin=*`);
     return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index).filter(p => p.thumbnail?.source)
       .map(p => ({ thumb: p.thumbnail.source, full: p.original?.source, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`, title: p.title, via: "Wikipedia" }));
   }},
@@ -341,32 +358,33 @@ async function firstThatAnswers(hosts, fn) {
   throw last || new Error("no server answered");
 }
 Object.assign(VIDEO_SOURCES, {
-  youtube: { name: "YouTube (via Invidious / Piped)", async run(q) {
+  youtube: { paged: true, name: "YouTube (via Invidious / Piped)", async run(q, { page: P = 0 } = {}) {
     try {
-      return await firstThatAnswers(INVIDIOUS, async h => (await getJson(`https://${h}/api/v1/search?q=${encodeURIComponent(q)}&type=video`, 6000)).filter(v => v.videoId).slice(0, 16).map(v => ({
+      return await firstThatAnswers(INVIDIOUS, async h => (await getJson(`https://${h}/api/v1/search?q=${encodeURIComponent(q)}&type=video&page=${P + 1}`, 6000)).filter(v => v.videoId).slice(0, 16).map(v => ({
         title: v.title, url: `https://www.youtube.com/watch?v=${v.videoId}`, thumb: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`, secs: v.lengthSeconds, by: v.author, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${v.videoId}` })));
-    } catch {
+    } catch (e) {
+      if (P) throw e;
       return await firstThatAnswers(PIPED, async h => ((await getJson(`https://${h}/search?q=${encodeURIComponent(q)}&filter=videos`, 6000)).items || []).filter(v => v.url?.includes("watch?v=")).slice(0, 16).map(v => {
         const id = v.url.split("v=")[1]; return { title: v.title, url: `https://www.youtube.com/watch?v=${id}`, thumb: v.thumbnail, secs: v.duration, by: v.uploaderName, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${id}` }; }));
     }
   }},
-  odysee: { name: "Odysee", async run(q) {
-    const d = await getJson(`https://lighthouse.odysee.tv/search?s=${encodeURIComponent(q)}&size=12&mediaType=video&include=channel,title,thumbnail_url,duration`);
+  odysee: { paged: true, name: "Odysee", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://lighthouse.odysee.tv/search?s=${encodeURIComponent(q)}&size=12&from=${P * 12}&mediaType=video&include=channel,title,thumbnail_url,duration`);
     return (Array.isArray(d) ? d : []).map(v => ({ title: v.title || v.name, url: `https://odysee.com/${v.name}:${v.claimId}`, thumb: v.thumbnail_url, secs: v.duration, by: v.channel, via: "Odysee", embed: `https://odysee.com/$/embed/${v.name}:${v.claimId}` }));
   }},
-  nasa: { name: "NASA Video Library", async run(q) {
-    const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=video&page_size=12`);
+  nasa: { paged: true, name: "NASA Video Library", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=video&page_size=12&page=${P + 1}`);
     return (d.collection?.items || []).map(i => ({ title: i.data?.[0]?.title, url: `https://images.nasa.gov/details/${i.data?.[0]?.nasa_id}`, thumb: i.links?.[0]?.href, by: i.data?.[0]?.center, via: "NASA", file: `https://images-assets.nasa.gov/video/${i.data?.[0]?.nasa_id}/${i.data?.[0]?.nasa_id}~mobile.mp4` }));
   }},
 });
 
 // Engines' own image and video sections that let other websites read them: SearXNG servers (each
 // result names the engine that found it: Google, Bing, Flickr, Unsplash, Vimeo, YouTube…) and Qwant.
-async function searxJson(q, category) {
+async function searxJson(q, category, P = 0) {
   const reasons = [];
   for (const server of SEARX_HOSTS) {
     try {
-      const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=${category}&language=all`, 6000);
+      const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=${category}&language=all&pageno=${P + 1}`, 6000);
       if (d.results?.length) return d.results;
     } catch (e) { reasons.push(e.message); }
   }
@@ -375,30 +393,30 @@ async function searxJson(q, category) {
 const searxEngine = (r, kind) => `${engineName(String(r.engine || r.engines?.[0] || "SearXNG").replace(/[ .]*(images?|videos?)$/i, ""))} ${kind} (through SearXNG)`;
 const qwantSecs = d => d > 36000 ? Math.round(d / 1000) : d;
 Object.assign(IMAGE_SOURCES, {
-  searxng: { name: "SearXNG Images (Google, Bing, Flickr, Unsplash…)", async run(q) {
-    return (await searxJson(q, "images")).filter(r => r.thumbnail_src || r.img_src).slice(0, 30).map(r => ({ thumb: r.thumbnail_src || r.img_src, full: r.img_src, url: r.url, title: strip(r.title), via: searxEngine(r, "Images"), site: host(r.url) }));
+  searxng: { paged: true, name: "SearXNG Images (Google, Bing, Flickr, Unsplash…)", async run(q, { page: P = 0 } = {}) {
+    return (await searxJson(q, "images", P)).filter(r => r.thumbnail_src || r.img_src).slice(0, 30).map(r => ({ thumb: r.thumbnail_src || r.img_src, full: r.img_src, url: r.url, title: strip(r.title), via: searxEngine(r, "Images"), site: host(r.url) }));
   }},
-  qwant: { name: "Qwant Images", async run(q) {
-    const d = await getJson(`https://api.qwant.com/v3/search/images?q=${encodeURIComponent(q)}&count=30&offset=0&locale=en_GB&device=desktop&safesearch=1`);
+  qwant: { paged: true, name: "Qwant Images", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.qwant.com/v3/search/images?q=${encodeURIComponent(q)}&count=30&offset=${P * 30}&locale=en_GB&device=desktop&safesearch=1`);
     return (d.data?.result?.items || []).map(i => ({ thumb: i.thumbnail, full: i.media, url: i.url, title: i.title, via: "Qwant Images", site: host(i.url) }));
   }},
 });
 Object.assign(VIDEO_SOURCES, {
-  searxng: { name: "SearXNG Videos (YouTube, Vimeo, Bing…)", async run(q) {
-    return (await searxJson(q, "videos")).slice(0, 24).map(r => ({ title: strip(r.title), url: r.url, thumb: r.thumbnail || r.img_src, by: r.author, secs: durSecs(r.length), via: searxEngine(r, "Videos"), embed: ytEmbed(r.url) || r.iframe_src || undefined }));
+  searxng: { paged: true, name: "SearXNG Videos (YouTube, Vimeo, Bing…)", async run(q, { page: P = 0 } = {}) {
+    return (await searxJson(q, "videos", P)).slice(0, 24).map(r => ({ title: strip(r.title), url: r.url, thumb: r.thumbnail || r.img_src, by: r.author, secs: durSecs(r.length), via: searxEngine(r, "Videos"), embed: ytEmbed(r.url) || r.iframe_src || undefined }));
   }},
-  qwant: { name: "Qwant Videos", async run(q) {
-    const d = await getJson(`https://api.qwant.com/v3/search/videos?q=${encodeURIComponent(q)}&count=20&offset=0&locale=en_GB&device=desktop&safesearch=1`);
+  qwant: { paged: true, name: "Qwant Videos", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://api.qwant.com/v3/search/videos?q=${encodeURIComponent(q)}&count=20&offset=${P * 20}&locale=en_GB&device=desktop&safesearch=1`);
     return (d.data?.result?.items || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail, secs: qwantSecs(v.duration), by: v.channel || v.source, via: "Qwant Videos", embed: ytEmbed(v.url) }));
   }},
 });
 Object.assign(BOOK_SOURCES, {
-  archive: { name: "Internet Archive (books)", async run(q) {
-    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(texts)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=12&output=json`);
+  archive: { paged: true, name: "Internet Archive (books)", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(texts)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=12&page=${P + 1}&output=json`);
     return (d.response?.docs || []).map(b => ({ title: b.title, url: `https://archive.org/details/${b.identifier}`, thumb: `https://archive.org/services/img/${b.identifier}`, via: "Internet Archive", author: [].concat(b.creator || [])[0], year: +b.year || undefined, free: true, read: `https://archive.org/details/${b.identifier}` }));
   }},
-  loc: { name: "Library of Congress", async run(q) {
-    const d = await getJson(`https://www.loc.gov/books/?q=${encodeURIComponent(q)}&fo=json&c=12`);
+  loc: { paged: true, name: "Library of Congress", async run(q, { page: P = 0 } = {}) {
+    const d = await getJson(`https://www.loc.gov/books/?q=${encodeURIComponent(q)}&fo=json&c=12&sp=${P + 1}`);
     return (d.results || []).filter(b => b.title).map(b => ({ title: b.title, url: b.url || b.id, thumb: [].concat(b.image_url || [])[0], via: "Library of Congress", author: [].concat(b.contributor || [])[0], year: +year(b.date) || undefined, free: b.online_format?.length > 0 }));
   }},
 });
@@ -415,15 +433,24 @@ Object.assign(PLACE_SOURCES, {
 for (const [tabId, sources] of Object.entries({ news: NEWS_SOURCES, images: IMAGE_SOURCES, videos: VIDEO_SOURCES, books: BOOK_SOURCES })) {
   for (const [id, src] of Object.entries(HELPER_VERTICALS[tabId])) sources["helper_" + id] = { ...src, enabled: () => !!helperVersion() };
 }
-// Shopping: with the helper, stores' and engines' shopping pages are read and become product cards.
-const SHOP_FOR = { shopping: ["amazon", "ebay", "googleshop", "bingshop"], marketplace: ["ebay", "amazon"], reviews: ["amazon"] };
+// Shopping: with the helper, stores' and engines' shopping pages are read and become product cards:
+// Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country (STORES in helper.js).
+const SHOP_FOR = { shopping: ["amazon", "ebay", "googleshop", "bingshop", "@stores"], marketplace: ["ebay", "@secondhand", "amazon"], reviews: ["amazon"] };
 function cardSourcesFor(topic) {
   const out = {};
   if (CARD_SOURCES[topic]) out[topic] = CARD_SOURCES[topic];
-  for (const id of SHOP_FOR[topic] || []) out["helper_" + id] = { name: STORE_SOURCES[id].name, enabled: () => !!helperVersion(), run: q => STORE_SOURCES[id].run(q, { region: regionId, used: topic === "marketplace" }) };
+  const used = topic === "marketplace";
+  for (const id of SHOP_FOR[topic] || []) {
+    if (id.startsWith("@")) {
+      for (const st of (id === "@stores" ? STORES : SECONDHAND_STORES)[regionId] || []) out["store_" + st[0]] = { ...storeReader(st), enabled: () => !!helperVersion() };
+      continue;
+    }
+    const src = STORE_SOURCES[id];
+    out["helper_" + id] = { name: src.name, paged: src.paged, enabled: () => !!helperVersion(), run: (q, o = {}) => src.run(q, { ...o, region: regionId, used }) };
+  }
   return out;
 }
-const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => n.startsWith("helper_")).map(([, s]) => s.name);
+const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => /^(helper|store)_/.test(n)).map(([, s]) => s.name);
 
 // The tabs. "kind" picks how results are drawn; "subs" are the filters under a tab. A sub can set a
 // topic (its specialist sites and cards), add a word to the search ("suffix"), or bring its own sources.
@@ -508,7 +535,7 @@ function resultItem(r) {
         el("strong", { textContent: host(url) }), path.length > 1 && el("span", { className: "r-site", textContent: path.slice(0, 40) })),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
       r.snippet && el("p", { className: "r-snippet", textContent: r.snippet }),
-      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + viaText(via) }), r.meta && el("span", { textContent: r.meta }))),
+      el("p", { className: "r-meta" }, viaLabel(via, url) && el("span", { className: "via", textContent: "found by " + viaLabel(via, url) }), r.meta && el("span", { textContent: r.meta }))),
     (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
 
@@ -517,7 +544,7 @@ function imageTile(i) {
   if (!url || !thumb) return null;
   return el("a", { className: "img-tile", href: url, rel: "noopener", title: i.title || "" },
     el("img", { src: thumb, alt: i.title || "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.closest(".img-tile").remove(); } }),
-    el("span", { className: "img-via", textContent: i.via }));
+    !isSelf(i.via, i.url, i.site) && el("span", { className: "img-via", textContent: i.via }));
 }
 
 function mediaCard(i, kind) {
@@ -534,18 +561,50 @@ function mediaCard(i, kind) {
 
 // ---------- which sources ran: the status bar ----------
 
+let sourcesOpen = false;
+let lastPanel = null;
 function renderSources(settled, sources, extraLocked = []) {
-  const chips = settled.map(s => {
-    const name = sources[s.n].name;
-    if (s.err) {
-      const why = s.err.message;
-      return el("span", { className: "src bad", title: why }, "✕ ", name, el("small", { textContent: " " + why }));
-    }
-    return el("span", { className: "src ok" }, "✓ ", name, el("small", { textContent: ` ${s.r.length}` }));
+  lastPanel = { settled, sources, extraLocked };
+  const ok = settled.filter(x => x.r?.length).length;
+  const relevant = Object.entries(sources).filter(([n, src]) => !src.enabled || src.enabled() || /^(helper|store)_/.test(n)).length;
+  const btn = $("sources-btn");
+  btn.textContent = `⚙ Sources: ${ok} of ${relevant} answered${offSources.size || offSites.size ? " · some switched off" : ""} ${sourcesOpen ? "▴" : "▾"}`;
+  btn.hidden = false;
+  btn.onclick = () => { sourcesOpen = !sourcesOpen; renderSources(settled, sources, extraLocked); };
+  const box = $("sources");
+  box.hidden = !sourcesOpen;
+  if (!sourcesOpen) return;
+  const toggle = (set, key, storeKey) => { set.has(key) ? set.delete(key) : set.add(key); store.set(storeKey, [...set]); go(); };
+  const chips = Object.entries(sources).filter(([n, src]) => !src.enabled || src.enabled() || /^(helper|store)_/.test(n)).map(([n, src]) => {
+    const r = settled.find(x => x.n === n);
+    const locked = src.enabled && !src.enabled() && /^(helper|store)_/.test(n);
+    const isOff = offSources.has(n);
+    const state = isOff ? "off" : locked ? "locked" : !r ? "off" : r.err ? "bad" : "ok";
+    const b = el("button", { type: "button", className: "src " + state, title: isOff ? "Switched off: click to search it again" : locked ? "Needs Unitex Helper" : r?.err ? r.err.message : "Click to stop searching it" },
+      { ok: "✓ ", bad: "✕ ", off: "○ ", locked: "🔒 " }[state], src.name,
+      r && !isOff && el("small", { textContent: r.err ? " " + r.err.message : ` ${r.r.length}` }));
+    b.setAttribute("aria-pressed", !isOff);
+    b.onclick = () => locked ? (location.href = "install.html") : toggle(offSources, n, "unitex.off");
+    return b;
   });
-  const locked = extraLocked.length && el("a", { className: "src locked", href: "install.html", title: "Install Unitex Helper to search these" }, "🔒 Not searched (need Unitex Helper): ", el("small", { textContent: extraLocked.join(", ") }));
-  fill($("sources"), el("span", { className: "row-label", textContent: "Searched" }), ...chips, locked);
-  $("sources").hidden = false;
+  const topic = topicById(topicId);
+  const sites = topic.id !== "all" ? topicSites(topic) : [];
+  const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
+  region.onchange = () => { setRegion(region.value); go(); };
+  fill(box,
+    el("div", { className: "sp-head" }, el("strong", { textContent: "Search engines and sources" }), el("span", { className: "hint", textContent: "Click one to switch it off or on." }),
+      el("label", { className: "region" }, "Country ", region)),
+    el("div", { className: "sp-chips" }, ...chips),
+    sites.length && el("div", { className: "sp-head" }, el("strong", { textContent: `${topic.name} sites` }), el("span", { className: "hint", textContent: helperVersion() ? "Searched through the engines. Click one to leave it out." : "Searched through the engines once Unitex Helper is installed. Click one to leave it out." })),
+    sites.length && el("div", { className: "sp-chips" }, ...sites.map(st => {
+      const isOff = offSites.has(st.domain);
+      const b = el("button", { type: "button", className: "src " + (isOff ? "off" : "ok") }, isOff ? "○ " : "✓ ", domainIcon(st.domain), " ", st.name);
+      b.setAttribute("aria-pressed", !isOff);
+      b.onclick = () => toggle(offSites, st.domain, "unitex.offsites");
+      return b;
+    })),
+    extraLocked.length && el("a", { className: "src locked", href: "install.html" }, "🔒 Needs Unitex Helper: ", el("small", { textContent: [...new Set(extraLocked)].join(", ") })),
+    (offSources.size || offSites.size) && el("button", { type: "button", className: "chip", textContent: "Switch everything back on", onclick: () => { offSources.clear(); offSites.clear(); store.set("unitex.off", []); store.set("unitex.offsites", []); go(); } }));
 }
 
 function renderNotice() {
@@ -559,31 +618,7 @@ function renderNotice() {
 
 // ---------- topic box ----------
 
-function renderTopicSites(hits, settled) {
-  const box = $("topic-sites");
-  const topic = topicById(topicId);
-  const sites = topicSites(topic);
-  if (topic.id === "all" || !query || cur().kind !== "web") { box.hidden = true; return; }
-
-  const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
-  region.onchange = () => { setRegion(region.value); go(); };
-  const on = !!helperVersion();
-  const direct = directSites().map(id => LISTING_SITES[id].name);
-  // Before results arrive a directly-read site counts as searched; afterwards only if it returned listings.
-  const directOk = name => { const r = settled?.find(x => x.n === "listing_" + Object.keys(LISTING_SITES).find(id => LISTING_SITES[id].name === name)); return !r || !!r.r?.length; };
-  fill(box,
-    el("div", { className: "ts-head" }, el("h2", { textContent: `${topic.name}: ${sites.length} specialist sites` }), el("label", { className: "region" }, "in ", region)),
-    el("div", { className: "ts-chips" }, ...sites.map(s => {
-      const state = on || (direct.includes(s.domain) && directOk(s.domain)) ? "ok" : direct.includes(s.domain) ? "bad" : "locked";
-      return el("span", { className: "src " + state, title: { ok: "Searched", bad: "Tried directly, no listings came back", locked: "Needs Unitex Helper" }[state] }, { ok: "", bad: "✕ ", locked: "🔒 " }[state], domainIcon(s.domain), " ", s.name);
-    })),
-    !on && direct.length && el("p", { className: "hint", textContent: direct.every(directOk)
-      ? `${direct.join(" and ")} are read directly; the others need Unitex Helper.`
-      : `Unitex tried reading ${direct.join(" and ")} directly; see "Searched" below for what came back. The others need Unitex Helper.` }),
-    on && el("p", { className: "hint", textContent: hits ? `Searched through ${HELPER_ENGINES.map(e => e.name).join(", ")}; their pages are in the results below.` : "The engines found no pages on these sites for this search. Try fewer words." }),
-    regionId === "*" && el("p", { className: "hint", textContent: "Pick your country to add local sites." }));
-  box.hidden = false;
-}
+function renderTopicSites() { $("topic-sites").hidden = true; }
 
 // ---------- rows & tabs ----------
 
@@ -663,10 +698,10 @@ function renderAnswer(a) {
 
 let runId = 0;
 let lastTopic = topicId;
-document.addEventListener("unitex-saved-changed", () => { if (MODES[topicId]) { drawCards(); renderShortlist(topicById(topicId)); } });
-const settle = (sources, q) => Promise.all(Object.entries(sources)
-  .filter(([, s]) => !s.enabled || s.enabled())
-  .map(([n, s]) => s.run(q).then(r => ({ n, r }), err => ({ n, err }))));
+document.addEventListener("unitex-saved-changed", () => { if (MODES[topicId] && !$("cards").hidden) drawCards(); });
+const settle = (sources, q, page = 0) => Promise.all(Object.entries(sources)
+  .filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n) && (!page || s.paged))
+  .map(([n, s]) => s.run(q, { page }).then(r => ({ n, r: r || [] }), err => ({ n, err }))));
 const MAIN_SOURCES = Object.fromEntries(Object.entries(SOURCES).filter(([, s]) => s.group === "main"));
 const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ searxng: "SearXNG result pages" }[e.id] || e.name));
 const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
@@ -688,17 +723,51 @@ function mergeMain(settled) {
 // The strip of images on the All tab uses a few fast sources; the Images tab uses them all.
 const STRIP_SOURCES = Object.fromEntries(Object.entries(IMAGE_SOURCES).filter(([n]) => ["openverse", "commons", "wikipedia", "nasa", "helper_bing", "helper_google"].includes(n)));
 
-let wasShop = false;
+// "Show more": reveals what's already loaded, then asks every source that can page for its next page.
+// It keeps going as long as any source returns something new.
+let more = null;
+const STEP = { web: 10, images: 40, videos: 24, books: 24, news: 20, papers: 15, maps: 50, code: 15 };
+function moreButton(kind, label) {
+  if (!more) return null;
+  const b = el("button", { type: "button", className: "show-more", textContent: more.done ? "That's everything the sources returned" : more.busy ? "Loading more…" : label, disabled: more.done || more.busy });
+  b.onclick = () => showMore(kind);
+  return b;
+}
+async function showMore(kind) {
+  const m = more;
+  if (!m || m.busy || m.done) return;
+  if (m.reveal(kind)) return;
+  m.busy = true; m.redraw();
+  let added = 0;
+  for (let tries = 0; tries < 3 && !added; tries++) {
+    m.page++;
+    added = await m.fetch(m.page);
+    if (m !== more) return;
+  }
+  m.busy = false;
+  if (!added) m.done = true;
+  m.reveal(kind, true);
+  m.redraw();
+}
+
+let shown = 10;
+function drawResults(rest, c) {
+  const list = rest.filter(r => !siteOff(r));
+  const items = list.slice(0, shown).map(resultItem).filter(Boolean);
+  $("results").replaceChildren(...items);
+  if (c.shop || MODES[topicId]) items.length && $("results").prepend(el("li", { className: "results-head" }, el("h2", { textContent: "More from the web" })));
+  const b = moreButton("web", "Show more results");
+  if (b && list.length) $("results").append(el("li", { className: "more-li" }, b));
+}
+
 async function go() {
   const c = cur();
   topicId = c.topic;
-  // The Shopping tab is always the full shopping area; other tabs keep the mode the person chose.
-  if (c.shop) modeOn = true; else if (wasShop) modeOn = false;
-  wasShop = !!c.shop;
+  // Topics with cards (Jobs, Houses, Products, Recipes…) open straight in their mode.
+  modeOn = c.kind === "web" && !!MODES[topicId];
   const p = new URLSearchParams({ q: query });
   if (tab !== "all") p.set("tab", tab);
   if (c.sub && c.sub !== TABS.find(t => t.id === tab).subs?.[0].id) p.set("sub", c.sub);
-  if (modeOn && !c.shop && MODES[topicId]) p.set("mode", "1");
   history.replaceState(null, "", "search.html?" + p);
   document.title = query ? `${query} – Unitex` : "Unitex Search";
   $("q").value = query;
@@ -706,12 +775,14 @@ async function go() {
   renderTabs();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
+  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "sources-btn", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
-  document.body.classList.toggle("mode-on", modeOn && !!MODES[topicId] && c.kind === "web");
+  document.body.classList.toggle("mode-on", modeOn);
   document.body.classList.toggle("shop-area", !!c.shop);
   document.body.classList.toggle("web-tab", c.kind === "web");
   $("results").replaceChildren();
+  $("tab-more")?.replaceChildren();
+  more = null;
 
   if (!query) { $("status").textContent = c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
@@ -735,14 +806,29 @@ async function go() {
     if (id !== runId) return;
     renderSources([...cardSettled, ...settled], { ...cardSrc, ...c.sources }, lockedFor(c.sources));
     if (Object.keys(cardSrc).length) showCards([], cardSettled.flatMap(s => s.r || []));
+    const keyOf = c.kind === "images" ? i => i.thumb : r => urlKey(r.url);
     // Engines' own sections first (they're the biggest indexes), then the open sources.
-    const lists = [...settled.filter(s => s.n.startsWith("helper_")), ...settled.filter(s => !s.n.startsWith("helper_"))].map(s => s.r || []);
-    showTab(roundRobin(lists, c.kind === "images" ? i => i.thumb : undefined));
+    const order = list => [...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))].map(s => s.r || []);
+    const step = STEP[c.view] || 20;
+    tabLimit = step;
+    more = {
+      page: 0,
+      reveal(kind, force) { if (force || tabLimit < filteredCount()) { tabLimit += step; drawTab(); return !force; } return false; },
+      async fetch(page) {
+        const next = await settle(c.sources, q, page);
+        if (id !== runId) return 0;
+        const seen = new Set(tabItems.map(keyOf));
+        const fresh = roundRobin(order(next), keyOf).filter(i => !seen.has(keyOf(i)));
+        tabItems.push(...fresh);
+        return fresh.length;
+      },
+      redraw: () => drawTab(),
+    };
+    showTab(roundRobin(order(settled), keyOf));
     return;
   }
 
-  renderTopicSites();
-  if (!c.shop) aiOverviewStart();
+  if (!c.shop && !MODES[topicId]) aiOverviewStart();
   $("results").replaceChildren(...skeletons(5));
   $("status").textContent = c.shop ? "Searching every store…" : "Searching…";
 
@@ -751,24 +837,45 @@ async function go() {
   wikiAnswer(query).catch(() => {});
   if (id !== runId) return;
 
-  const { main, engineLists } = mergeMain(settled);
-  if (topicId !== "all") renderTopicSites(engineLists.flat().length, settled);
+  const { main } = mergeMain(settled);
   renderSources([...cardSettled, ...settled], { ...cardSrc, ...MAIN_SOURCES }, [...LOCKED_ENGINES(), ...lockedFor(cardSrc)]);
 
   // On a topic, results from its specialist sites (and the stores) become cards; the rest stay as a list.
-  const rest = showCards(main, roundRobin(cardSettled.map(s => s.r || [])));
-  $("results").replaceChildren(...rest.map(resultItem).filter(Boolean));
-  if (!main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
-  if (c.shop && rest.length) $("results").prepend(el("li", { className: "results-head" }, el("h2", { textContent: "More from the web" })));
+  const kept = main.filter(r => !siteOff(r));
+  let rest = showCards(kept, roundRobin(cardSettled.map(s => s.r || [])).filter(r => !siteOff(r)));
+  shown = STEP.web;
+  const seen = new Set([...main.map(r => urlKey(r.url)), ...lastCards.map(r => urlKey(r.url))]);
+  more = {
+    page: 0,
+    reveal(kind, force) {
+      if (kind === "cards") { if (force || cardLimit < applyFilters(lastCards).length) { cardLimit += CARD_STEP; drawCards(); return !force; } return false; }
+      if (force || shown < rest.length) { shown += STEP.web; drawResults(rest, c); return !force; }
+      return false;
+    },
+    async fetch(page) {
+      const [s1, s2] = await Promise.all([settle(MAIN_SOURCES, query, page), settle(cardSrc, query, page)]);
+      if (id !== runId) return 0;
+      const fresh = mergeMain(s1).main.filter(r => !seen.has(urlKey(r.url)) && !siteOff(r));
+      const freshCards = roundRobin(s2.map(s => s.r || [])).filter(r => !seen.has(urlKey(r.url)) && !siteOff(r));
+      for (const r of [...fresh, ...freshCards]) seen.add(urlKey(r.url));
+      const newRest = appendCards(fresh, freshCards);
+      rest = [...rest, ...newRest];
+      return fresh.length + freshCards.length;
+    },
+    redraw() { drawResults(rest, c); drawCards(); },
+  };
+  drawResults(rest, c);
+  drawCards();
+  if (!main.length && !lastCards.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
-  if (!c.shop) renderAiOverview(query, main);
+  if (!c.shop && !MODES[topicId]) renderAiOverview(query, main);
   const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
   if (tiles.length && tab === "all" && topicId === "all") {
     fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; sub = ""; go(); } }));
     $("image-strip").hidden = false;
   }
 
-  $("status").textContent = `${main.length} results`;
+  $("status").textContent = MODES[topicId] ? "" : `${main.length} results`;
 }
 
 $("search").addEventListener("submit", e => {

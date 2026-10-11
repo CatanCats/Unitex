@@ -5,6 +5,9 @@
 let tabItems = [];
 let tabFilters = {};
 let tabFiltersFor = "";
+let tabLimit = 40;
+let tabFiltered = [];
+const filteredCount = () => tabFiltered.length;
 
 const playable = v => v.embed || v.file;
 
@@ -51,7 +54,7 @@ function playVideo(v) {
   fill(d,
     el("div", { className: "viewer-head" }, el("h2", { textContent: v.title }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
     el("div", { className: "player" }, player),
-    el("div", { className: "viewer-foot" }, el("span", { className: "via", textContent: "from " + v.via }), v.by && el("span", { className: "hint", textContent: v.by }), v.secs && el("span", { className: "hint", textContent: mins(v.secs) }),
+    el("div", { className: "viewer-foot" }, !isSelf(v.via, v.url) && el("span", { className: "via", textContent: "from " + v.via }), v.by && el("span", { className: "hint", textContent: v.by }), v.secs && el("span", { className: "hint", textContent: mins(v.secs) }),
       el("a", { href: v.url, rel: "noopener", className: "btn-ghost", textContent: `Open on ${v.via}` }), tabSave(v, "videos")));
   if (!d.open) d.showModal();
 }
@@ -64,7 +67,7 @@ function videoCard(v) {
       v.secs && el("span", { className: "dur", textContent: mins(v.secs) })),
     el("div", { className: "vbody" },
       el("strong", { textContent: v.title }),
-      el("small", { textContent: [v.by, v.via].filter(Boolean).join(" · ") })),
+      el("small", { textContent: [v.by, !isSelf(v.via, v.url) && v.via].filter(Boolean).join(" · ") })),
     tabSave(v, "videos"));
   return card;
 }
@@ -104,7 +107,7 @@ function bookCard(b) {
     el("div", { className: "bbody" },
       el("strong", { textContent: b.title }),
       el("small", { textContent: [b.author, b.year, b.price].filter(Boolean).join(" · ") }),
-      el("span", { className: "via", textContent: b.via })),
+      !isSelf(b.via, b.url) && el("span", { className: "via", textContent: b.via })),
     el("div", { className: "bactions" },
       b.read && el("a", { href: b.read, rel: "noopener", className: "btn-primary", textContent: "Read now" }),
       tabSave(b, "books")));
@@ -126,7 +129,7 @@ function paperItem(p) {
       el("div", { className: "r-src" }, p.free && el("span", { className: "free-badge inline", textContent: "Free to read" }), el("strong", { textContent: p.venue || host(p.url) })),
       el("a", { className: "r-title", href: p.url, rel: "noopener", textContent: p.title }),
       el("p", { className: "r-meta" }, el("span", { textContent: [(p.authors || []).slice(0, 4).join(", ") + ((p.authors || []).length > 4 ? " et al." : ""), p.year, p.cites != null && `cited ${p.cites}×`].filter(Boolean).join(" · ") })),
-      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + p.via }), copy, tabSave(p, "papers"))));
+      el("p", { className: "r-meta" }, !isSelf(p.via, p.url) && el("span", { className: "via", textContent: "found by " + p.via }), copy, tabSave(p, "papers"))));
 }
 
 // ---------- maps: list + live map, with a choice of maps ----------
@@ -211,11 +214,14 @@ function drawTab() {
     bar.push(tabSelect("sort", "Sort: newest", [["match", "Best match"]]), tabSelect("outlet", "All outlets", opts(tabItems.map(n => n.outlet))), tabSelect("region", "All countries", opts(tabItems.map(n => n.region))));
   }
 
+  tabFiltered = list;
+  const total = list.length;
+  list = list.slice(0, tabLimit);
   const grid = $("media-grid"), results = $("results"), images = $("image-grid");
   for (const x of [grid, results, images]) x.replaceChildren();
   grid.hidden = images.hidden = true;
   $("tab-bar").hidden = !bar.filter(Boolean).length;
-  fill($("tab-bar"), ...bar, el("span", { className: "hint", textContent: `${list.length} of ${tabItems.length}` }));
+  fill($("tab-bar"), ...bar, el("span", { className: "hint", textContent: `${total} of ${tabItems.length}` }));
 
   if (v === "videos") { fill(grid, ...list.map(videoCard)); grid.className = "media-grid videos"; grid.hidden = false; }
   else if (v === "images") { fill(images, ...list.map((im, i) => { const a = imageTile(im); if (a) a.onclick = e => { e.preventDefault(); viewImage(list, i); }; return a; }).filter(Boolean)); images.hidden = false; }
@@ -225,8 +231,11 @@ function drawTab() {
   else if (v === "news") results.replaceChildren(...list.map(newsItem).filter(Boolean));
   else results.replaceChildren(...list.map(resultItem).filter(Boolean));
 
-  $("status").textContent = list.length ? `${list.length} ${t.noun}` : "";
+  $("status").textContent = list.length ? `Showing ${list.length} ${t.noun}` : "";
   if (!list.length) results.replaceChildren(empty(tabItems.length ? "Nothing matches these filters." : `No ${t.noun} found for this search.`));
+  let row = $("tab-more");
+  if (!row) { row = el("div", { id: "tab-more", className: "more-row" }); $("media-grid").after(row); }
+  fill(row, list.length && v !== "maps" && moreButton(v, `Show more ${t.noun}`));
 }
 
 // Called by search.js with the merged items for a media tab.

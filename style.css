@@ -695,3 +695,33 @@ body.web-tab .rmain:has(.rside:not(:has(> :not([hidden])))) { grid-template-colu
 @media (max-width: 900px) { .rmain, body.mode-on .rmain, body.shop-area .rmain, body.web-tab .rmain { grid-template-columns: minmax(0, 1fr); } }
 .sources .src { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .subtabs .row-label { width: auto; flex: none; margin: 0 4px 0 0; text-align: left; }
+
+/* ---------- Sources panel (hidden until asked for) ---------- */
+.status-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.status-row .status { margin: 0; }
+.sources-btn { margin-left: auto; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.sources-btn:hover { color: var(--accent); border-color: var(--accent); }
+.sources { display: grid; gap: 8px; margin: 10px 0 16px; padding: 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); }
+.sp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
+.sp-head .region { margin-left: auto; }
+.sp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+button.src { cursor: pointer; font: inherit; font-size: 0.76rem; font-weight: 600; }
+.src.off { color: var(--muted); opacity: 0.75; border-style: dashed; }
+
+/* ---------- Show more ---------- */
+.show-more { display: block; width: 100%; max-width: 360px; margin: 18px auto 8px; padding: 11px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
+.show-more:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.show-more:disabled { color: var(--muted); cursor: default; }
+.more-li { list-style: none; }
+.more-row:empty { display: none; }
+
+/* ---------- Modes: full width, results stay below, Your list is a button ---------- */
+body.mode-on #results { display: block !important; }
+body.mode-on .rside { display: none !important; }
+body.mode-on .rmain { grid-template-columns: minmax(0, 1fr) !important; }
+.cards-head { flex-wrap: wrap; }
+.list-btn { margin-left: auto; padding: 7px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: inherit; font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+.list-btn.on, .list-btn:hover { border-color: var(--accent); color: var(--accent); }
+.list-panel { margin: 0 0 14px; padding: 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow); }
+.list-panel .compare-wrap { margin-top: 10px; }
+body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }

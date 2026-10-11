@@ -1,7 +1,7 @@
 // Specialist cards and "modes" for topic searches: houses, shopping, second-hand, cars, jobs,
 // recipes and movies & TV. Results from specialist sites become cards (photo, price, key facts,
-// which website it's from, Save), and each topic has a full-width mode with its own filters, a
-// shortlist of saved items and a compare table.
+// which website it's from, Save). Every such topic opens in its full-width mode, with filters,
+// "Show more", and Your list (saved items and a compare table) behind a button above the cards.
 
 // ---------- reading facts out of titles and snippets ----------
 
@@ -82,7 +82,7 @@ const MODES = {
   reviews:     { name: "Reviews",            icon: "★", noun: "rated products" },
 };
 
-let modeOn = new URLSearchParams(location.search).get("mode") === "1";
+let modeOn = false; // set by search.js: on for every topic with cards
 let filters = {};
 let lastCards = [];
 
@@ -172,7 +172,7 @@ function siteBadge(c) {
 function saveButton(c, topic) {
   const b = el("button", { type: "button", className: "save-btn" });
   const paint = () => { const on = saved.has(c.url); b.textContent = on ? "♥ Saved" : "♡ Save"; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); };
-  b.onclick = e => { e.preventDefault(); saved.toggle({ url: c.url, title: cardTitle(c), image: c.image, price: c.card.price, facts: cardFacts(c), site: c.card.site || host(c.url), topic: topic.id }); paint(); renderShortlist(topic); };
+  b.onclick = e => { e.preventDefault(); saved.toggle({ url: c.url, title: cardTitle(c), image: c.image, price: c.card.price, facts: cardFacts(c), site: c.card.site || host(c.url), topic: topic.id }); paint(); if (listOpen) drawCards(); else $("cards").querySelector(".list-btn")?.replaceWith(listButton(topic)); };
   paint();
   return b;
 }
@@ -224,37 +224,43 @@ function renderCard(c, topic) {
       k.area && el("p", { className: "xcard-sub", textContent: k.area }),
       facts.some(Boolean) && el("div", { className: "facts" }, ...facts),
       genres, showExtra, extra,
-      el("p", { className: "xcard-via", textContent: "found by " + viaText([].concat(c.via)) })),
+      viaLabel(c.via, c.url, k.site) && el("p", { className: "xcard-via", textContent: "found by " + viaLabel(c.via, c.url, k.site) })),
     el("div", { className: "xcard-actions" }, open, saveButton(c, topic)));
 }
 
-// ---------- shortlist & compare ----------
+// ---------- your list & compare ----------
+// A button above the cards (not a sidebar, so the cards get the whole width) that opens the saved items.
 
-function renderShortlist(topic) {
-  const box = $("shortlist");
-  if (!box || !modeOn || !MODES[topic.id] || cur().kind !== "web") { if (box) box.hidden = true; return; }
+let listOpen = false;
+function listButton(topic) {
+  const items = saved.all().filter(s => s.topic === topic.id);
+  return el("button", { type: "button", className: "list-btn" + (listOpen ? " on" : ""), textContent: `♥ Your list (${items.length}) ${listOpen ? "▴" : "▾"}`, onclick: () => { listOpen = !listOpen; drawCards(); } });
+}
+function listPanel(topic) {
+  if (!listOpen) return null;
   const items = saved.all().filter(s => s.topic === topic.id);
   const mode = MODES[topic.id];
-  fill(box,
-    el("h2", { textContent: `${cur().shop ? "🛒 Your list" : "Your shortlist"} (${items.length})` }),
-    cur().shop && items.some(s => money(s.price) != null) && el("p", { className: "list-total", textContent: `Total: $${items.reduce((t, s) => t + (money(s.price) || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}` }),
+  return el("div", { className: "list-panel" },
     !items.length && el("p", { className: "hint", textContent: `Tap ♡ Save on any of the ${mode.noun} to keep it here. Saved items stay in this browser.` }),
+    cur().shop && items.some(s => money(s.price) != null) && el("p", { className: "list-total", textContent: `Total: $${items.reduce((t, s) => t + (money(s.price) || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}` }),
     items.length && el("ul", { className: "shortlist" }, ...items.map(s => el("li", {},
       s.image && el("img", { src: s.image, alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
       el("div", {}, el("a", { href: s.url, rel: "noopener", textContent: s.title }), el("small", { textContent: [s.price, ...(s.facts || []), s.site].filter(Boolean).join(" · ") })),
-      el("button", { type: "button", className: "icon-btn", ariaLabel: "Remove", textContent: "✕", onclick: () => { saved.remove(s.url); renderShortlist(topic); drawCards(); } })))),
-    items.length > 1 && el("details", { className: "compare" }, el("summary", { textContent: `Compare ${items.length} side by side` }),
-      el("div", { className: "compare-wrap" }, el("table", {},
-        el("thead", {}, el("tr", {}, el("th", { textContent: "" }), ...items.map(s => el("th", { textContent: s.title })))),
-        el("tbody", {},
-          el("tr", {}, el("th", { textContent: "Price" }), ...items.map(s => el("td", { textContent: s.price || "–" }))),
-          el("tr", {}, el("th", { textContent: "Details" }), ...items.map(s => el("td", { textContent: (s.facts || []).join(", ") || "–" }))),
-          el("tr", {}, el("th", { textContent: "Website" }), ...items.map(s => el("td", { textContent: s.site || "–" }))))))));
-  box.hidden = false;
+      el("button", { type: "button", className: "icon-btn", ariaLabel: "Remove", textContent: "✕", onclick: () => { saved.remove(s.url); drawCards(); } })))),
+    items.length > 1 && el("div", { className: "compare-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { textContent: "" }), ...items.map(s => el("th", { textContent: s.title })))),
+      el("tbody", {},
+        el("tr", {}, el("th", { textContent: "Price" }), ...items.map(s => el("td", { textContent: s.price || "–" }))),
+        el("tr", {}, el("th", { textContent: "Details" }), ...items.map(s => el("td", { textContent: (s.facts || []).join(", ") || "–" }))),
+        el("tr", {}, el("th", { textContent: "Website" }), ...items.map(s => el("td", { textContent: s.site || "–" })))))));
 }
+// Kept for callers: the list now lives above the cards.
+function renderShortlist() { $("shortlist").hidden = true; if (!$("cards").hidden) drawCards(); }
 
 // ---------- drawing the card section ----------
 
+const CARD_STEP = 12;
+let cardLimit = CARD_STEP;
 function drawCards() {
   const topic = topicById(topicId);
   const box = $("cards");
@@ -263,17 +269,22 @@ function drawCards() {
   const shop = cur().shop;
   const shown = applyFilters(lastCards);
   const mode = MODES[topic.id];
+  if (!mode) { box.hidden = true; return; }
+  const limit = modeOn ? cardLimit : 6;
+  const moreBtn = modeOn && moreButton("cards", `Show more ${mode.noun}`);
   fill(box,
     el("div", { className: "cards-head" },
-      el("h2", { textContent: `${mode?.icon || ""} ${shown.length} ${shown.length === 1 ? (mode?.noun || "results").replace(/e?s$/, "") : mode?.noun || "results"}${lastCards.length !== shown.length ? ` of ${lastCards.length}` : ""}` }),
+      el("h2", { textContent: `${mode.icon || ""} ${shown.length} ${shown.length === 1 ? mode.noun.replace(/e?s$/, "") : mode.noun}${lastCards.length !== shown.length ? ` of ${lastCards.length}` : ""}` }),
       shop && el("span", { className: "hint", textContent: shopFrom() }),
-      mode && !shop && cur().kind === "web" && el("button", { type: "button", className: modeOn ? "btn-ghost" : "btn-primary", textContent: modeOn ? "Leave " + mode.name.toLowerCase() : `${mode.icon} Open ${mode.name.toLowerCase()}`, onclick: () => setMode(!modeOn) })),
-    shop && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping and Bing Shopping need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
+      modeOn && listButton(topic)),
+    modeOn && listPanel(topic),
+    shop && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
     el("div", { className: "shop-layout" },
       modeOn && el("aside", { className: "shop-filters" }, el("h3", { textContent: "Filters" }), filterBar(topic, lastCards)),
-      el("div", { className: "xcards" }, ...(modeOn ? shown : shown.slice(0, 6)).map(c => renderCard(c, topic)).filter(Boolean))),
-    !modeOn && shown.length > 6 && cur().kind === "web" && el("button", { type: "button", className: "chip more", textContent: `See all ${shown.length} in ${mode.name.toLowerCase()}`, onclick: () => setMode(true) }),
-    !shown.length && el("p", { className: "hint", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode?.noun || "cards"} could be read for this search.` }));
+      el("div", { className: "xcards-wrap" },
+        el("div", { className: "xcards" }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
+        shown.length > 0 && moreBtn)),
+    !shown.length && el("p", { className: "hint", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode.noun} could be read for this search.` }));
   box.hidden = !lastCards.length && !modeOn;
 }
 
@@ -283,17 +294,6 @@ function shopFrom() {
   return sites.length ? `from ${sites.slice(0, 3).join(", ")}${sites.length > 3 ? ` and ${sites.length - 3} more` : ""}` : "";
 }
 
-function setMode(on) {
-  modeOn = on;
-  document.body.classList.toggle("mode-on", on);
-  const p = new URLSearchParams(location.search);
-  if (on) p.set("mode", "1"); else p.delete("mode");
-  history.replaceState(null, "", "search.html?" + p);
-  drawCards();
-  renderShortlist(topicById(topicId));
-  if (on) window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
 // Called by search.js after a topic search: splits results into cards and ordinary results.
 function showCards(results, extra = []) {
   const topic = topicById(topicId);
@@ -301,8 +301,21 @@ function showCards(results, extra = []) {
   const cards = [], rest = [];
   for (const r of results) { const c = cardFor(r, topic); (c ? cards : rest).push(c || r); }
   lastCards = [...extra, ...cards].filter((c, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(c.url)) === i);
-  document.body.classList.toggle("mode-on", modeOn);
+  cardLimit = CARD_STEP;
   drawCards();
-  renderShortlist(topic);
+  return rest;
+}
+
+// Adds the next page of results: new cards join the list, the rest is returned.
+function appendCards(results, extra = []) {
+  const topic = topicById(topicId);
+  if (!MODES[topic.id]) return results;
+  const have = new Set(lastCards.map(c => urlKey(c.url)));
+  const rest = [];
+  for (const r of [...extra, ...results]) {
+    const c = cardFor(r, topic);
+    if (!c) { rest.push(r); continue; }
+    if (!have.has(urlKey(c.url))) { have.add(urlKey(c.url)); lastCards.push(c); }
+  }
   return rest;
 }

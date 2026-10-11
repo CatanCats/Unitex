@@ -11,7 +11,8 @@ const ALLOWED_HOSTS = ["www.google.com", "www.bing.com", "search.brave.com", "ww
   // Yandex (its own index, for images)
   "yandex.com",
   // Stores, for the Shopping area
-  "www.amazon.com", "www.amazon.com.au", "www.amazon.co.uk", "www.amazon.ca", "www.ebay.com", "www.ebay.com.au", "www.ebay.co.uk", "www.ebay.ca"];
+  "www.amazon.com", "www.amazon.com.au", "www.amazon.co.uk", "www.amazon.ca", "www.ebay.com", "www.ebay.com.au", "www.ebay.co.uk", "www.ebay.ca",
+  "www.argos.co.uk", "www.bestbuy.ca", "www.bestbuy.com", "www.bigw.com.au", "www.currys.co.uk", "www.gumtree.com", "www.gumtree.com.au", "www.harveynorman.com.au", "www.jbhifi.com.au", "www.johnlewis.com", "www.kijiji.ca", "www.kmart.com.au", "www.kogan.com", "www.noelleeming.co.nz", "www.officeworks.com.au", "www.pbtech.co.nz", "www.target.com", "www.thegoodguys.com.au", "www.thewarehouse.co.nz", "www.trademe.co.nz", "www.walmart.ca", "www.walmart.com"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {
