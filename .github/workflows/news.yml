@@ -2,7 +2,8 @@ name: Update news
 
 on:
   schedule:
-    - cron: "17 * * * *"   # hourly
+    # Every 30 minutes. GitHub delays or skips scheduled runs when it is busy, so run often.
+    - cron: "7,37 * * * *"
   workflow_dispatch:
   push:
     branches: [main]

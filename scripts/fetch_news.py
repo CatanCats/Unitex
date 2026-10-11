@@ -21,8 +21,8 @@ FEEDS_FILE = ROOT / "scripts" / "feeds.json"
 OUT_FILE = ROOT / "news.json"
 
 PER_FEED = 15        # items read from each feed
-PER_SOURCE = 6       # max items one source can contribute to a category
-PER_CATEGORY = 80    # items kept per category
+PER_SOURCE = 5       # max items one source can contribute to a category
+PER_CATEGORY = 120   # items kept per category
 MAX_AGE_H = 72       # drop stories older than this
 UA = "Mozilla/5.0 (compatible; UnitexNews/1.0; +https://github.com/CatanCats/Unitex)"
 

@@ -134,6 +134,156 @@
         "source": "MercoPress",
         "region": "South America",
         "url": "https://en.mercopress.com/rss"
+      },
+      {
+        "source": "The Hindu",
+        "region": "India",
+        "url": "https://www.thehindu.com/news/international/feeder/default.rss"
+      },
+      {
+        "source": "Dawn",
+        "region": "Pakistan",
+        "url": "https://www.dawn.com/feeds/home"
+      },
+      {
+        "source": "The Straits Times",
+        "region": "Singapore",
+        "url": "https://www.straitstimes.com/news/world/rss.xml"
+      },
+      {
+        "source": "CNA",
+        "region": "Singapore",
+        "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml"
+      },
+      {
+        "source": "Japan Today",
+        "region": "Japan",
+        "url": "https://japantoday.com/feed"
+      },
+      {
+        "source": "Bangkok Post",
+        "region": "Thailand",
+        "url": "https://www.bangkokpost.com/rss/data/topstories.xml"
+      },
+      {
+        "source": "Inquirer",
+        "region": "Philippines",
+        "url": "https://newsinfo.inquirer.net/feed"
+      },
+      {
+        "source": "The Times of Israel",
+        "region": "Israel",
+        "url": "https://www.timesofisrael.com/feed/"
+      },
+      {
+        "source": "Arab News",
+        "region": "Saudi Arabia",
+        "url": "https://www.arabnews.com/rss.xml"
+      },
+      {
+        "source": "Middle East Eye",
+        "region": "Middle East",
+        "url": "https://www.middleeasteye.net/rss"
+      },
+      {
+        "source": "Mail & Guardian",
+        "region": "South Africa",
+        "url": "https://mg.co.za/feed/"
+      },
+      {
+        "source": "News24",
+        "region": "South Africa",
+        "url": "https://feeds.news24.com/articles/news24/TopStories/rss"
+      },
+      {
+        "source": "Premium Times",
+        "region": "Nigeria",
+        "url": "https://www.premiumtimesng.com/feed"
+      },
+      {
+        "source": "Buenos Aires Times",
+        "region": "Argentina",
+        "url": "https://www.batimes.com.ar/feed"
+      },
+      {
+        "source": "Mexico News Daily",
+        "region": "Mexico",
+        "url": "https://mexiconewsdaily.com/feed/"
+      },
+      {
+        "source": "The Kyiv Independent",
+        "region": "Ukraine",
+        "url": "https://kyivindependent.com/news-archive/rss/"
+      },
+      {
+        "source": "The Moscow Times",
+        "region": "Russia",
+        "url": "https://www.themoscowtimes.com/rss/news"
+      },
+      {
+        "source": "RTÉ",
+        "region": "Ireland",
+        "url": "https://www.rte.ie/feeds/rss/?index=/news/"
+      },
+      {
+        "source": "Politico Europe",
+        "region": "Europe",
+        "url": "https://www.politico.eu/feed/"
+      },
+      {
+        "source": "Yle News",
+        "region": "Finland",
+        "url": "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_NEWS"
+      },
+      {
+        "source": "CBS News",
+        "region": "US",
+        "url": "https://www.cbsnews.com/latest/rss/world"
+      },
+      {
+        "source": "NBC News",
+        "region": "US",
+        "url": "https://feeds.nbcnews.com/nbcnews/public/world"
+      },
+      {
+        "source": "PBS NewsHour",
+        "region": "US",
+        "url": "https://www.pbs.org/newshour/feeds/rss/world"
+      },
+      {
+        "source": "ProPublica",
+        "region": "US",
+        "url": "https://www.propublica.org/feeds/propublica/main"
+      },
+      {
+        "source": "The Conversation",
+        "region": "Global",
+        "url": "https://theconversation.com/global/articles.atom"
+      },
+      {
+        "source": "The Guardian Australia",
+        "region": "Australia",
+        "url": "https://www.theguardian.com/australia-news/rss"
+      },
+      {
+        "source": "SBS News",
+        "region": "Australia",
+        "url": "https://www.sbs.com.au/news/feed"
+      },
+      {
+        "source": "The Age",
+        "region": "Australia",
+        "url": "https://www.theage.com.au/rss/feed.xml"
+      },
+      {
+        "source": "The Sydney Morning Herald",
+        "region": "Australia",
+        "url": "https://www.smh.com.au/rss/feed.xml"
+      },
+      {
+        "source": "NZ Herald",
+        "region": "New Zealand",
+        "url": "https://www.nzherald.co.nz/arc/outboundfeeds/rss/curated/78/?outputType=xml"
       }
     ]
   },
@@ -170,6 +320,26 @@
         "source": "New York Times",
         "region": "US",
         "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"
+      },
+      {
+        "source": "The Economist",
+        "region": "UK",
+        "url": "https://www.economist.com/finance-and-economics/rss.xml"
+      },
+      {
+        "source": "Fortune",
+        "region": "US",
+        "url": "https://fortune.com/feed/"
+      },
+      {
+        "source": "Business Insider",
+        "region": "US",
+        "url": "https://feeds.businessinsider.com/custom/all"
+      },
+      {
+        "source": "ABC News Business",
+        "region": "Australia",
+        "url": "https://www.abc.net.au/news/feed/51892/rss.xml"
       }
     ]
   },
@@ -216,6 +386,51 @@
         "source": "Hacker News",
         "region": "Community",
         "url": "https://hnrss.org/frontpage?points=100"
+      },
+      {
+        "source": "Engadget",
+        "region": "US",
+        "url": "https://www.engadget.com/rss.xml"
+      },
+      {
+        "source": "MIT Technology Review",
+        "region": "US",
+        "url": "https://www.technologyreview.com/feed/"
+      },
+      {
+        "source": "Tom's Hardware",
+        "region": "US",
+        "url": "https://www.tomshardware.com/feeds/all"
+      },
+      {
+        "source": "9to5Mac",
+        "region": "US",
+        "url": "https://9to5mac.com/feed/"
+      },
+      {
+        "source": "9to5Google",
+        "region": "US",
+        "url": "https://9to5google.com/feed/"
+      },
+      {
+        "source": "Android Authority",
+        "region": "US",
+        "url": "https://www.androidauthority.com/feed/"
+      },
+      {
+        "source": "Slashdot",
+        "region": "Community",
+        "url": "https://rss.slashdot.org/Slashdot/slashdotMain"
+      },
+      {
+        "source": "ZDNET",
+        "region": "US",
+        "url": "https://www.zdnet.com/news/rss.xml"
+      },
+      {
+        "source": "TechRadar",
+        "region": "UK",
+        "url": "https://www.techradar.com/rss"
       }
     ]
   },
@@ -257,6 +472,31 @@
         "source": "Quanta Magazine",
         "region": "US",
         "url": "https://www.quantamagazine.org/feed/"
+      },
+      {
+        "source": "Phys.org",
+        "region": "Global",
+        "url": "https://phys.org/rss-feed/"
+      },
+      {
+        "source": "Science News",
+        "region": "US",
+        "url": "https://www.sciencenews.org/feed"
+      },
+      {
+        "source": "Scientific American",
+        "region": "US",
+        "url": "http://rss.sciam.com/ScientificAmerican-Global"
+      },
+      {
+        "source": "Space.com",
+        "region": "US",
+        "url": "https://www.space.com/feeds/all"
+      },
+      {
+        "source": "Live Science",
+        "region": "US",
+        "url": "https://www.livescience.com/feeds/all"
       }
     ]
   },
@@ -288,6 +528,26 @@
         "source": "ABC Sport",
         "region": "Australia",
         "url": "https://www.abc.net.au/news/feed/45924/rss.xml"
+      },
+      {
+        "source": "ESPNcricinfo",
+        "region": "Global",
+        "url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"
+      },
+      {
+        "source": "CBS Sports",
+        "region": "US",
+        "url": "https://www.cbssports.com/rss/headlines/"
+      },
+      {
+        "source": "Yahoo Sports",
+        "region": "US",
+        "url": "https://sports.yahoo.com/rss/"
+      },
+      {
+        "source": "The Guardian Football",
+        "region": "UK",
+        "url": "https://www.theguardian.com/football/rss"
       }
     ]
   },
@@ -324,6 +584,41 @@
         "source": "NPR",
         "region": "US",
         "url": "https://feeds.npr.org/1008/rss.xml"
+      },
+      {
+        "source": "Rolling Stone",
+        "region": "US",
+        "url": "https://www.rollingstone.com/feed/"
+      },
+      {
+        "source": "The Hollywood Reporter",
+        "region": "US",
+        "url": "https://www.hollywoodreporter.com/feed/"
+      },
+      {
+        "source": "Deadline",
+        "region": "US",
+        "url": "https://deadline.com/feed/"
+      },
+      {
+        "source": "NME",
+        "region": "UK",
+        "url": "https://www.nme.com/feed"
+      },
+      {
+        "source": "Polygon",
+        "region": "US",
+        "url": "https://www.polygon.com/rss/index.xml"
+      },
+      {
+        "source": "IGN",
+        "region": "US",
+        "url": "https://feeds.ign.com/ign/all"
+      },
+      {
+        "source": "The Guardian Books",
+        "region": "UK",
+        "url": "https://www.theguardian.com/books/rss"
       }
     ]
   },
@@ -359,6 +654,51 @@
         "source": "Lobsters",
         "region": "Community",
         "url": "https://lobste.rs/rss"
+      },
+      {
+        "source": "Hackaday",
+        "region": "Community",
+        "url": "https://hackaday.com/blog/feed/"
+      },
+      {
+        "source": "9to5Linux",
+        "region": "Community",
+        "url": "https://9to5linux.com/feed/"
+      },
+      {
+        "source": "Fedora Magazine",
+        "region": "Community",
+        "url": "https://fedoramagazine.org/feed/"
+      },
+      {
+        "source": "Mozilla Blog",
+        "region": "Community",
+        "url": "https://blog.mozilla.org/en/feed/"
+      },
+      {
+        "source": "KDE",
+        "region": "Community",
+        "url": "https://kde.org/index.xml"
+      },
+      {
+        "source": "Planet GNOME",
+        "region": "Community",
+        "url": "https://planet.gnome.org/atom.xml"
+      },
+      {
+        "source": "Planet Debian",
+        "region": "Community",
+        "url": "https://planet.debian.org/rss20.xml"
+      },
+      {
+        "source": "Linuxiac",
+        "region": "Community",
+        "url": "https://linuxiac.com/feed/"
+      },
+      {
+        "source": "Free Software Foundation",
+        "region": "Community",
+        "url": "https://www.fsf.org/static/fsforg/rss/news.xml"
       }
     ]
   }
