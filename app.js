@@ -181,8 +181,8 @@ function card(i, featured) {
   const main = el("a", { className: "card-main", href: i.url, target: "_blank", rel: "noopener" },
     img, el("div", { className: "card-body" }, meta, el("h3", { textContent: i.title }), i.summary && el("p", { textContent: i.summary })));
   const actions = el("div", { className: "card-actions" },
-    el("a", { href: buildUrl(i.title.slice(0, 140), { engine: webEngine(), sites: OPINION_SITES }), target: "_blank", rel: "noopener", textContent: "What people think" }),
-    el("a", { href: `https://news.google.com/search?q=${encodeURIComponent(i.title.slice(0, 140))}`, target: "_blank", rel: "noopener", textContent: "Other coverage" }));
+    el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
+    el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }));
   return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
 }
 

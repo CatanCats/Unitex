@@ -5,7 +5,7 @@
 const params = new URLSearchParams(location.search);
 let query = (params.get("q") || "").trim();
 let topicId = topicById(params.get("topic") || "all").id;
-let tab = params.get("tab") === "images" ? "images" : "all";
+let tab = params.get("tab") || "all";
 
 const strip = html => new DOMParser().parseFromString(html || "", "text/html").body.textContent.replace(/\s+/g, " ").trim();
 const safeUrl = u => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; } };
@@ -146,30 +146,116 @@ const IMAGE_SOURCES = {
   }},
 };
 
-// ---------- merging ----------
 
-// Take turns between sources so the first screen shows a bit of everything. The same page found by
-// several engines becomes one result listing all of them.
-function interleave(lists) {
-  const out = [], byKey = new Map();
-  const queues = lists.map(l => [...l]);
-  while (queues.some(q => q.length)) {
-    for (const q of queues) {
-      const r = q.shift();
-      if (!r || !safeUrl(r.url)) continue;
-      const k = urlKey(r.url);
-      const seen = byKey.get(k);
-      if (seen) { if (!seen.via.includes(r.via)) seen.via.push(r.via); seen.image ||= r.image; continue; }
-      const item = { ...r, via: [r.via] };
-      byKey.set(k, item);
-      out.push(item);
-    }
-  }
-  return out;
-}
+// ---------- more tabs: videos, news, books, research, places, code ----------
+// Only sources that let other websites read them. Each returns cards: { title, url, via, thumb, meta, snippet }.
 
-// Metasearch ranking: a page that several engines rank highly comes first (reciprocal rank fusion).
+const mins = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "";
+const year = d => d ? String(d).slice(0, 4) : "";
+
+const VIDEO_SOURCES = {
+  peertube: { name: "PeerTube (Sepia Search)", async run(q) {
+    const d = await getJson(`https://sepiasearch.org/api/v1/search/videos?search=${encodeURIComponent(q)}&count=16`);
+    return (d.data || []).map(v => ({ title: v.name, url: v.url, thumb: v.thumbnailUrl, via: "PeerTube", meta: [v.account?.displayName || v.channel?.displayName, mins(v.duration)].filter(Boolean).join(" · ") }));
+  }},
+  dailymotion: { name: "Dailymotion", async run(q) {
+    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&fields=title,url,thumbnail_360_url,duration,owner.screenname`);
+    return (d.list || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail_360_url, via: "Dailymotion", meta: [v["owner.screenname"], mins(v.duration)].filter(Boolean).join(" · ") }));
+  }},
+  archive: { name: "Internet Archive", async run(q) {
+    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(movies)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=16&output=json`);
+    return (d.response?.docs || []).map(v => ({ title: v.title, url: `https://archive.org/details/${v.identifier}`, thumb: `https://archive.org/services/img/${v.identifier}`, via: "Internet Archive", meta: [[].concat(v.creator || [])[0], v.year].filter(Boolean).join(" · ") }));
+  }},
+  commons: { name: "Wikimedia Commons", async run(q) {
+    const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=${encodeURIComponent(q + " filetype:video")}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
+    return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index).filter(p => p.imageinfo?.[0]?.thumburl)
+      .map(p => ({ title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), url: p.imageinfo[0].descriptionurl, thumb: p.imageinfo[0].thumburl, via: "Wikimedia Commons" }));
+  }},
+};
+
+const NEWS_SOURCES = {
+  unitex: { name: "Unitex News (100+ outlets)", async run(q) {
+    const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    let d;
+    try { d = await getJson(`https://raw.githubusercontent.com/CatanCats/Unitex/main/news.json?t=${Math.floor(Date.now() / 300000)}`); }
+    catch { d = await getJson("news.json"); }
+    const seen = new Set();
+    return d.categories.flatMap(c => c.items)
+      .filter(i => { const t = (i.title + " " + i.summary).toLowerCase(); return words.length && words.every(w => t.includes(w)) && !seen.has(i.url) && seen.add(i.url); })
+      .map(i => ({ title: i.title, url: i.url, thumb: i.image, snippet: i.summary, via: i.source, meta: i.published ? ago(i.published) : "" }));
+  }},
+  gdelt: { name: "GDELT (world news index)", async run(q) {
+    const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=25&format=json&sort=datedesc`);
+    return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
+  }},
+  hackernews: { name: "Hacker News", async run(q) {
+    const d = await getJson(`https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=10`);
+    return d.hits.filter(h => h.title).map(h => ({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, via: "Hacker News", meta: `${h.points} points · ${ago(h.created_at_i)}` }));
+  }},
+};
+
+const BOOK_SOURCES = {
+  openlibrary: { name: "Open Library", async run(q) {
+    const d = await getJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=12&fields=key,title,author_name,first_publish_year,cover_i`);
+    return (d.docs || []).map(b => ({ title: b.title, url: `https://openlibrary.org${b.key}`, thumb: b.cover_i && `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`, via: "Open Library", meta: [b.author_name?.slice(0, 2).join(", "), b.first_publish_year].filter(Boolean).join(" · ") }));
+  }},
+  googlebooks: { name: "Google Books", async run(q) {
+    const d = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12`);
+    return (d.items || []).map(({ volumeInfo: v }) => ({ title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180), meta: [v.authors?.slice(0, 2).join(", "), year(v.publishedDate)].filter(Boolean).join(" · ") }));
+  }},
+  gutenberg: { name: "Project Gutenberg (free e-books)", async run(q) {
+    const d = await getJson(`https://gutendex.com/books/?search=${encodeURIComponent(q)}`);
+    return (d.results || []).slice(0, 10).map(b => ({ title: b.title, url: `https://www.gutenberg.org/ebooks/${b.id}`, thumb: b.formats?.["image/jpeg"], via: "Project Gutenberg", meta: ["Free e-book", b.authors?.[0]?.name].filter(Boolean).join(" · ") }));
+  }},
+};
+
+const PAPER_SOURCES = {
+  openalex: { name: "OpenAlex", async run(q) {
+    const d = await getJson(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=12`);
+    return (d.results || []).map(w => ({ title: w.display_name, url: w.open_access?.oa_url || w.primary_location?.landing_page_url || w.doi || w.id, via: "OpenAlex",
+      meta: [w.authorships?.slice(0, 3).map(a => a.author?.display_name).join(", "), w.primary_location?.source?.display_name, w.publication_year, `cited ${w.cited_by_count}×`, w.open_access?.is_oa && "free to read"].filter(Boolean).join(" · ") }));
+  }},
+  crossref: { name: "Crossref", async run(q) {
+    const d = await getJson(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=10&select=DOI,title,author,issued,container-title,URL`);
+    return (d.message?.items || []).filter(w => w.title?.[0]).map(w => ({ title: w.title[0], url: w.URL, via: "Crossref",
+      meta: [w.author?.slice(0, 3).map(a => [a.given, a.family].filter(Boolean).join(" ")).join(", "), w["container-title"]?.[0], w.issued?.["date-parts"]?.[0]?.[0]].filter(Boolean).join(" · ") }));
+  }},
+  wikipedia: { name: "Wikipedia", async run(q) { return SOURCES.wikipedia.run(q); } },
+};
+
+const PLACE_SOURCES = {
+  osm: { name: "OpenStreetMap", async run(q) {
+    const d = await getJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&limit=12`);
+    return d.map(p => ({ title: p.name || p.display_name.split(",")[0], url: `https://www.openstreetmap.org/${p.osm_type}/${p.osm_id}`, via: "OpenStreetMap", snippet: p.display_name, meta: [p.type?.replace(/_/g, " "), `${(+p.lat).toFixed(4)}, ${(+p.lon).toFixed(4)}`].filter(Boolean).join(" · ") }));
+  }},
+};
+
+const CODE_SOURCES = {
+  github: SOURCES.github,
+  stackoverflow: SOURCES.stackoverflow,
+  npm: { name: "npm", async run(q) {
+    const d = await getJson(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=6`);
+    return (d.objects || []).map(({ package: p }) => ({ title: p.name, url: p.links?.npm || `https://www.npmjs.com/package/${p.name}`, snippet: short(p.description), via: "npm", meta: `v${p.version}` }));
+  }},
+};
+
+// The tabs. "kind" picks how results are drawn.
+const TABS = [
+  { id: "all",    name: "All",       kind: "web" },
+  { id: "images", name: "Images",    kind: "images", sources: IMAGE_SOURCES, noun: "images" },
+  { id: "videos", name: "Videos",    kind: "cards",  sources: VIDEO_SOURCES, noun: "videos" },
+  { id: "news",   name: "News",      kind: "list",   sources: NEWS_SOURCES, noun: "news stories" },
+  { id: "books",  name: "Books",     kind: "covers", sources: BOOK_SOURCES, noun: "books" },
+  { id: "papers", name: "Research",  kind: "list",   sources: PAPER_SOURCES, noun: "papers" },
+  { id: "places", name: "Places",    kind: "list",   sources: PLACE_SOURCES, noun: "places" },
+  { id: "code",   name: "Code",      kind: "list",   sources: CODE_SOURCES, noun: "results" },
+];
+if (!TABS.some(t => t.id === tab)) tab = "all";
+
+// ---------- drawing ----------
+
 function fuse(lists) {
+  // Metasearch ranking: a page that several engines rank highly comes first (reciprocal rank fusion).
   const byKey = new Map();
   for (const list of lists) {
     list.forEach((r, pos) => {
@@ -188,18 +274,31 @@ function fuse(lists) {
   return [...byKey.values()].sort((a, b) => b.score - a.score);
 }
 
+// Take turns between sources, dropping repeats.
+function roundRobin(lists, key = r => urlKey(r.url)) {
+  const out = [], seen = new Set();
+  const queues = lists.map(l => [...l]);
+  while (queues.some(q => q.length)) for (const q of queues) {
+    const r = q.shift();
+    if (!r || !safeUrl(r.url) || seen.has(key(r))) continue;
+    seen.add(key(r)); out.push(r);
+  }
+  return out;
+}
+
 function resultItem(r) {
   const url = safeUrl(r.url);
   if (!url) return null;
   const path = new URL(url).pathname.replace(/\/$/, "");
-  return el("li", { className: "result" + (r.image ? " has-thumb" : "") },
+  const via = [].concat(r.via);
+  return el("li", { className: "result" + (r.image || r.thumb ? " has-thumb" : "") },
     el("div", { className: "r-body" },
       el("div", { className: "r-src" }, domainIcon(r.domain || host(url)),
-        el("span", { className: "r-site", textContent: host(url) + (path.length > 1 ? path.slice(0, 40) : "") })),
+        el("strong", { textContent: host(url) }), path.length > 1 && el("span", { className: "r-site", textContent: path.slice(0, 40) })),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
       r.snippet && el("p", { className: "r-snippet", textContent: r.snippet }),
-      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + r.via.join(" · ") }), r.meta && el("span", { textContent: r.meta }))),
-    r.image && el("img", { className: "r-thumb", src: r.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
+      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + via.join(" · ") }), r.meta && el("span", { textContent: r.meta }))),
+    (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
 
 function imageTile(i) {
@@ -210,6 +309,82 @@ function imageTile(i) {
     el("span", { className: "img-via", textContent: i.via }));
 }
 
+function mediaCard(i, kind) {
+  const url = safeUrl(i.url);
+  if (!url) return null;
+  const thumb = safeUrl(i.thumb);
+  return el("a", { className: `media-card ${kind}`, href: url, rel: "noopener" },
+    el("div", { className: "media-thumb" }, thumb && el("img", { src: thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })),
+    el("div", { className: "media-body" },
+      el("strong", { textContent: i.title }),
+      i.meta && el("small", { textContent: i.meta }),
+      el("span", { className: "via", textContent: "found by " + i.via })));
+}
+
+// ---------- which sources ran: the status bar ----------
+
+function renderSources(settled, sources, extraLocked = []) {
+  const chips = settled.map(s => {
+    const name = sources[s.n].name;
+    if (s.err) {
+      const why = /CAPTCHA|JavaScript/.test(s.err.message) ? s.err.message : "couldn't be read right now";
+      return el("span", { className: "src bad", title: why }, "✕ ", name, el("small", { textContent: " " + why }));
+    }
+    return el("span", { className: "src ok" }, "✓ ", name, el("small", { textContent: ` ${s.r.length}` }));
+  });
+  const locked = extraLocked.length && el("a", { className: "src locked", href: "install.html", title: "Install Unitex Helper to search these" }, "🔒 Not searched (need Unitex Helper): ", el("small", { textContent: extraLocked.join(", ") }));
+  fill($("sources"), el("span", { className: "row-label", textContent: "Searched" }), ...chips, locked);
+  $("sources").hidden = false;
+}
+
+function renderNotice() {
+  fill($("notice"),
+    el("strong", { textContent: "Unitex is only partly working in this browser." }),
+    el("p", { textContent: "Without Unitex Helper it can only search sites that let other websites read them directly, like Wikipedia, DuckDuckGo's instant answers, Reddit, Openverse and Open Library. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia, Mojeek, and sites like realestate.com.au can't be searched until you install it." }),
+    el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
+  $("notice").hidden = !!helperVersion();
+}
+
+// ---------- topic box ----------
+
+function renderTopicSites(hits) {
+  const box = $("topic-sites");
+  const topic = topicById(topicId);
+  const sites = topicSites(topic);
+  if (topic.id === "all" || !query || tab !== "all") { box.hidden = true; return; }
+
+  const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
+  region.onchange = () => { setRegion(region.value); go(); };
+  const on = !!helperVersion();
+  fill(box,
+    el("div", { className: "ts-head" }, el("h2", { textContent: `${topic.name}: ${sites.length} specialist sites` }), el("label", { className: "region" }, "in ", region)),
+    el("div", { className: "ts-chips" }, ...sites.map(s => el("span", { className: "src " + (on ? "ok" : "locked") }, domainIcon(s.domain), " ", s.name))),
+    on ? el("p", { className: "hint", textContent: hits ? `Searched all of them through ${HELPER_ENGINES.map(e => e.name).join(", ")}. Their pages are in the results below, marked with the engines that found them.` : "The engines found no pages on these sites for this search. Try fewer words." })
+       : el("p", { className: "hint warn", textContent: "None of these sites can be searched without Unitex Helper: they don't let other websites read them, and neither do the engines that index them. The results below are only from sources that allow it." }),
+    regionId === "*" && el("p", { className: "hint", textContent: "Pick your country to add local sites." }));
+  box.hidden = false;
+}
+
+// ---------- rows & tabs ----------
+
+function renderTopics() {
+  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Looking for" }), ...TOPICS.map(t => {
+    const b = el("button", { type: "button", className: "chip topic" + (t.id === topicId ? " active" : ""), textContent: t.name });
+    b.setAttribute("aria-pressed", t.id === topicId);
+    b.onclick = () => { topicId = t.id; store.set("unitex.topic", t.id); tab = "all"; go(); };
+    return b;
+  }));
+}
+
+function renderTabs() {
+  fill($("tabs"), ...TABS.map(t => {
+    const b = el("button", { type: "button", role: "tab", textContent: t.name });
+    b.setAttribute("aria-selected", t.id === tab);
+    b.onclick = () => { tab = t.id; go(); };
+    return b;
+  }));
+  document.body.dataset.tab = tab;
+}
 // ---------- answer card ----------
 
 function showDuckAnswer(d) {
@@ -260,11 +435,6 @@ Answer the user's search using the numbered search results provided. Lead with t
 Cite the results you rely on inline as [1], [2] using their numbers. If the results don't cover the question, answer from general knowledge and say that no result confirms it.
 Plain text only: no headings, no bold, no tables.`;
 
-function aiLinks(q) {
-  return el("div", { className: "ai-links" }, el("span", { textContent: "Ask:" }),
-    ...["claude", "chatgpt", "perplexity", "aimode"].map(id => { const e = byId(id); return el("a", { href: buildUrl(q, { engine: id }), rel: "noopener" }, icon(e), e.name); }));
-}
-
 // Turns "text [1] more [2]" into text with links to the cited results.
 function citedText(text, results) {
   const p = el("p", { className: "ai-text" });
@@ -280,13 +450,13 @@ function renderAiPrompt(results) {
   const box = $("ai");
   const head = el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI answer" }));
   if (!keys.claude) {
-    fill(box, head, el("p", { className: "hint", textContent: "Add an Anthropic API key in Settings to get an instant answer here, written from these results with links to its sources." }),
-      el("button", { type: "button", className: "btn-ghost", textContent: "Open Settings", onclick: openSettings }), aiLinks(query));
+    fill(box, head, el("p", { className: "hint", textContent: "Add an Anthropic API key in Settings to get a short answer here, written from these results with numbered links to its sources." }),
+      el("button", { type: "button", className: "btn-ghost", textContent: "Open Settings", onclick: openSettings }));
   } else if (looksLikeQuestion(query)) {
     runAi(results);
     return;
   } else {
-    fill(box, head, el("button", { type: "button", className: "btn-primary", textContent: "Get an AI answer from these results", onclick: () => runAi(results) }), aiLinks(query));
+    fill(box, head, el("button", { type: "button", className: "btn-primary", textContent: "Get an AI answer from these results", onclick: () => runAi(results) }));
   }
   box.hidden = false;
 }
@@ -325,9 +495,8 @@ async function runAi(results) {
     if (id !== runId) return;
     const answer = msg.content.filter(b => b.type === "text").map(b => b.text).join("");
     show(msg.stop_reason === "refusal"
-      ? el("p", { className: "hint", textContent: "Claude declined to answer this one. Try one of the AI links below." })
+      ? el("p", { className: "hint", textContent: "Claude declined to answer this one." })
       : citedText(answer, sources));
-    box.append(aiLinks(query));
   } catch (err) {
     if (id !== runId) return;
     const Anthropic = await loadAnthropic().catch(() => null);
@@ -336,71 +505,7 @@ async function runAi(results) {
       : Anthropic && err instanceof Anthropic.APIError ? `The AI service returned an error (${err.status ?? "network"}).`
       : "Couldn't reach the AI service.";
     show(el("p", { className: "hint", textContent: why }));
-    box.append(aiLinks(query));
   }
-}
-
-// ---------- topic sites ----------
-
-function renderTopicSites(googleHits) {
-  const box = $("topic-sites");
-  const topic = topicById(topicId);
-  const sites = topicSites(topic);
-  if (topic.id === "all" || !query) { box.hidden = true; return; }
-
-  const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
-  region.onchange = () => { setRegion(region.value); go(); };
-  const engineSel = el("select", { ariaLabel: "Search the sites with" }, ...SITE_ENGINES.map(id => el("option", { value: id, textContent: byId(id).name, selected: id === webEngine() })));
-  engineSel.onchange = () => { store.set("unitex.siteEngine", engineSel.value); renderTopicSites(googleHits); };
-
-  const engine = byId(webEngine());
-  const live = helperVersion() || (keys.google && keys.googleCx);
-  fill(box,
-    el("div", { className: "ts-head" },
-      el("h2", { textContent: `${topic.name}: ${sites.length} sites` }),
-      el("div", { className: "ts-controls" }, el("label", { className: "region" }, "in ", region), el("label", { className: "region" }, "open with ", engineSel))),
-    el("ul", { className: "ts-grid" }, ...sites.map(s => el("li", {}, el("a", { href: siteSearchUrl(s, query), rel: "noopener" },
-      domainIcon(s.domain, 20), el("span", { className: "ts-text" }, el("strong", { textContent: s.name }), el("small", { textContent: s.url ? "Search this site" : `Search via ${engine.name}` })))))),
-    el("a", { className: "btn-primary", href: buildUrl(query, { engine: engine.id, sites: sites.map(s => s.domain).slice(0, 14) }), rel: "noopener" },
-      `Search all ${Math.min(sites.length, 14)} at once on ${engine.name}`),
-    live ? (googleHits === 0 && el("p", { className: "hint", textContent: "The search engines found no matching pages on these sites. Try fewer words." }))
-      : el("p", { className: "hint ts-note" },
-          "Want the listings from all these sites shown right here? ",
-          el("a", { href: "install.html", textContent: "Install Unitex Helper" }), " (one minute) and Unitex searches them through Google, Bing, DuckDuckGo and more in your own browser."),
-    regionId === "*" && el("p", { className: "hint", textContent: "Pick your country to add local sites." }));
-  box.hidden = false;
-}
-
-// ---------- helper banner ----------
-
-function renderHelperBanner() {
-  $("helper-banner").hidden = !!helperVersion() || store.get("unitex.hideHelperBanner", false);
-}
-$("helper-banner-close").onclick = () => { store.set("unitex.hideHelperBanner", true); $("helper-banner").hidden = true; };
-
-// ---------- rows & tabs ----------
-
-function renderTopics() {
-  $("topics").replaceChildren(...TOPICS.map(t => {
-    const b = el("button", { type: "button", className: "chip topic" + (t.id === topicId ? " active" : ""), textContent: t.name });
-    b.setAttribute("aria-pressed", t.id === topicId);
-    b.onclick = () => { topicId = t.id; store.set("unitex.topic", t.id); go(); };
-    return b;
-  }));
-}
-
-function renderElsewhere() {
-  const ids = ["google", "bing", "duckduckgo", "ecosia", "brave", "startpage", "chatgpt", "claude", "perplexity", "aimode"];
-  $("elsewhere").replaceChildren(el("span", { className: "row-label", textContent: "Also on" }), ...ids.map(id => {
-    const e = byId(id);
-    return el("a", { className: "chip", href: query ? buildUrl(withSites(query, topicId !== "all" ? topicDomains() : []), { engine: id }) : "#", rel: "noopener" }, icon(e), e.name);
-  }));
-}
-
-for (const b of document.querySelectorAll("#tabs button")) b.onclick = () => { tab = b.dataset.tab; go(); };
-function renderTabs() {
-  for (const b of document.querySelectorAll("#tabs button")) b.setAttribute("aria-selected", b.dataset.tab === tab);
-  document.body.dataset.tab = tab;
 }
 
 // ---------- settings ----------
@@ -420,12 +525,17 @@ $("settings").addEventListener("close", () => {
   go();
 });
 
+
 // ---------- run a search ----------
 
 let runId = 0;
 const settle = (sources, q) => Promise.all(Object.entries(sources)
   .filter(([, s]) => !s.enabled || s.enabled())
   .map(([n, s]) => s.run(q).then(r => ({ n, r }), err => ({ n, err }))));
+const MAIN_SOURCES = Object.fromEntries(Object.entries(SOURCES).filter(([, s]) => s.group === "main"));
+const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => e.id === "duckduckgo" ? "DuckDuckGo web results" : e.name);
+const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
+const empty = text => el("li", { className: "empty", textContent: text });
 
 async function go() {
   const p = new URLSearchParams({ q: query });
@@ -436,80 +546,78 @@ async function go() {
   $("q").value = query;
   renderTabs();
   renderTopics();
-  renderElsewhere();
+  renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "code", "ai", "image-strip", "image-grid"]) $(id).hidden = true;
+  for (const id of ["answer", "ai", "image-strip", "image-grid", "media-grid", "topic-sites", "sources"]) $(id).hidden = true;
   $("results").replaceChildren();
 
-  if (!query) { $("topic-sites").hidden = true; $("status").textContent = "Type something to search."; return; }
+  if (!query) { $("status").textContent = "Type something to search."; return; }
   const id = ++runId;
+  const t = TABS.find(x => x.id === tab);
 
-  if (tab === "images") {
-    $("topic-sites").hidden = true;
-    $("status").textContent = "Searching images…";
-    const settled = await settle(IMAGE_SOURCES, query);
+  if (t.kind !== "web") {
+    $("status").textContent = `Searching ${t.name.toLowerCase()}…`;
+    if (t.kind === "list") $("results").replaceChildren(...skeletons(4));
+    const settled = await settle(t.sources, query);
     if (id !== runId) return;
-    const tiles = interleaveImages(settled.map(s => s.r || []));
-    fill($("image-grid"), ...tiles.map(imageTile));
-    $("image-grid").hidden = false;
-    $("status").textContent = statusLine(settled, IMAGE_SOURCES, tiles.length, "images");
+    renderSources(settled, t.sources);
+    const lists = settled.map(s => s.r || []);
+    let count = 0;
+    if (t.kind === "images") {
+      const tiles = roundRobin(lists, i => i.thumb).map(imageTile).filter(Boolean);
+      fill($("image-grid"), ...tiles);
+      $("image-grid").hidden = false;
+      count = tiles.length;
+    } else if (t.kind === "list") {
+      const items = roundRobin(lists).map(resultItem).filter(Boolean);
+      $("results").replaceChildren(...items);
+      count = items.length;
+    } else {
+      const cards = roundRobin(lists).map(i => mediaCard(i, t.kind)).filter(Boolean);
+      fill($("media-grid"), ...cards);
+      $("media-grid").className = "media-grid " + t.kind;
+      $("media-grid").hidden = false;
+      count = cards.length;
+    }
+    $("status").textContent = count ? `${count} ${t.noun}` : "";
+    if (!count) $("results").replaceChildren(empty(`No ${t.noun} found for this search.`));
     return;
   }
 
   renderTopicSites();
-  $("results").replaceChildren(...Array.from({ length: 5 }, () => el("li", { className: "skeleton result-skel" })));
+  $("results").replaceChildren(...skeletons(5));
   $("status").textContent = "Searching…";
 
-  const [settled, images] = await Promise.all([settle(SOURCES, query), settle(IMAGE_SOURCES, query)]);
+  const [settled, images] = await Promise.all([settle(MAIN_SOURCES, query), settle(IMAGE_SOURCES, query)]);
   wikiAnswer(query).catch(() => {});
   if (id !== runId) return;
 
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
   const engineLists = [...HELPER_ENGINES.map(e => by["helper_" + e.id] || []), by.google || []];
   const otherLists = ["wikipedia", "duckduckgo", "marginalia", "reddit", "hackernews", "news"].map(n => by[n] || []);
-  // On a topic, the engines' site-restricted listings come first; extra sources follow.
-  const main = topicId !== "all" ? [...fuse(engineLists), ...fuse(otherLists)].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
-                                 : fuse([...engineLists, ...otherLists]);
-  const code = interleave(["github", "stackoverflow"].map(n => by[n] || []));
+  // On a topic, the engines' site-restricted listings come first; other sources follow.
+  const main = topicId !== "all"
+    ? [...fuse(engineLists), ...fuse(otherLists)].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
+    : fuse([...engineLists, ...otherLists]);
   if (topicId !== "all") renderTopicSites(engineLists.flat().length);
+  renderSources(settled, MAIN_SOURCES, LOCKED_ENGINES());
 
   $("results").replaceChildren(...main.map(resultItem).filter(Boolean));
-  if (!main.length) $("results").replaceChildren(el("li", { className: "empty", textContent: "No results from these sources. Try one of the engines above." }));
-  $("code-results").replaceChildren(...code.map(resultItem).filter(Boolean));
-  $("code").hidden = !code.length || topicId !== "all";
+  if (!main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
-  const tiles = interleaveImages(images.map(s => s.r || [])).slice(0, 8);
+  const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
   if (tiles.length && topicId === "all") {
-    fill($("image-strip"), ...tiles.map(imageTile), el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; go(); } }));
+    fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; go(); } }));
     $("image-strip").hidden = false;
   }
 
-  renderHelperBanner();
   renderAiPrompt(main);
-  $("status").textContent = statusLine(settled, SOURCES, main.length + code.length, "results");
-}
-
-function interleaveImages(lists) {
-  const out = [], seen = new Set();
-  const queues = lists.map(l => [...l]);
-  while (queues.some(q => q.length)) for (const q of queues) { const i = q.shift(); if (i && !seen.has(i.thumb)) { seen.add(i.thumb); out.push(i); } }
-  return out;
-}
-
-function statusLine(settled, sources, count, noun) {
-  const ok = settled.filter(s => s.r && s.r.length).map(s => sources[s.n].name);
-  // Say why an engine failed when it's something the person can act on (CAPTCHA, needs JavaScript).
-  const failed = settled.filter(s => s.err).map(s => sources[s.n].name + (/CAPTCHA|JavaScript/.test(s.err.message) ? ` (${s.err.message})` : ""));
-  return `${count} ${noun} from ${ok.join(", ") || "no sources"}` + (failed.length ? ` · unavailable: ${failed.join(", ")}` : "");
+  $("status").textContent = `${main.length} results`;
 }
 
 $("search").addEventListener("submit", e => {
   e.preventDefault();
-  const q = $("q").value.trim();
-  // Bangs still work here: "!b cats" goes straight to Bing.
-  const bang = q.match(/(?:^|\s)!(\w+)(?=\s|$)/);
-  if (bang && ENGINES.some(x => x.bang === bang[1].toLowerCase() && !x.local)) { location.href = buildUrl(q); return; }
-  query = q.replace(/(?:^|\s)!u(?=\s|$)/, "").trim();
+  query = $("q").value.replace(/(?:^|\s)!\w+(?=\s|$)/g, " ").trim();
   go();
 });
 $("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));

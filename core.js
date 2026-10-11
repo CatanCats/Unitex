@@ -136,17 +136,6 @@ function detectAlternatives(q) {
   return null;
 }
 
-function altLinks(product) {
-  const ask = `What are the best open-source alternatives to ${product}? Compare them on features, license, maturity, and what users say.`;
-  return [
-    ["AlternativeTo", "alternativeto.net", `https://alternativeto.net/browse/search/?q=${encodeURIComponent(product)}`],
-    ["GitHub", "github.com", `https://github.com/search?q=${encodeURIComponent(product + " alternative")}&type=repositories&s=stars&o=desc`],
-    ["What people say", "reddit.com", buildUrl(`open source alternative to ${product}`, { engine: "google", sites: OPINION_SITES })],
-    ["Ask Claude", "claude.ai", byId("claude").url.replace("{q}", encodeURIComponent(ask))],
-    ["Ask ChatGPT", "chatgpt.com", byId("chatgpt").url.replace("{q}", encodeURIComponent(ask))],
-  ];
-}
-
 function renderAlternatives(box, query) {
   const found = detectAlternatives(query);
   if (!found) { box.hidden = true; box.replaceChildren(); return; }
@@ -163,10 +152,8 @@ function renderAlternatives(box, query) {
       el("span", { className: "alt-text" }, el("strong", { textContent: name }), el("small", { textContent: desc })),
       el("span", { className: "license", textContent: license })))));
 
-  const more = el("div", { className: "alts-more" }, el("span", { textContent: alts.length ? "Find more:" : "Find them on:" }),
-    ...altLinks(product).map(([label, domain, href]) => el("a", { href, target: "_blank", rel: "noopener" }, domainIcon(domain), label)));
 
-  fill(box, head, list, more);
+  fill(box, head, list || el("p", { className: "hint", textContent: "No well-known open-source alternatives listed for this one yet. The results below may have some." }));
   box.hidden = false;
 }
 
