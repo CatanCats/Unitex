@@ -60,7 +60,8 @@ function parseDomain(html) {
     const addr = [m.address?.street, m.address?.suburb].filter(Boolean).join(", ");
     out.push({ title: [addr || "Listing", m.price].filter(Boolean).join(" – "), url: new URL(m.url, "https://www.domain.com.au").href,
       snippet: featureText(m.features?.beds, m.features?.baths, m.features?.parking) + (m.features?.propertyTypeFormatted ? " · " + m.features.propertyTypeFormatted : ""),
-      image: m.images?.[0], domain: "domain.com.au" });
+      image: m.images?.[0], domain: "domain.com.au",
+      card: { kind: "house", address: addr, price: m.price, beds: m.features?.beds, baths: m.features?.baths, cars: m.features?.parking, type: m.features?.propertyTypeFormatted } });
   });
   if (!out.length) for (const a of doc.querySelectorAll("a[href]")) {
     const href = a.getAttribute("href");
@@ -90,7 +91,8 @@ function parseRealestate(html) {
       const img = o.media?.mainImage?.templatedUrl?.replace("{size}", "800x600");
       out.push({ title: [o.address?.display?.shortAddress || o.address?.display?.fullAddress || "Listing", o.price?.display].filter(Boolean).join(" – "),
         url: new URL(href, "https://www.realestate.com.au").href, snippet: featureText(f.bedrooms?.value, f.bathrooms?.value, f.parkingSpaces?.value) + (o.propertyType?.display ? " · " + o.propertyType.display : ""),
-        image: img, domain: "realestate.com.au" });
+        image: img, domain: "realestate.com.au",
+        card: { kind: "house", address: o.address?.display?.shortAddress || o.address?.display?.fullAddress, price: o.price?.display, beds: f.bedrooms?.value, baths: f.bathrooms?.value, cars: f.parkingSpaces?.value, type: o.propertyType?.display } });
     });
   }
   if (!out.length) for (const a of doc.querySelectorAll("a[href*='/property-']")) {
@@ -122,5 +124,7 @@ async function searchListings(siteId, q) {
   const html = await readPage(site.url(place, listingKind(q), listingBeds(q)));
   const items = site.parse(html);
   if (!items.length) throw new Error(botCheck(html) ? "sent a bot-check page instead of listings" : "page had no listings Unitex could read");
-  return items.slice(0, 12).map(i => ({ ...i, via: `${site.name} (read directly)`, meta: `${listingKind(q) === "rent" ? "For rent" : "For sale"} · ${place.suburb} ${place.state.toUpperCase()} ${place.postcode}` }));
+  const kind = listingKind(q);
+  return items.slice(0, 24).map(i => ({ ...i, via: `${site.name} (read directly)`, meta: `${kind === "rent" ? "For rent" : "For sale"} · ${place.suburb} ${place.state.toUpperCase()} ${place.postcode}`,
+    card: { kind: "house", ...(i.card || { address: i.title }), deal: kind, area: `${place.suburb} ${place.state.toUpperCase()} ${place.postcode}` } }));
 }

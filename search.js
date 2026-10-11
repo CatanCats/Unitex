@@ -478,6 +478,8 @@ function renderAnswer(a) {
 // ---------- run a search ----------
 
 let runId = 0;
+let lastTopic = topicId;
+document.addEventListener("unitex-saved-changed", () => { if (MODES[topicId]) { drawCards(); renderShortlist(topicById(topicId)); } });
 const settle = (sources, q) => Promise.all(Object.entries(sources)
   .filter(([, s]) => !s.enabled || s.enabled())
   .map(([n, s]) => s.run(q).then(r => ({ n, r }), err => ({ n, err }))));
@@ -497,7 +499,9 @@ async function go() {
   renderTopics();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources"]) $(id).hidden = true;
+  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview"]) $(id).hidden = true;
+  if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
+  document.body.classList.toggle("mode-on", modeOn && !!MODES[topicId] && tab === "all");
   $("results").replaceChildren();
 
   if (!query) { $("status").textContent = "Type something to search."; return; }
@@ -534,10 +538,12 @@ async function go() {
   }
 
   renderTopicSites();
+  renderAiOverviews(query);
   $("results").replaceChildren(...skeletons(5));
   $("status").textContent = "Searching…";
 
-  const [settled, images] = await Promise.all([settle(MAIN_SOURCES, query), settle(IMAGE_SOURCES, query)]);
+  const cardSource = CARD_SOURCES[topicId];
+  const [settled, images, cardSettled] = await Promise.all([settle(MAIN_SOURCES, query), settle(IMAGE_SOURCES, query), cardSource ? settle({ [topicId]: cardSource }, query) : []]);
   wikiAnswer(query).catch(() => {});
   if (id !== runId) return;
 
@@ -551,9 +557,11 @@ async function go() {
     ? [...fuse(engineLists), ...fuse([...indexLists, ...otherLists])].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
     : fuse([...engineLists, ...indexLists, ...otherLists]);
   if (topicId !== "all") renderTopicSites(engineLists.flat().length, settled);
-  renderSources(settled, MAIN_SOURCES, LOCKED_ENGINES());
+  renderSources([...cardSettled, ...settled], { ...(cardSource ? { [topicId]: cardSource } : {}), ...MAIN_SOURCES }, LOCKED_ENGINES());
 
-  $("results").replaceChildren(...main.map(resultItem).filter(Boolean));
+  // On a topic, results from its specialist sites become cards; the rest stay as a list.
+  const rest = showCards(main, cardSettled.flatMap(s => s.r || []));
+  $("results").replaceChildren(...rest.map(resultItem).filter(Boolean));
   if (!main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
   const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);

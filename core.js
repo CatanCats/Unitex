@@ -161,3 +161,51 @@ $("theme").onclick = () => {
   document.documentElement.dataset.theme = dark ? "light" : "dark";
   store.set("unitex.theme", document.documentElement.dataset.theme);
 };
+
+// ---------- saved items (houses, products, recipes…) ----------
+// Kept in this browser only. Shown in the ♡ Saved drawer on every page and in each topic's mode.
+
+const saved = {
+  all: () => store.get("unitex.saved", []),
+  has: url => saved.all().some(s => s.url === url),
+  remove(url) { store.set("unitex.saved", saved.all().filter(s => s.url !== url)); updateSavedButton(); },
+  toggle(item) {
+    if (saved.has(item.url)) saved.remove(item.url);
+    else { store.set("unitex.saved", [{ ...item, savedAt: Date.now() }, ...saved.all()]); updateSavedButton(); }
+  },
+};
+
+function updateSavedButton() {
+  const b = document.getElementById("saved-btn");
+  if (b) b.textContent = `♡ Saved${saved.all().length ? ` (${saved.all().length})` : ""}`;
+}
+
+function openSavedDrawer() {
+  let d = document.getElementById("saved-drawer");
+  if (!d) {
+    d = el("dialog", { id: "saved-drawer", className: "saved-drawer" });
+    d.addEventListener("click", e => { if (e.target === d) d.close(); });
+    document.body.append(d);
+  }
+  const items = saved.all();
+  const groups = [...new Set(items.map(s => s.topic))];
+  fill(d,
+    el("div", { className: "drawer-head" }, el("h2", { textContent: `Saved (${items.length})` }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
+    !items.length && el("p", { className: "hint", textContent: "Nothing saved yet. Tap ♡ Save on a house, product, car, job, recipe or show." }),
+    ...groups.map(g => el("section", {},
+      el("h3", { textContent: topicById(g).name }),
+      el("ul", { className: "shortlist" }, ...items.filter(s => s.topic === g).map(s => el("li", {},
+        s.image && el("img", { src: s.image, alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
+        el("div", {}, el("a", { href: s.url, rel: "noopener", textContent: s.title }), el("small", { textContent: [s.price, ...(s.facts || []), s.site].filter(Boolean).join(" · ") })),
+        el("button", { type: "button", className: "icon-btn", ariaLabel: "Remove", textContent: "✕", onclick: () => { saved.remove(s.url); openSavedDrawer(); document.dispatchEvent(new Event("unitex-saved-changed")); } })))))));
+  if (!d.open) d.showModal();
+}
+
+// Put the ♡ Saved button in the page header, next to the theme button.
+(() => {
+  const theme = document.getElementById("theme");
+  if (!theme) return;
+  const b = el("button", { id: "saved-btn", type: "button", className: "saved-btn", onclick: openSavedDrawer });
+  theme.before(b);
+  updateSavedButton();
+})();

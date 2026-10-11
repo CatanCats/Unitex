@@ -11,7 +11,18 @@ window.addEventListener("message", e => {
   helperWaiting.delete(e.data.id);
 });
 
+// Recent pages are kept for a minute so the results and the AI overview share one fetch.
+const helperCache = new Map();
 function helperFetch(url, ms = 12000) {
+  const hit = helperCache.get(url);
+  if (hit && Date.now() - hit.t < 60000) return hit.p;
+  const p = helperFetchNow(url, ms);
+  helperCache.set(url, { t: Date.now(), p });
+  p.catch(() => helperCache.delete(url));
+  return p;
+}
+
+function helperFetchNow(url, ms) {
   return new Promise((resolve, reject) => {
     if (!helperVersion()) return reject(new Error("Unitex Helper not installed"));
     const id = ++helperSeq;
