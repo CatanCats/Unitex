@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unitex Access Test</title>
+<meta name="description" content="Checks, from your own browser, which search engines and sites let Unitex read their results.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="style.css?v=4">
+<style>
+  .test-wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  .test-wrap h1 { font-size: 1.8rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .test-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .test-table th, .test-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.9rem; vertical-align: top; }
+  .test-table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .ok { color: #1f8a4c; font-weight: 600; }
+  .bad { color: #c2410c; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .ok { color: #4ade80; } .bad { color: #fb923c; } }
+  .test-wrap a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main class="test-wrap">
+  <h1>Can Unitex read these sites from your browser?</h1>
+  <p class="hint">This page asks your browser to read each site's search results in the background, the way Unitex would, and shows what your browser allows. "Blocked" means the site loads fine when you visit it, but it doesn't allow other websites to read it, so your browser refuses to hand the page to Unitex.</p>
+  <button id="run" class="btn-primary" type="button" style="border:0;cursor:pointer;margin-top:12px">Run the test</button>
+  <table class="test-table">
+    <thead><tr><th>Site</th><th>Result in your browser</th><th>Open it yourself</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script>
+const Q = "3 bedroom house to rent brunswick";
+const SITES = [
+  ["Google", "https://www.google.com/search?q="],
+  ["Bing", "https://www.bing.com/search?q="],
+  ["DuckDuckGo", "https://html.duckduckgo.com/html/?q="],
+  ["Yahoo", "https://search.yahoo.com/search?p="],
+  ["Brave Search", "https://search.brave.com/search?q="],
+  ["Ecosia", "https://www.ecosia.org/search?q="],
+  ["Mojeek", "https://www.mojeek.com/search?q="],
+  ["realestate.com.au", "https://www.realestate.com.au/rent/in-brunswick,+vic+3056/list-1?q="],
+  ["domain.com.au", "https://www.domain.com.au/rent/brunswick-vic-3056/?q="],
+  // For comparison: sources Unitex already uses because they do allow it.
+  ["Wikipedia (allows it)", "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srsearch="],
+  ["Hacker News (allows it)", "https://hn.algolia.com/api/v1/search?query="],
+];
+
+const rows = document.getElementById("rows");
+for (const [name, base] of SITES) {
+  const url = base + encodeURIComponent(Q);
+  const tr = document.createElement("tr");
+  const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener", textContent: "Open" });
+  tr.append(Object.assign(document.createElement("td"), { textContent: name }), Object.assign(document.createElement("td"), { textContent: "Not tested yet" }));
+  const td = document.createElement("td"); td.append(a); tr.append(td);
+  tr.dataset.url = url;
+  rows.append(tr);
+}
+
+document.getElementById("run").onclick = async () => {
+  for (const tr of rows.children) {
+    const cell = tr.children[1];
+    cell.className = ""; cell.textContent = "Testing…";
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch(tr.dataset.url, { signal: ctrl.signal });
+      const text = await r.text();
+      cell.className = r.ok ? "ok" : "bad";
+      cell.textContent = r.ok ? `Readable (HTTP ${r.status}, ${Math.round(text.length / 1024)} KB)` : `Answered, but with HTTP ${r.status}`;
+    } catch (err) {
+      cell.className = "bad";
+      cell.textContent = err.name === "AbortError" ? "No answer within 10 seconds" : "Blocked by your browser: the site doesn't allow other websites to read it";
+    } finally { clearTimeout(timer); }
+  }
+};
+</script>
+</body>
+</html>
