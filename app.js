@@ -27,6 +27,18 @@ function chip(e) {
   return b;
 }
 
+// The big "Search everywhere" button: picks Unitex, which searches many sources at once.
+function everywhere() {
+  const b = el("button", { type: "button", className: "chip everywhere" + (engineId === "unitex" ? " active" : "") }, el("span", { className: "logo mini", textContent: "U" }), "Search everywhere with Unitex");
+  b.setAttribute("aria-pressed", engineId === "unitex");
+  b.onclick = () => {
+    selectEngine("unitex");
+    if ($("q").value.trim()) $("search").requestSubmit();
+    else $("q").focus();
+  };
+  return b;
+}
+
 function renderEngine() {
   const e = byId(engineId);
   $("engine-icon").replaceChildren(icon(e));
@@ -34,9 +46,9 @@ function renderEngine() {
   const topic = topicById(topicId);
   $("q").placeholder = topic.id !== "all" ? topic.hint : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
 
-  $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), chip(byId("unitex")), ...recent.map(id => chip(byId(id))),
+  $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), everywhere(), ...recent.map(id => chip(byId(id))),
     el("button", { type: "button", className: "chip more", textContent: `All ${ENGINES.length}`, onclick: openPicker }));
-  $("quick-ai").replaceChildren(el("span", { className: "row-label", textContent: "Ask AI" }), ...AI_ENGINES.map(chip));
+  $("quick-ai").replaceChildren(el("span", { className: "row-label", textContent: "Ask AI" }), everywhere(), ...AI_ENGINES.map(chip));
 }
 
 // ---------- topics ----------

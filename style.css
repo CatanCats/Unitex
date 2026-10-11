@@ -278,7 +278,7 @@ footer a { color: inherit; }
 .searchbar.compact input[type="search"] { padding: 9px 4px; font-size: 1rem; }
 .searchbar.compact .go { width: 40px; height: 40px; border-radius: 10px; }
 .rtop .icon-btn { flex: none; }
-.rtop #settings-btn { margin-left: auto; }
+.rtop #theme { margin-left: auto; }
 .rnav { max-width: 1180px; margin: 0 auto; padding: 10px 16px 0; }
 .rnav .quick { justify-content: flex-start; margin-top: 6px; }
 .rnav .quick > :first-child, .rnav .quick > :last-child { margin-left: 0; margin-right: 0; }
@@ -443,3 +443,11 @@ body:not([data-tab="all"]) .rmain { grid-template-columns: 1fr; }
 .r-src strong { color: var(--fg); }
 .rnav #topics .row-label { width: auto; text-align: left; margin: 0 2px 0 0; }
 .src.locked { white-space: normal; }
+.chip.everywhere { padding: 9px 18px 9px 12px; font-size: 0.98rem; font-weight: 700; border: 0; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+.chip.everywhere .logo.mini { background: #fff; color: var(--accent); }
+.chip.everywhere:not(.active) { opacity: 0.9; }
+.chip.everywhere.active { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+@media (min-width: 901px) {
+  #quick, #quick-ai { flex-wrap: wrap; justify-content: center; overflow: visible; }
+  #quick > :first-child, #quick > :last-child, #quick-ai > :first-child, #quick-ai > :last-child { margin-left: 0; margin-right: 0; }
+}

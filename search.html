@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body class="results-page">
 
@@ -23,9 +23,6 @@
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
     </button>
   </form>
-  <button id="settings-btn" class="icon-btn" type="button" aria-label="Settings" title="Settings">
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.9c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
-  </button>
   <button id="theme" class="icon-btn" type="button" aria-label="Toggle dark mode" title="Toggle theme">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
   </button>
@@ -39,7 +36,6 @@
 <main class="rmain">
   <div class="rcol">
     <section id="notice" class="notice" role="status" hidden></section>
-    <section id="ai" class="ai-card" hidden></section>
     <section id="topic-sites" class="topic-sites" hidden></section>
     <div id="sources" class="sources" hidden></div>
     <p id="status" class="hint status"></p>
@@ -54,38 +50,16 @@
   </aside>
 </main>
 
-<dialog id="settings" class="settings">
-  <form method="dialog">
-    <h2>Settings</h2>
-    <p class="hint">Keys are saved only in this browser and sent only to the service they belong to.</p>
-    <fieldset>
-      <legend>AI answers (Claude)</legend>
-      <label>Anthropic API key <input id="set-claude" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
-      <p class="hint">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Usage is billed to your Anthropic account.</p>
-    </fieldset>
-    <fieldset>
-      <legend>Live Google results (houses, jobs, images…)</legend>
-      <label>Google API key <input id="set-google" type="password" autocomplete="off" placeholder="AIza…"></label>
-      <label>Search engine ID (cx) <input id="set-cx" type="text" autocomplete="off" placeholder="0123456789abcdef"></label>
-      <p class="hint">Free for 100 searches a day. Create a search engine at <a href="https://programmablesearchengine.google.com/" target="_blank" rel="noopener">programmablesearchengine.google.com</a> and a key at <a href="https://developers.google.com/custom-search/v1/introduction" target="_blank" rel="noopener">Google's Custom Search API page</a>.</p>
-    </fieldset>
-    <div class="settings-actions">
-      <button type="submit" value="cancel" class="btn-ghost">Cancel</button>
-      <button type="submit" value="save" class="btn-primary">Save</button>
-    </div>
-  </form>
-</dialog>
-
 <footer>
   Every result shows its website and the search engines or sources that found it. Unitex only searches sources that let other websites read them, straight from your browser; Google, Bing, Yahoo, Brave, Ecosia, Mojeek and DuckDuckGo's web results need <a href="install.html">Unitex Helper</a>. Nothing goes through a Unitex server.
   · <a href="./">Home</a> · <a href="test.html">What can my browser read?</a>
 </footer>
 
-<script src="engines.js?v=6"></script>
-<script src="alternatives.js?v=6"></script>
-<script src="topics.js?v=6"></script>
-<script src="core.js?v=6"></script>
-<script src="helper.js?v=6"></script>
-<script src="search.js?v=6"></script>
+<script src="engines.js?v=7"></script>
+<script src="alternatives.js?v=7"></script>
+<script src="topics.js?v=7"></script>
+<script src="core.js?v=7"></script>
+<script src="helper.js?v=7"></script>
+<script src="search.js?v=7"></script>
 </body>
 </html>

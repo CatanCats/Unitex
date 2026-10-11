@@ -66,13 +66,6 @@ function webEngine() {
   return SITE_ENGINES.includes(saved) ? saved : "google";
 }
 
-// Optional keys people can add in Settings on the results page; stored only in this browser.
-const keys = {
-  get claude() { return store.get("unitex.key.claude", ""); },
-  get google() { return store.get("unitex.key.google", ""); },
-  get googleCx() { return store.get("unitex.key.googleCx", ""); },
-};
-
 function siteSearchUrl(site, q) {
   return site.url ? site.url.replace("{q}", encodeURIComponent(q)) : buildUrl(`site:${site.domain} ${q}`, { engine: webEngine() });
 }

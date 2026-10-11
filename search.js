@@ -1,6 +1,6 @@
 // Unitex results page: asks search engines and open sources directly from the browser and merges
 // what comes back. Every result is labelled with the engine(s) that found it.
-// Google results and AI answers need keys (Settings); everything else works without one.
+// Without Unitex Helper only sources that let other websites read them are searched.
 
 const params = new URLSearchParams(location.search);
 let query = (params.get("q") || "").trim();
@@ -51,14 +51,6 @@ const topicDomains = () => topicSites(topicById(topicId)).map(s => s.domain).sli
 const withSites = (q, domains) => domains.length ? `${q} (${domains.map(d => "site:" + d).join(" OR ")})` : q;
 
 const SOURCES = {
-  google: { name: "Google", group: "main", enabled: () => keys.google && keys.googleCx, async run(q) {
-    const d = await getJson(`https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(keys.google)}&cx=${encodeURIComponent(keys.googleCx)}&num=10&q=${encodeURIComponent(withSites(q, topicDomains()))}`);
-    if (d.error) throw new Error(d.error.message);
-    return (d.items || []).map(i => ({
-      title: i.title, url: i.link, snippet: i.snippet, via: "Google", domain: i.displayLink,
-      image: i.pagemap?.cse_thumbnail?.[0]?.src || i.pagemap?.cse_image?.[0]?.src,
-    }));
-  }},
   wikipedia: { name: "Wikipedia", group: "main", async run(q) {
     const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&format=json&origin=*`);
     return d.query.search.map(r => ({
@@ -129,11 +121,6 @@ SOURCES.duckduckgo.name = "DuckDuckGo Instant Answers";
 
 // Image sources return [{ thumb, url, title, via }].
 const IMAGE_SOURCES = {
-  google: { name: "Google Images", enabled: () => keys.google && keys.googleCx, async run(q) {
-    const d = await getJson(`https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(keys.google)}&cx=${encodeURIComponent(keys.googleCx)}&searchType=image&num=10&q=${encodeURIComponent(q)}`);
-    if (d.error) throw new Error(d.error.message);
-    return (d.items || []).map(i => ({ thumb: i.image?.thumbnailLink || i.link, url: i.image?.contextLink || i.link, title: i.title, via: "Google" }));
-  }},
   openverse: { name: "Openverse", async run(q) {
     const d = await getJson(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=20`);
     return (d.results || []).map(i => ({ thumb: i.thumbnail || i.url, url: i.foreign_landing_url || i.url, title: i.title, via: "Openverse" }));
@@ -358,9 +345,8 @@ function renderTopicSites(hits) {
   const on = !!helperVersion();
   fill(box,
     el("div", { className: "ts-head" }, el("h2", { textContent: `${topic.name}: ${sites.length} specialist sites` }), el("label", { className: "region" }, "in ", region)),
-    el("div", { className: "ts-chips" }, ...sites.map(s => el("span", { className: "src " + (on ? "ok" : "locked") }, domainIcon(s.domain), " ", s.name))),
-    on ? el("p", { className: "hint", textContent: hits ? `Searched all of them through ${HELPER_ENGINES.map(e => e.name).join(", ")}. Their pages are in the results below, marked with the engines that found them.` : "The engines found no pages on these sites for this search. Try fewer words." })
-       : el("p", { className: "hint warn", textContent: "None of these sites can be searched without Unitex Helper: they don't let other websites read them, and neither do the engines that index them. The results below are only from sources that allow it." }),
+    el("div", { className: "ts-chips" }, ...sites.map(s => el("span", { className: "src " + (on ? "ok" : "locked"), title: on ? "Searched" : "Needs Unitex Helper" }, on ? "" : "🔒 ", domainIcon(s.domain), " ", s.name))),
+    on && el("p", { className: "hint", textContent: hits ? `Searched through ${HELPER_ENGINES.map(e => e.name).join(", ")}; their pages are in the results below.` : "The engines found no pages on these sites for this search. Try fewer words." }),
     regionId === "*" && el("p", { className: "hint", textContent: "Pick your country to add local sites." }));
   box.hidden = false;
 }
@@ -419,113 +405,6 @@ function renderAnswer(a) {
   $("answer").hidden = false;
 }
 
-// ---------- AI answer ----------
-
-// Question-like searches get an AI answer automatically; for others it's one click.
-const looksLikeQuestion = q => /\?$/.test(q) || /^(who|what|when|where|why|how|which|is|are|can|could|should|does|do|did|will|would|explain|compare|best|vs\b)/i.test(q) || /\bvs\.?\b/i.test(q);
-
-let anthropicModule;
-async function loadAnthropic() {
-  anthropicModule ||= import("https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk/+esm");
-  return (await anthropicModule).default;
-}
-
-const AI_SYSTEM = `You write the short answer box at the top of a search results page.
-Answer the user's search using the numbered search results provided. Lead with the direct answer, then add only what helps: 2-5 sentences, or a short list when the query asks for options or steps.
-Cite the results you rely on inline as [1], [2] using their numbers. If the results don't cover the question, answer from general knowledge and say that no result confirms it.
-Plain text only: no headings, no bold, no tables.`;
-
-// Turns "text [1] more [2]" into text with links to the cited results.
-function citedText(text, results) {
-  const p = el("p", { className: "ai-text" });
-  for (const part of text.split(/(\[\d+\])/)) {
-    const m = part.match(/^\[(\d+)\]$/);
-    const r = m && results[+m[1] - 1];
-    p.append(r ? el("a", { className: "cite", href: r.url, rel: "noopener", title: r.title, textContent: m[1] }) : part.replace(/\*\*/g, ""));
-  }
-  return p;
-}
-
-function renderAiPrompt(results) {
-  const box = $("ai");
-  const head = el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI answer" }));
-  if (!keys.claude) {
-    fill(box, head, el("p", { className: "hint", textContent: "Add an Anthropic API key in Settings to get a short answer here, written from these results with numbered links to its sources." }),
-      el("button", { type: "button", className: "btn-ghost", textContent: "Open Settings", onclick: openSettings }));
-  } else if (looksLikeQuestion(query)) {
-    runAi(results);
-    return;
-  } else {
-    fill(box, head, el("button", { type: "button", className: "btn-primary", textContent: "Get an AI answer from these results", onclick: () => runAi(results) }));
-  }
-  box.hidden = false;
-}
-
-async function runAi(results) {
-  const box = $("ai");
-  const id = runId;
-  const sources = results.slice(0, 10);
-  const text = el("p", { className: "ai-text", textContent: "Thinking…" });
-  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI answer" }), el("span", { className: "hint", textContent: "Claude · from the results below" })), text);
-  box.hidden = false;
-
-  const numbered = sources.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet || ""}`).join("\n\n");
-  let live = text;
-  const show = node => { live.replaceWith(node); live = node; };
-  try {
-    const Anthropic = await loadAnthropic();
-    const client = new Anthropic({ apiKey: keys.claude, dangerouslyAllowBrowser: true });
-    const stream = client.beta.messages.stream({
-      model: "claude-opus-5-5",
-      max_tokens: 16000,
-      output_config: { effort: "low" },
-      // If a request is declined by a safety classifier, let the API retry it on a suitable model.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      system: AI_SYSTEM,
-      messages: [{ role: "user", content: `Search: ${query}\n\nSearch results:\n\n${numbered || "(no results)"}` }],
-    });
-    let acc = "";
-    stream.on("text", t => {
-      if (id !== runId) return;
-      acc += t;
-      show(citedText(acc, sources));
-    });
-    const msg = await stream.finalMessage();
-    if (id !== runId) return;
-    const answer = msg.content.filter(b => b.type === "text").map(b => b.text).join("");
-    show(msg.stop_reason === "refusal"
-      ? el("p", { className: "hint", textContent: "Claude declined to answer this one." })
-      : citedText(answer, sources));
-  } catch (err) {
-    if (id !== runId) return;
-    const Anthropic = await loadAnthropic().catch(() => null);
-    const why = Anthropic && err instanceof Anthropic.AuthenticationError ? "Your Anthropic API key was rejected. Check it in Settings."
-      : Anthropic && err instanceof Anthropic.RateLimitError ? "Too many requests right now. Try again in a moment."
-      : Anthropic && err instanceof Anthropic.APIError ? `The AI service returned an error (${err.status ?? "network"}).`
-      : "Couldn't reach the AI service.";
-    show(el("p", { className: "hint", textContent: why }));
-  }
-}
-
-// ---------- settings ----------
-
-function openSettings() {
-  $("set-claude").value = keys.claude;
-  $("set-google").value = keys.google;
-  $("set-cx").value = keys.googleCx;
-  $("settings").showModal();
-}
-$("settings-btn").onclick = openSettings;
-$("settings").addEventListener("close", () => {
-  if ($("settings").returnValue !== "save") return;
-  store.set("unitex.key.claude", $("set-claude").value.trim());
-  store.set("unitex.key.google", $("set-google").value.trim());
-  store.set("unitex.key.googleCx", $("set-cx").value.trim());
-  go();
-});
-
-
 // ---------- run a search ----------
 
 let runId = 0;
@@ -548,7 +427,7 @@ async function go() {
   renderTopics();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "ai", "image-strip", "image-grid", "media-grid", "topic-sites", "sources"]) $(id).hidden = true;
+  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources"]) $(id).hidden = true;
   $("results").replaceChildren();
 
   if (!query) { $("status").textContent = "Type something to search."; return; }
@@ -593,7 +472,7 @@ async function go() {
   if (id !== runId) return;
 
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
-  const engineLists = [...HELPER_ENGINES.map(e => by["helper_" + e.id] || []), by.google || []];
+  const engineLists = HELPER_ENGINES.map(e => by["helper_" + e.id] || []);
   const otherLists = ["wikipedia", "duckduckgo", "marginalia", "reddit", "hackernews", "news"].map(n => by[n] || []);
   // On a topic, the engines' site-restricted listings come first; other sources follow.
   const main = topicId !== "all"
@@ -611,7 +490,6 @@ async function go() {
     $("image-strip").hidden = false;
   }
 
-  renderAiPrompt(main);
   $("status").textContent = `${main.length} results`;
 }
 
