@@ -20,15 +20,23 @@ const ago = t => {
 };
 const urlKey = u => { try { const x = new URL(u); return (x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/$/, "")).toLowerCase(); } catch { return u; } };
 
-async function getJson(url, ms = 8000) {
+// Fetches JSON and turns failures into reasons people can understand.
+async function getJson(url, ms = 8000, init = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
+  let r;
   try {
-    const r = await fetch(url, { signal: ctrl.signal });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return await r.json();
+    r = await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    throw new Error(err.name === "AbortError" ? "didn't answer in time" : "blocked or offline");
   } finally { clearTimeout(timer); }
+  if (r.status === 429) throw new Error("too many searches right now (HTTP 429)");
+  if (!r.ok) throw new Error(`answered with an error (HTTP ${r.status})`);
+  try { return await r.json(); } catch { throw new Error("answered with something that isn't search results"); }
 }
+
+// Joins text that APIs split into highlighted pieces ([{value}], {fragments:[{text}]}, …).
+const flatText = v => typeof v === "string" ? v : Array.isArray(v) ? v.map(flatText).join("") : v && typeof v === "object" ? flatText(v.value ?? v.text ?? v.fragments ?? v.content ?? "") : "";
 
 // DuckDuckGo's Instant Answer API only supports JSONP from the browser.
 function jsonp(url, ms = 8000) {
@@ -38,7 +46,7 @@ function jsonp(url, ms = 8000) {
     const done = () => { delete window[cb]; s.remove(); clearTimeout(timer); };
     const timer = setTimeout(() => { done(); reject(new Error("timeout")); }, ms);
     window[cb] = data => { done(); resolve(data); };
-    s.onerror = () => { done(); reject(new Error("failed")); };
+    s.onerror = () => { done(); reject(new Error("couldn't be reached")); };
     s.src = url + "&callback=" + cb;
     document.head.append(s);
   });
@@ -57,6 +65,23 @@ const SOURCES = {
       title: r.title, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
       snippet: strip(r.snippet) + "…", via: "Wikipedia", domain: "wikipedia.org",
     }));
+  }},
+  // Independent, open web indexes: actual websites, labelled with the index that found them.
+  mwmbl: { name: "Mwmbl", group: "main", async run(q) {
+    const d = await getJson(`https://api.mwmbl.org/search?s=${encodeURIComponent(q)}`);
+    return (Array.isArray(d) ? d : d.results || []).map(r => ({ title: strip(flatText(r.title)) || host(r.url), url: r.url, snippet: short(strip(flatText(r.extract))), via: "Mwmbl", domain: host(r.url) }));
+  }},
+  stract: { name: "Stract", group: "main", async run(q) {
+    const d = await getJson("https://stract.com/beta/api/search", 9000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) });
+    return (d.webpages || d.results || []).map(r => ({ title: strip(flatText(r.title)) || host(r.url), url: r.url, snippet: short(strip(flatText(r.snippet?.text ?? r.snippet ?? r.body))), via: "Stract", domain: host(r.url) }));
+  }},
+  alexandria: { name: "Alexandria", group: "main", async run(q) {
+    const d = await getJson(`https://api.alexandria.org/?q=${encodeURIComponent(q)}&a=1&c=a`);
+    return (d.results || []).map(r => ({ title: strip(r.title) || host(r.url), url: /^https?:/.test(r.url) ? r.url : "https://" + r.url, snippet: short(strip(r.snippet)), via: "Alexandria", domain: host(/^https?:/.test(r.url) ? r.url : "https://" + r.url) }));
+  }},
+  wiby: { name: "Wiby", group: "main", async run(q) {
+    const d = await getJson(`https://wiby.me/json/?q=${encodeURIComponent(q)}`);
+    return (Array.isArray(d) ? d : []).map(r => ({ title: strip(r.Title) || host(r.URL), url: r.URL, snippet: short(strip(r.Snippet)), via: "Wiby", domain: host(r.URL) }));
   }},
   marginalia: { name: "Marginalia", group: "main", async run(q) {
     const d = await getJson(`https://api.marginalia.nu/public/search/${encodeURIComponent(q)}?count=10`);
@@ -320,7 +345,7 @@ function renderSources(settled, sources, extraLocked = []) {
   const chips = settled.map(s => {
     const name = sources[s.n].name;
     if (s.err) {
-      const why = /CAPTCHA|JavaScript/.test(s.err.message) || s.n.startsWith("listing_") ? s.err.message : "couldn't be read right now";
+      const why = s.err.message;
       return el("span", { className: "src bad", title: why }, "✕ ", name, el("small", { textContent: " " + why }));
     }
     return el("span", { className: "src ok" }, "✓ ", name, el("small", { textContent: ` ${s.r.length}` }));
@@ -333,7 +358,7 @@ function renderSources(settled, sources, extraLocked = []) {
 function renderNotice() {
   fill($("notice"),
     el("strong", { textContent: "Unitex is only partly working in this browser." }),
-    el("p", { textContent: "Without Unitex Helper it can only search sites that let other websites read them directly, like Wikipedia, DuckDuckGo's instant answers, Reddit, Openverse and Open Library. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia and Mojeek can't be searched until you install it." }),
+    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia and Mojeek can't be searched until you install it." }),
     el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
   $("notice").hidden = !!helperVersion();
 }
@@ -489,11 +514,12 @@ async function go() {
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
   const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
   const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
-  const otherLists = ["wikipedia", "duckduckgo", "marginalia", "reddit", "hackernews", "news"].map(n => by[n] || []);
+  const indexLists = ["mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
+  const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews", "news"].map(n => by[n] || []);
   // On a topic, the engines' site-restricted listings come first; other sources follow.
   const main = topicId !== "all"
-    ? [...fuse(engineLists), ...fuse(otherLists)].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
-    : fuse([...engineLists, ...otherLists]);
+    ? [...fuse(engineLists), ...fuse([...indexLists, ...otherLists])].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
+    : fuse([...engineLists, ...indexLists, ...otherLists]);
   if (topicId !== "all") renderTopicSites(engineLists.flat().length, settled);
   renderSources(settled, MAIN_SOURCES, LOCKED_ENGINES());
 

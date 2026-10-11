@@ -6,7 +6,7 @@
 <title>Unitex Access Test</title>
 <meta name="description" content="Checks, from your own browser, which search engines and sites let Unitex read their results.">
 <meta name="color-scheme" content="light dark">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <style>
   .test-wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
   .test-wrap h1 { font-size: 1.8rem; margin: 0 0 8px; letter-spacing: -0.02em; }
@@ -29,8 +29,8 @@
     <tbody id="rows"></tbody>
   </table>
 </main>
-<script src="helper.js?v=8"></script>
-<script src="listings.js?v=8"></script>
+<script src="helper.js?v=9"></script>
+<script src="listings.js?v=9"></script>
 <script>
 const Q = "3 bedroom house to rent brunswick";
 const SITES = [
@@ -43,6 +43,11 @@ const SITES = [
   ["Mojeek", "https://www.mojeek.com/search?q="],
   ["realestate.com.au", "https://www.realestate.com.au/rent/in-brunswick,+vic+3056/list-1#", parseRealestate],
   ["domain.com.au", "https://www.domain.com.au/rent/brunswick-vic-3056/#", parseDomain],
+  // Open web indexes Unitex uses for actual websites.
+  ["Mwmbl", "https://api.mwmbl.org/search?s="],
+  ["Alexandria", "https://api.alexandria.org/?a=1&c=a&q="],
+  ["Wiby", "https://wiby.me/json/?q="],
+  ["Marginalia", "https://api.marginalia.nu/public/search/"],
   // For comparison: sources Unitex already uses because they do allow it.
   ["Wikipedia (allows it)", "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srsearch="],
   ["Hacker News (allows it)", "https://hn.algolia.com/api/v1/search?query="],
