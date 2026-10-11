@@ -2,92 +2,364 @@
   "world": {
     "name": "World",
     "feeds": [
-      { "source": "Google News", "region": "Global", "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", "aggregator": true },
-      { "source": "BBC News", "region": "UK", "url": "https://feeds.bbci.co.uk/news/world/rss.xml" },
-      { "source": "The Guardian", "region": "UK", "url": "https://www.theguardian.com/world/rss" },
-      { "source": "Sky News", "region": "UK", "url": "https://feeds.skynews.com/feeds/rss/world.xml" },
-      { "source": "Al Jazeera", "region": "Middle East", "url": "https://www.aljazeera.com/xml/rss/all.xml" },
-      { "source": "NPR", "region": "US", "url": "https://feeds.npr.org/1004/rss.xml" },
-      { "source": "New York Times", "region": "US", "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
-      { "source": "CBC", "region": "Canada", "url": "https://www.cbc.ca/webfeed/rss/rss-world" },
-      { "source": "DW", "region": "Germany", "url": "https://rss.dw.com/rdf/rss-en-all" },
-      { "source": "France 24", "region": "France", "url": "https://www.france24.com/en/rss" },
-      { "source": "Euronews", "region": "Europe", "url": "https://www.euronews.com/rss" },
-      { "source": "Times of India", "region": "India", "url": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms" },
-      { "source": "South China Morning Post", "region": "Hong Kong", "url": "https://www.scmp.com/rss/91/feed" },
-      { "source": "The Japan Times", "region": "Japan", "url": "https://www.japantimes.co.jp/feed/" },
-      { "source": "ABC News", "region": "Australia", "url": "https://www.abc.net.au/news/feed/51120/rss.xml" },
-      { "source": "RNZ", "region": "New Zealand", "url": "https://www.rnz.co.nz/rss/world.xml" },
-      { "source": "Africanews", "region": "Africa", "url": "https://www.africanews.com/feed/rss" },
-      { "source": "MercoPress", "region": "South America", "url": "https://en.mercopress.com/rss" }
+      {
+        "source": "Google News",
+        "region": "Global",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "SG",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-SG&gl=SG&ceid=SG:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "CA",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-CA&gl=CA&ceid=CA:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "ZA",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-ZA&gl=ZA&ceid=ZA:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "NG",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-NG&gl=NG&ceid=NG:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "AU",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-AU&gl=AU&ceid=AU:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "IN",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-IN&gl=IN&ceid=IN:en",
+        "aggregator": true
+      },
+      {
+        "source": "Google News",
+        "region": "GB",
+        "url": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-GB&gl=GB&ceid=GB:en",
+        "aggregator": true
+      },
+      {
+        "source": "BBC News",
+        "region": "UK",
+        "url": "https://feeds.bbci.co.uk/news/world/rss.xml"
+      },
+      {
+        "source": "The Guardian",
+        "region": "UK",
+        "url": "https://www.theguardian.com/world/rss"
+      },
+      {
+        "source": "Sky News",
+        "region": "UK",
+        "url": "https://feeds.skynews.com/feeds/rss/world.xml"
+      },
+      {
+        "source": "Al Jazeera",
+        "region": "Middle East",
+        "url": "https://www.aljazeera.com/xml/rss/all.xml"
+      },
+      {
+        "source": "NPR",
+        "region": "US",
+        "url": "https://feeds.npr.org/1004/rss.xml"
+      },
+      {
+        "source": "New York Times",
+        "region": "US",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+      },
+      {
+        "source": "CBC",
+        "region": "Canada",
+        "url": "https://www.cbc.ca/webfeed/rss/rss-world"
+      },
+      {
+        "source": "DW",
+        "region": "Germany",
+        "url": "https://rss.dw.com/rdf/rss-en-all"
+      },
+      {
+        "source": "France 24",
+        "region": "France",
+        "url": "https://www.france24.com/en/rss"
+      },
+      {
+        "source": "Euronews",
+        "region": "Europe",
+        "url": "https://www.euronews.com/rss"
+      },
+      {
+        "source": "Times of India",
+        "region": "India",
+        "url": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+      },
+      {
+        "source": "South China Morning Post",
+        "region": "Hong Kong",
+        "url": "https://www.scmp.com/rss/91/feed"
+      },
+      {
+        "source": "The Japan Times",
+        "region": "Japan",
+        "url": "https://www.japantimes.co.jp/feed/"
+      },
+      {
+        "source": "ABC News",
+        "region": "Australia",
+        "url": "https://www.abc.net.au/news/feed/51120/rss.xml"
+      },
+      {
+        "source": "RNZ",
+        "region": "New Zealand",
+        "url": "https://www.rnz.co.nz/rss/world.xml"
+      },
+      {
+        "source": "Africanews",
+        "region": "Africa",
+        "url": "https://www.africanews.com/feed/rss"
+      },
+      {
+        "source": "MercoPress",
+        "region": "South America",
+        "url": "https://en.mercopress.com/rss"
+      }
     ]
   },
   "business": {
     "name": "Business",
     "feeds": [
-      { "source": "Google News", "region": "Global", "url": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en", "aggregator": true },
-      { "source": "BBC News", "region": "UK", "url": "https://feeds.bbci.co.uk/news/business/rss.xml" },
-      { "source": "The Guardian", "region": "UK", "url": "https://www.theguardian.com/business/rss" },
-      { "source": "CNBC", "region": "US", "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html" },
-      { "source": "MarketWatch", "region": "US", "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
-      { "source": "New York Times", "region": "US", "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml" },
-      { "source": "Al Jazeera", "region": "Middle East", "url": "https://www.aljazeera.com/xml/rss/economy.xml" }
+      {
+        "source": "Google News",
+        "region": "Global",
+        "url": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en",
+        "aggregator": true
+      },
+      {
+        "source": "BBC News",
+        "region": "UK",
+        "url": "https://feeds.bbci.co.uk/news/business/rss.xml"
+      },
+      {
+        "source": "The Guardian",
+        "region": "UK",
+        "url": "https://www.theguardian.com/business/rss"
+      },
+      {
+        "source": "CNBC",
+        "region": "US",
+        "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+      },
+      {
+        "source": "MarketWatch",
+        "region": "US",
+        "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories"
+      },
+      {
+        "source": "New York Times",
+        "region": "US",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"
+      }
     ]
   },
   "tech": {
     "name": "Tech",
     "feeds": [
-      { "source": "Google News", "region": "Global", "url": "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en", "aggregator": true },
-      { "source": "The Verge", "region": "US", "url": "https://www.theverge.com/rss/index.xml" },
-      { "source": "Ars Technica", "region": "US", "url": "https://feeds.arstechnica.com/arstechnica/index" },
-      { "source": "TechCrunch", "region": "US", "url": "https://techcrunch.com/feed/" },
-      { "source": "Wired", "region": "US", "url": "https://www.wired.com/feed/rss" },
-      { "source": "BBC News", "region": "UK", "url": "https://feeds.bbci.co.uk/news/technology/rss.xml" },
-      { "source": "The Register", "region": "UK", "url": "https://www.theregister.com/headlines.atom" },
-      { "source": "Hacker News", "region": "Community", "url": "https://hnrss.org/frontpage?points=100" }
+      {
+        "source": "Google News",
+        "region": "Global",
+        "url": "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en",
+        "aggregator": true
+      },
+      {
+        "source": "The Verge",
+        "region": "US",
+        "url": "https://www.theverge.com/rss/index.xml"
+      },
+      {
+        "source": "Ars Technica",
+        "region": "US",
+        "url": "https://feeds.arstechnica.com/arstechnica/index"
+      },
+      {
+        "source": "TechCrunch",
+        "region": "US",
+        "url": "https://techcrunch.com/feed/"
+      },
+      {
+        "source": "Wired",
+        "region": "US",
+        "url": "https://www.wired.com/feed/rss"
+      },
+      {
+        "source": "BBC News",
+        "region": "UK",
+        "url": "https://feeds.bbci.co.uk/news/technology/rss.xml"
+      },
+      {
+        "source": "The Register",
+        "region": "UK",
+        "url": "https://www.theregister.com/headlines.atom"
+      },
+      {
+        "source": "Hacker News",
+        "region": "Community",
+        "url": "https://hnrss.org/frontpage?points=100"
+      }
     ]
   },
   "science": {
     "name": "Science",
     "feeds": [
-      { "source": "Google News", "region": "Global", "url": "https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=en-US&gl=US&ceid=US:en", "aggregator": true },
-      { "source": "BBC News", "region": "UK", "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml" },
-      { "source": "Nature", "region": "UK", "url": "https://www.nature.com/nature.rss" },
-      { "source": "New Scientist", "region": "UK", "url": "https://www.newscientist.com/feed/home/" },
-      { "source": "ScienceDaily", "region": "US", "url": "https://www.sciencedaily.com/rss/top/science.xml" },
-      { "source": "NASA", "region": "US", "url": "https://www.nasa.gov/news-release/feed/" },
-      { "source": "Quanta Magazine", "region": "US", "url": "https://www.quantamagazine.org/feed/" }
+      {
+        "source": "Google News",
+        "region": "Global",
+        "url": "https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=en-US&gl=US&ceid=US:en",
+        "aggregator": true
+      },
+      {
+        "source": "BBC News",
+        "region": "UK",
+        "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+      },
+      {
+        "source": "Nature",
+        "region": "UK",
+        "url": "https://www.nature.com/nature.rss"
+      },
+      {
+        "source": "New Scientist",
+        "region": "UK",
+        "url": "https://www.newscientist.com/feed/home/"
+      },
+      {
+        "source": "ScienceDaily",
+        "region": "US",
+        "url": "https://www.sciencedaily.com/rss/top/science.xml"
+      },
+      {
+        "source": "NASA",
+        "region": "US",
+        "url": "https://www.nasa.gov/news-release/feed/"
+      },
+      {
+        "source": "Quanta Magazine",
+        "region": "US",
+        "url": "https://www.quantamagazine.org/feed/"
+      }
     ]
   },
   "sport": {
     "name": "Sport",
     "feeds": [
-      { "source": "BBC Sport", "region": "UK", "url": "https://feeds.bbci.co.uk/sport/rss.xml" },
-      { "source": "The Guardian", "region": "UK", "url": "https://www.theguardian.com/sport/rss" },
-      { "source": "Sky Sports", "region": "UK", "url": "https://www.skysports.com/rss/12040" },
-      { "source": "ESPN", "region": "US", "url": "https://www.espn.com/espn/rss/news" },
-      { "source": "ABC Sport", "region": "Australia", "url": "https://www.abc.net.au/news/feed/45924/rss.xml" }
+      {
+        "source": "Google News",
+        "region": "Global",
+        "url": "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=en-US&gl=US&ceid=US:en",
+        "aggregator": true
+      },
+      {
+        "source": "BBC Sport",
+        "region": "UK",
+        "url": "https://feeds.bbci.co.uk/sport/rss.xml"
+      },
+      {
+        "source": "The Guardian",
+        "region": "UK",
+        "url": "https://www.theguardian.com/sport/rss"
+      },
+      {
+        "source": "Sky Sports",
+        "region": "UK",
+        "url": "https://www.skysports.com/rss/12040"
+      },
+      {
+        "source": "ABC Sport",
+        "region": "Australia",
+        "url": "https://www.abc.net.au/news/feed/45924/rss.xml"
+      }
     ]
   },
   "culture": {
     "name": "Culture",
     "feeds": [
-      { "source": "BBC News", "region": "UK", "url": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
-      { "source": "The Guardian", "region": "UK", "url": "https://www.theguardian.com/culture/rss" },
-      { "source": "Variety", "region": "US", "url": "https://variety.com/feed/" },
-      { "source": "Pitchfork", "region": "US", "url": "https://pitchfork.com/feed/feed-news/rss" },
-      { "source": "NPR", "region": "US", "url": "https://feeds.npr.org/1008/rss.xml" }
+      {
+        "source": "Google News",
+        "region": "Global",
+        "url": "https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=en-US&gl=US&ceid=US:en",
+        "aggregator": true
+      },
+      {
+        "source": "BBC News",
+        "region": "UK",
+        "url": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
+      },
+      {
+        "source": "The Guardian",
+        "region": "UK",
+        "url": "https://www.theguardian.com/culture/rss"
+      },
+      {
+        "source": "Variety",
+        "region": "US",
+        "url": "https://variety.com/feed/"
+      },
+      {
+        "source": "Pitchfork",
+        "region": "US",
+        "url": "https://pitchfork.com/feed/feed-news/rss"
+      },
+      {
+        "source": "NPR",
+        "region": "US",
+        "url": "https://feeds.npr.org/1008/rss.xml"
+      }
     ]
   },
   "opensource": {
     "name": "Open source",
     "feeds": [
-      { "source": "LWN.net", "region": "Community", "url": "https://lwn.net/headlines/rss" },
-      { "source": "Phoronix", "region": "Community", "url": "https://www.phoronix.com/rss.php" },
-      { "source": "It's FOSS", "region": "Community", "url": "https://itsfoss.com/rss/" },
-      { "source": "OMG! Ubuntu", "region": "Community", "url": "https://www.omgubuntu.co.uk/feed" },
-      { "source": "GitHub Blog", "region": "Community", "url": "https://github.blog/feed/" },
-      { "source": "Lobsters", "region": "Community", "url": "https://lobste.rs/rss" }
+      {
+        "source": "LWN.net",
+        "region": "Community",
+        "url": "https://lwn.net/headlines/rss"
+      },
+      {
+        "source": "Phoronix",
+        "region": "Community",
+        "url": "https://www.phoronix.com/rss.php"
+      },
+      {
+        "source": "It's FOSS",
+        "region": "Community",
+        "url": "https://itsfoss.com/rss/"
+      },
+      {
+        "source": "OMG! Ubuntu",
+        "region": "Community",
+        "url": "https://www.omgubuntu.co.uk/feed"
+      },
+      {
+        "source": "GitHub Blog",
+        "region": "Community",
+        "url": "https://github.blog/feed/"
+      },
+      {
+        "source": "Lobsters",
+        "region": "Community",
+        "url": "https://lobste.rs/rss"
+      }
     ]
   }
 }

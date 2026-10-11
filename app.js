@@ -196,13 +196,18 @@ async function fetchNews() {
 }
 
 function tabsFor(data) {
-  const all = data.categories.flatMap(c => c.items.map(i => ({ ...i, category: c.name })))
-    .sort((a, b) => (b.published || 0) - (a.published || 0));
-  // "Top" mixes every category but keeps any one source from dominating.
-  const perSource = {};
-  const top = all.filter(i => (perSource[i.source] = (perSource[i.source] || 0) + 1) <= 3).slice(0, 60);
+  // "Top" takes turns between categories (World first) so no single topic or outlet dominates.
+  const queues = data.categories.map(c => c.items.map(i => ({ ...i, category: c.name })));
+  const top = [];
+  for (let n = 0; top.length < 60 && queues.some(q => q.length); n++) {
+    const item = queues[n % queues.length].shift();
+    if (item) top.push(item);
+  }
   return [{ id: "all", name: "Top", items: top }, ...data.categories];
 }
+
+const PAGE = 24;
+let shown = PAGE;
 
 function renderTabs() {
   const tabs = tabsFor(news);
@@ -210,7 +215,7 @@ function renderTabs() {
   $("news-tabs").replaceChildren(...tabs.map(t => {
     const b = el("button", { type: "button", role: "tab", textContent: t.name });
     b.setAttribute("aria-selected", t.id === feedId);
-    b.onclick = () => { feedId = t.id; store.set("unitex.feed", t.id); renderTabs(); renderNews(); };
+    b.onclick = () => { feedId = t.id; shown = PAGE; store.set("unitex.feed", t.id); renderTabs(); renderNews(); };
     return b;
   }));
 }
@@ -235,7 +240,16 @@ function renderNews() {
     list.replaceChildren(el("li", { className: "empty", textContent: "Nothing here right now." }));
     return;
   }
-  list.replaceChildren(...tab.items.map((i, n) => card(i, n === 0)));
+  // Lead with the first story that has a picture.
+  const lead = tab.items.findIndex(i => i.image);
+  const items = lead > 0 ? [tab.items[lead], ...tab.items.filter((_, n) => n !== lead)] : tab.items;
+  list.replaceChildren(...items.slice(0, shown).map((i, n) => card(i, n === 0)));
+  if (items.length > shown) {
+    list.append(el("li", { className: "more-row" }, el("button", {
+      type: "button", className: "chip more", textContent: `Show more (${items.length - shown})`,
+      onclick() { shown += PAGE; renderNews(); },
+    })));
+  }
   $("news-status").textContent = `${news.sources.length} sources worldwide · updated ${ago(news.generated)}`;
 }
 

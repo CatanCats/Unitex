@@ -22,7 +22,7 @@ OUT_FILE = ROOT / "news.json"
 
 PER_FEED = 15        # items read from each feed
 PER_SOURCE = 6       # max items one source can contribute to a category
-PER_CATEGORY = 60    # items kept per category
+PER_CATEGORY = 80    # items kept per category
 MAX_AGE_H = 72       # drop stories older than this
 UA = "Mozilla/5.0 (compatible; UnitexNews/1.0; +https://github.com/CatanCats/Unitex)"
 
@@ -49,6 +49,16 @@ def image_of(e):
     return m.group(1) if m else None
 
 
+def summary_of(e, feed):
+    if feed.get("aggregator"):
+        return ""
+    s = clean(e.get("summary"), 220)
+    # Link aggregators (HN, Lobsters) put only URLs or "Comments" in the summary.
+    if s.startswith(("Article URL", "Comments")) or len(s) < 25:
+        return ""
+    return s
+
+
 def published_of(e):
     for key in ("published_parsed", "updated_parsed"):
         t = e.get(key)
@@ -60,7 +70,7 @@ def published_of(e):
 def fetch(feed):
     try:
         req = urllib.request.Request(feed["url"], headers={"User-Agent": UA, "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"})
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             parsed = feedparser.parse(r.read())
     except Exception as err:  # one broken feed must not break the rest
         return feed, [], f"{type(err).__name__}: {err}"
@@ -85,7 +95,7 @@ def fetch(feed):
             "region": feed["region"] if not feed.get("aggregator") else "",
             "published": published_of(e),
             "image": image_of(e),
-            "summary": clean(e.get("summary"), 220) if not feed.get("aggregator") else "",
+            "summary": summary_of(e, feed),
         })
     return feed, items, None if items else "no items"
 
