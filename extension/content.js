@@ -1,6 +1,8 @@
 // Runs only on Unitex pages. Tells the page the helper is installed and relays its fetch requests
 // to the background script, which is allowed to load search-engine pages.
-const api = globalThis.browser || globalThis.chrome;
+// Use the chrome.* API: Chrome only has this one, and Firefox supports it with callbacks too
+// (Firefox's browser.* API is promise-based and rejects the callback style used here).
+const api = globalThis.chrome || globalThis.browser;
 document.documentElement.dataset.unitexHelper = api.runtime.getManifest().version;
 
 window.addEventListener("message", e => {

@@ -66,6 +66,25 @@ const SOURCES = {
       snippet: strip(r.snippet) + "…", via: "Wikipedia", domain: "wikipedia.org",
     }));
   }},
+  // SearXNG metasearch: public servers that allow other websites to read their results (format=json).
+  // Each result lists the engines that found it, so they get the credit.
+  searxng: { name: "SearXNG (direct)", group: "main", async run(q) {
+    const reasons = [];
+    for (const server of SEARX_HOSTS) {
+      try {
+        const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=general&language=all`, 6000);
+        const out = (d.results || []).flatMap(r => (r.engines?.length ? r.engines : ["SearXNG"]).map(e => ({
+          title: strip(r.title) || host(r.url), url: r.url, snippet: short(strip(r.content)), via: e === "SearXNG" ? e : `${engineName(e)} (through SearXNG)`, domain: host(r.url) })));
+        if (out.length) return out;
+      } catch (e) { reasons.push(e.message); }
+    }
+    throw new Error(reasons.every(r => r === reasons[0]) && reasons[0] ? `public servers: ${reasons[0]}` : "no public server answered");
+  }},
+  qwant: { name: "Qwant", group: "main", async run(q) {
+    const d = await getJson(`https://api.qwant.com/v3/search/web?q=${encodeURIComponent(q)}&count=10&offset=0&locale=en_GB&device=desktop`);
+    const main = d.data?.result?.items?.mainline || [];
+    return main.filter(b => b.type === "web").flatMap(b => b.items || []).map(r => ({ title: strip(r.title) || host(r.url), url: r.url, snippet: short(strip(r.desc)), via: "Qwant", domain: host(r.url) }));
+  }},
   // Independent, open web indexes: actual websites, labelled with the index that found them.
   mwmbl: { name: "Mwmbl", group: "main", async run(q) {
     const d = await getJson(`https://api.mwmbl.org/search?s=${encodeURIComponent(q)}`);
@@ -308,6 +327,13 @@ function roundRobin(lists, key = r => urlKey(r.url)) {
   return out;
 }
 
+// "Google (through SearXNG)", "Bing (through SearXNG)", "Qwant" → "Google · Bing (through SearXNG) · Qwant"
+function viaText(via) {
+  const through = via.filter(v => v.endsWith(" (through SearXNG)")).map(v => v.replace(" (through SearXNG)", ""));
+  const rest = via.filter(v => !v.endsWith(" (through SearXNG)"));
+  return [through.length && `${through.join(" · ")} (through SearXNG)`, ...rest].filter(Boolean).join(" · ");
+}
+
 function resultItem(r) {
   const url = safeUrl(r.url);
   if (!url) return null;
@@ -319,7 +345,7 @@ function resultItem(r) {
         el("strong", { textContent: host(url) }), path.length > 1 && el("span", { className: "r-site", textContent: path.slice(0, 40) })),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
       r.snippet && el("p", { className: "r-snippet", textContent: r.snippet }),
-      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + via.join(" · ") }), r.meta && el("span", { textContent: r.meta }))),
+      el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + viaText(via) }), r.meta && el("span", { textContent: r.meta }))),
     (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
 
@@ -362,7 +388,7 @@ function renderSources(settled, sources, extraLocked = []) {
 function renderNotice() {
   fill($("notice"),
     el("strong", { textContent: "Unitex is only partly working in this browser." }),
-    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia and Mojeek can't be searched until you install it." }),
+    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia and Mojeek can't be searched until you install it." }),
     el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
   $("notice").hidden = !!helperVersion();
 }
@@ -456,7 +482,7 @@ const settle = (sources, q) => Promise.all(Object.entries(sources)
   .filter(([, s]) => !s.enabled || s.enabled())
   .map(([n, s]) => s.run(q).then(r => ({ n, r }), err => ({ n, err }))));
 const MAIN_SOURCES = Object.fromEntries(Object.entries(SOURCES).filter(([, s]) => s.group === "main"));
-const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => e.id === "duckduckgo" ? "DuckDuckGo web results" : e.name);
+const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ duckduckgo: "DuckDuckGo web results", searxng: "SearXNG result pages" }[e.id] || e.name));
 const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
 const empty = text => el("li", { className: "empty", textContent: text });
 
@@ -518,7 +544,7 @@ async function go() {
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
   const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
   const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
-  const indexLists = ["mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
+  const indexLists = ["searxng", "qwant", "mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
   const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews", "news"].map(n => by[n] || []);
   // On a topic, the engines' site-restricted listings come first; other sources follow.
   const main = topicId !== "all"

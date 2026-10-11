@@ -171,29 +171,24 @@
         "url": "https://newsinfo.inquirer.net/feed"
       },
       {
-        "source": "The Times of Israel",
+        "source": "The Jerusalem Post",
         "region": "Israel",
-        "url": "https://www.timesofisrael.com/feed/"
+        "url": "https://www.jpost.com/rss/rssfeedsfrontpage.aspx"
       },
       {
-        "source": "Arab News",
-        "region": "Saudi Arabia",
-        "url": "https://www.arabnews.com/rss.xml"
-      },
-      {
-        "source": "Middle East Eye",
+        "source": "Al Arabiya English",
         "region": "Middle East",
-        "url": "https://www.middleeasteye.net/rss"
+        "url": "https://english.alarabiya.net/feed/rss2/en.xml"
       },
       {
-        "source": "Mail & Guardian",
+        "source": "Daily Maverick",
         "region": "South Africa",
-        "url": "https://mg.co.za/feed/"
+        "url": "https://www.dailymaverick.co.za/dmrss/"
       },
       {
         "source": "News24",
         "region": "South Africa",
-        "url": "https://feeds.news24.com/articles/news24/TopStories/rss"
+        "url": "https://feeds.capi24.com/v1/Search/articles/news24/TopStories/rss"
       },
       {
         "source": "Premium Times",
@@ -489,9 +484,9 @@
         "url": "http://rss.sciam.com/ScientificAmerican-Global"
       },
       {
-        "source": "Space.com",
+        "source": "NASA Science",
         "region": "US",
-        "url": "https://www.space.com/feeds/all"
+        "url": "https://science.nasa.gov/feed/"
       },
       {
         "source": "Live Science",

@@ -35,7 +35,30 @@ const HELPER_ENGINES = [
   { id: "brave",      name: "Brave",      url: q => `https://search.brave.com/search?q=${encodeURIComponent(q)}&source=web` },
   { id: "ecosia",     name: "Ecosia",     url: q => `https://www.ecosia.org/search?q=${encodeURIComponent(q)}` },
   { id: "mojeek",     name: "Mojeek",     url: q => `https://www.mojeek.com/search?q=${encodeURIComponent(q)}` },
+  { id: "searxng",    name: "SearXNG",    url: (q, host = SEARX_HOSTS[0]) => `https://${host}/search?q=${encodeURIComponent(q)}&categories=general&language=all` },
 ];
+
+// Public SearXNG servers, tried in order until one answers.
+const SEARX_HOSTS = ["priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io"];
+const engineName = e => ({ duckduckgo: "DuckDuckGo", bing: "Bing", google: "Google", brave: "Brave", qwant: "Qwant", startpage: "Startpage", yahoo: "Yahoo", mojeek: "Mojeek", wikipedia: "Wikipedia", presearch: "Presearch", yandex: "Yandex" }[e.toLowerCase()] || e.replace(/^./, c => c.toUpperCase()));
+
+// SearXNG lists which engines found each result; credit them: "Google (through SearXNG)".
+function parseSearx(html, base) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const out = [];
+  for (const art of doc.querySelectorAll("article.result")) {
+    const a = art.querySelector("h3 a[href]") || art.querySelector("a.url_header[href]");
+    const url = a && unwrapLink(a.getAttribute("href"), base);
+    if (!url) continue;
+    const title = (art.querySelector("h3")?.textContent || a.textContent).replace(/\s+/g, " ").trim();
+    const snippet = (art.querySelector(".content")?.textContent || "").replace(/\s+/g, " ").trim();
+    const engines = [...art.querySelectorAll(".engines span")].map(e => e.textContent.trim()).filter(Boolean);
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    for (const e of engines.length ? engines : ["SearXNG"]) out.push({ title, url, snippet: snippet.slice(0, 240), via: e === "SearXNG" ? e : `${engineName(e)} (through SearXNG)`, domain });
+  }
+  if (!out.length && /too many requests|rate limit|captcha|not allowed/i.test(doc.body?.textContent || "")) throw new Error("the SearXNG server is limiting searches right now");
+  return out;
+}
 
 // Engines wrap result links in their own redirect URLs; recover the real destination.
 function unwrapLink(href, base) {
@@ -111,6 +134,17 @@ function parseResultsPage(html, base, engineName) {
 }
 
 async function helperSearch(engine, q) {
+  if (engine.id === "searxng") {
+    let last;
+    for (const host of SEARX_HOSTS) {
+      try {
+        const res = await helperFetch(engine.url(q, host));
+        const items = parseSearx(res.html, res.url);
+        if (items.length) return items;
+      } catch (e) { last = e; }
+    }
+    throw last || new Error("no SearXNG server returned results");
+  }
   const res = await helperFetch(engine.url(q));
   return parseResultsPage(res.html, res.url || engine.url(q), engine.name);
 }
