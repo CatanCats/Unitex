@@ -165,6 +165,7 @@ $("theme").onclick = () => {
 // ---------- saved items (houses, products, recipes…) ----------
 // Kept in this browser only. Shown in the ♡ Saved drawer on every page and in each topic's mode.
 
+const SAVED_GROUPS = { videos: "Watch later", images: "Images", books: "Reading list", papers: "Research papers", places: "Places", news: "News" };
 const saved = {
   all: () => store.get("unitex.saved", []),
   has: url => saved.all().some(s => s.url === url),
@@ -193,7 +194,7 @@ function openSavedDrawer() {
     el("div", { className: "drawer-head" }, el("h2", { textContent: `Saved (${items.length})` }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
     !items.length && el("p", { className: "hint", textContent: "Nothing saved yet. Tap ♡ Save on a house, product, car, job, recipe or show." }),
     ...groups.map(g => el("section", {},
-      el("h3", { textContent: topicById(g).name }),
+      el("h3", { textContent: SAVED_GROUPS[g] || topicById(g).name }),
       el("ul", { className: "shortlist" }, ...items.filter(s => s.topic === g).map(s => el("li", {},
         s.image && el("img", { src: s.image, alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
         el("div", {}, el("a", { href: s.url, rel: "noopener", textContent: s.title }), el("small", { textContent: [s.price, ...(s.facts || []), s.site].filter(Boolean).join(" · ") })),

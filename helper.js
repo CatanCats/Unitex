@@ -37,14 +37,12 @@ function helperFetchNow(url, ms) {
   });
 }
 
-// Result-page URLs for each engine the helper can load.
+// Result-page URLs for each engine the helper can load. Only engines with their own index:
+// resellers of Google's or Bing's results (Ecosia, Yahoo, DuckDuckGo's web results) are left out.
 const HELPER_ENGINES = [
   { id: "google",     name: "Google",     url: q => `https://www.google.com/search?q=${encodeURIComponent(q)}&hl=en&num=10` },
   { id: "bing",       name: "Bing",       url: q => `https://www.bing.com/search?q=${encodeURIComponent(q)}` },
-  { id: "duckduckgo", name: "DuckDuckGo", url: q => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}` },
-  { id: "yahoo",      name: "Yahoo",      url: q => `https://search.yahoo.com/search?p=${encodeURIComponent(q)}` },
   { id: "brave",      name: "Brave",      url: q => `https://search.brave.com/search?q=${encodeURIComponent(q)}&source=web` },
-  { id: "ecosia",     name: "Ecosia",     url: q => `https://www.ecosia.org/search?q=${encodeURIComponent(q)}` },
   { id: "mojeek",     name: "Mojeek",     url: q => `https://www.mojeek.com/search?q=${encodeURIComponent(q)}` },
   { id: "searxng",    name: "SearXNG",    url: (q, host = SEARX_HOSTS[0]) => `https://${host}/search?q=${encodeURIComponent(q)}&categories=general&language=all` },
 ];
@@ -159,3 +157,64 @@ async function helperSearch(engine, q) {
   const res = await helperFetch(engine.url(q));
   return parseResultsPage(res.html, res.url || engine.url(q), engine.name);
 }
+
+// ---------- engines' own News / Images / Videos sections ----------
+// Used by the media tabs when the helper is installed. Each returns the tab's item shape.
+
+const ytEmbed = u => { const m = String(u).match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/); return m && `https://www.youtube-nocookie.com/embed/${m[1]}`; };
+const attrJson = (el, name) => { try { return JSON.parse(el.getAttribute(name)); } catch { return null; } };
+const durSecs = t => { const p = String(t || "").split(":").map(Number); return p.every(n => !isNaN(n)) && p.length > 1 ? p.reduce((a, n) => a * 60 + n, 0) : undefined; };
+
+async function helperDoc(url) {
+  const res = await helperFetch(url);
+  return { doc: new DOMParser().parseFromString(res.html, "text/html"), base: res.url || url, html: res.html };
+}
+
+const HELPER_VERTICALS = {
+  news: {
+    bing: { name: "Bing News", async run(q) {
+      const { doc, base } = await helperDoc(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}`);
+      const out = [...doc.querySelectorAll(".news-card, .newsitem")].map(c => {
+        const a = c.querySelector("a.title, a[href].title, h2 a, a[href]");
+        const url = a && unwrapLink(c.getAttribute("url") || a.getAttribute("href"), base);
+        return url && { title: (c.getAttribute("data-title") || a.textContent).trim(), url, snippet: c.querySelector(".snippet")?.textContent.trim(), outlet: c.getAttribute("data-author") || c.querySelector(".source a, .source")?.textContent.trim() || new URL(url).hostname, via: "Bing News", thumb: c.querySelector("img[src^='http']")?.getAttribute("src") };
+      }).filter(Boolean);
+      return out.length ? out : parseResultsPage(doc.documentElement.outerHTML, base, "Bing News");
+    }},
+    google: { name: "Google News", async run(q) {
+      const res = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=nws&hl=en`);
+      return parseResultsPage(res.html, res.url, "Google News").map(r => ({ ...r, outlet: r.domain }));
+    }},
+    brave: { name: "Brave News", async run(q) {
+      const res = await helperFetch(`https://search.brave.com/news?q=${encodeURIComponent(q)}`);
+      return parseResultsPage(res.html, res.url, "Brave News").map(r => ({ ...r, outlet: r.domain }));
+    }},
+    mojeek: { name: "Mojeek News", async run(q) {
+      const res = await helperFetch(`https://www.mojeek.com/search?q=${encodeURIComponent(q)}&fmt=news`);
+      return parseResultsPage(res.html, res.url, "Mojeek News").map(r => ({ ...r, outlet: r.domain }));
+    }},
+  },
+  images: {
+    bing: { name: "Bing Images", async run(q) {
+      const { doc } = await helperDoc(`https://www.bing.com/images/search?q=${encodeURIComponent(q)}&form=HDRSC2`);
+      return [...doc.querySelectorAll("a.iusc[m]")].map(a => attrJson(a, "m")).filter(m => m?.turl && m?.purl)
+        .map(m => ({ thumb: m.turl, full: m.murl, url: m.purl, title: m.t || m.desc, via: "Bing Images", site: (() => { try { return new URL(m.purl).hostname; } catch { return ""; } })() }));
+    }},
+  },
+  videos: {
+    bing: { name: "Bing Videos", async run(q) {
+      const { doc, base } = await helperDoc(`https://www.bing.com/videos/search?q=${encodeURIComponent(q)}`);
+      return [...doc.querySelectorAll("[vrhm], .mc_vtvc")].map(c => {
+        const m = attrJson(c, "vrhm") || attrJson(c.querySelector("[vrhm]"), "vrhm") || {};
+        const url = unwrapLink(m.pgurl || m.murl || c.querySelector("a[href]")?.getAttribute("href"), base);
+        if (!url || /bing\.com/.test(url)) return null;
+        return { title: (m.vt || c.querySelector(".mc_vtvc_title, strong")?.textContent || "").trim() || url, url, thumb: c.querySelector("img[src^='http']")?.getAttribute("src"),
+          secs: durSecs(m.du || c.querySelector(".mc_bc_rc, .duration")?.textContent), by: m.pub || c.querySelector(".mc_vtvc_meta_row span")?.textContent?.trim(), via: "Bing Videos", embed: ytEmbed(url) };
+      }).filter(Boolean);
+    }},
+    brave: { name: "Brave Videos", async run(q) {
+      const res = await helperFetch(`https://search.brave.com/videos?q=${encodeURIComponent(q)}`);
+      return parseResultsPage(res.html, res.url, "Brave Videos").map(r => ({ title: r.title, url: r.url, thumb: r.image, via: "Brave Videos", by: r.domain, embed: ytEmbed(r.url) }));
+    }},
+  },
+};

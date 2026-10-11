@@ -18,7 +18,15 @@ const ago = t => {
   if (s < 86400 * 365) return `${Math.round(s / 86400)}d ago`;
   return `${Math.round(s / 86400 / 365)}y ago`;
 };
-const urlKey = u => { try { const x = new URL(u); return (x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/$/, "")).toLowerCase(); } catch { return u; } };
+// Same page = same host + path + meaningful query (e.g. YouTube's ?v=), ignoring tracking tags.
+const TRACKING = /^(utm_\w+|ref|ref_src|fbclid|gclid|msclkid|mc_cid|mc_eid|igshid|si|feature|spm|cmpid|ocid)$/i;
+const urlKey = u => {
+  try {
+    const x = new URL(u);
+    const q = [...x.searchParams].filter(([k]) => !TRACKING.test(k)).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join("&");
+    return (x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/$/, "") + (q ? "?" + q : "")).toLowerCase();
+  } catch { return u; }
+};
 
 // Fetches JSON and turns failures into reasons people can understand.
 async function getJson(url, ms = 8000, init = {}) {
@@ -177,13 +185,13 @@ for (const id of Object.keys(LISTING_SITES)) {
 const IMAGE_SOURCES = {
   openverse: { name: "Openverse", async run(q) {
     const d = await getJson(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=20`);
-    return (d.results || []).map(i => ({ thumb: i.thumbnail || i.url, url: i.foreign_landing_url || i.url, title: i.title, via: "Openverse" }));
+    return (d.results || []).map(i => ({ thumb: i.thumbnail || i.url, full: i.url, url: i.foreign_landing_url || i.url, title: i.title, via: "Openverse", license: [i.license?.toUpperCase(), i.license_version].filter(Boolean).join(" "), creator: i.creator, site: i.source }));
   }},
   commons: { name: "Wikimedia Commons", async run(q) {
     const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=16&gsrsearch=${encodeURIComponent(q)}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
     return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index)
       .filter(p => p.imageinfo?.[0]?.thumburl && !/\.(pdf|djvu|ogg|webm|tif)$/i.test(p.title))
-      .map(p => ({ thumb: p.imageinfo[0].thumburl, url: p.imageinfo[0].descriptionurl, title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), via: "Wikimedia Commons" }));
+      .map(p => ({ thumb: p.imageinfo[0].thumburl, full: p.imageinfo[0].url, url: p.imageinfo[0].descriptionurl, title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), via: "Wikimedia Commons", license: "Free licence (see page)" }));
   }},
 };
 
@@ -197,20 +205,21 @@ const year = d => d ? String(d).slice(0, 4) : "";
 const VIDEO_SOURCES = {
   peertube: { name: "PeerTube (Sepia Search)", async run(q) {
     const d = await getJson(`https://sepiasearch.org/api/v1/search/videos?search=${encodeURIComponent(q)}&count=16`);
-    return (d.data || []).map(v => ({ title: v.name, url: v.url, thumb: v.thumbnailUrl, via: "PeerTube", meta: [v.account?.displayName || v.channel?.displayName, mins(v.duration)].filter(Boolean).join(" · ") }));
+    return (d.data || []).map(v => ({ title: v.name, url: v.url, thumb: v.thumbnailUrl, via: "PeerTube", secs: v.duration, by: v.account?.displayName || v.channel?.displayName,
+      embed: v.embedUrl || (v.uuid && v.url ? new URL(v.url).origin + "/videos/embed/" + v.uuid : null), meta: [v.account?.displayName || v.channel?.displayName, mins(v.duration)].filter(Boolean).join(" · ") }));
   }},
   dailymotion: { name: "Dailymotion", async run(q) {
-    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&fields=title,url,thumbnail_360_url,duration,owner.screenname`);
-    return (d.list || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail_360_url, via: "Dailymotion", meta: [v["owner.screenname"], mins(v.duration)].filter(Boolean).join(" · ") }));
+    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&fields=id,title,url,thumbnail_360_url,duration,owner.screenname`);
+    return (d.list || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail_360_url, via: "Dailymotion", secs: v.duration, by: v["owner.screenname"], embed: `https://www.dailymotion.com/embed/video/${v.id}`, meta: [v["owner.screenname"], mins(v.duration)].filter(Boolean).join(" · ") }));
   }},
   archive: { name: "Internet Archive", async run(q) {
     const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(movies)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=16&output=json`);
-    return (d.response?.docs || []).map(v => ({ title: v.title, url: `https://archive.org/details/${v.identifier}`, thumb: `https://archive.org/services/img/${v.identifier}`, via: "Internet Archive", meta: [[].concat(v.creator || [])[0], v.year].filter(Boolean).join(" · ") }));
+    return (d.response?.docs || []).map(v => ({ title: v.title, url: `https://archive.org/details/${v.identifier}`, thumb: `https://archive.org/services/img/${v.identifier}`, via: "Internet Archive", by: [].concat(v.creator || [])[0], embed: `https://archive.org/embed/${v.identifier}`, meta: [[].concat(v.creator || [])[0], v.year].filter(Boolean).join(" · ") }));
   }},
   commons: { name: "Wikimedia Commons", async run(q) {
     const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=${encodeURIComponent(q + " filetype:video")}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
     return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index).filter(p => p.imageinfo?.[0]?.thumburl)
-      .map(p => ({ title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), url: p.imageinfo[0].descriptionurl, thumb: p.imageinfo[0].thumburl, via: "Wikimedia Commons" }));
+      .map(p => ({ title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), url: p.imageinfo[0].descriptionurl, thumb: p.imageinfo[0].thumburl, via: "Wikimedia Commons", file: p.imageinfo[0].url }));
   }},
 };
 
@@ -223,30 +232,32 @@ const NEWS_SOURCES = {
     const seen = new Set();
     return d.categories.flatMap(c => c.items)
       .filter(i => { const t = (i.title + " " + i.summary).toLowerCase(); return words.length && words.every(w => t.includes(w)) && !seen.has(i.url) && seen.add(i.url); })
-      .map(i => ({ title: i.title, url: i.url, thumb: i.image, snippet: i.summary, via: i.source, meta: i.published ? ago(i.published) : "" }));
+      .map(i => ({ title: i.title, url: i.url, thumb: i.image, snippet: i.summary, via: i.source, outlet: i.source, region: i.region, ts: i.published, meta: i.published ? ago(i.published) : "" }));
   }},
   gdelt: { name: "GDELT (world news index)", async run(q) {
     const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=25&format=json&sort=datedesc`);
-    return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
+    return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
   }},
   hackernews: { name: "Hacker News", async run(q) {
     const d = await getJson(`https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=10`);
-    return d.hits.filter(h => h.title).map(h => ({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, via: "Hacker News", meta: `${h.points} points · ${ago(h.created_at_i)}` }));
+    return d.hits.filter(h => h.title).map(h => ({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, via: "Hacker News", outlet: h.url ? host(h.url) : "Hacker News", region: "Community", ts: h.created_at_i, meta: `${h.points} points · ${ago(h.created_at_i)}` }));
   }},
 };
 
 const BOOK_SOURCES = {
   openlibrary: { name: "Open Library", async run(q) {
-    const d = await getJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=12&fields=key,title,author_name,first_publish_year,cover_i`);
-    return (d.docs || []).map(b => ({ title: b.title, url: `https://openlibrary.org${b.key}`, thumb: b.cover_i && `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`, via: "Open Library", meta: [b.author_name?.slice(0, 2).join(", "), b.first_publish_year].filter(Boolean).join(" · ") }));
+    const d = await getJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=12&fields=key,title,author_name,first_publish_year,cover_i,ebook_access`);
+    return (d.docs || []).map(b => ({ title: b.title, url: `https://openlibrary.org${b.key}`, thumb: b.cover_i && `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`, via: "Open Library",
+      author: b.author_name?.slice(0, 2).join(", "), year: b.first_publish_year, free: b.ebook_access === "public", borrow: b.ebook_access === "borrowable", meta: [b.author_name?.slice(0, 2).join(", "), b.first_publish_year].filter(Boolean).join(" · ") }));
   }},
   googlebooks: { name: "Google Books", async run(q) {
     const d = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12`);
-    return (d.items || []).map(({ volumeInfo: v }) => ({ title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180), meta: [v.authors?.slice(0, 2).join(", "), year(v.publishedDate)].filter(Boolean).join(" · ") }));
+    return (d.items || []).map(({ volumeInfo: v, accessInfo: a }) => ({ title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180),
+      author: v.authors?.slice(0, 2).join(", "), year: +year(v.publishedDate) || undefined, free: a?.viewability === "ALL_PAGES" || a?.epub?.isAvailable && a?.accessViewStatus === "FULL_PUBLIC_DOMAIN", meta: [v.authors?.slice(0, 2).join(", "), year(v.publishedDate)].filter(Boolean).join(" · ") }));
   }},
   gutenberg: { name: "Project Gutenberg (free e-books)", async run(q) {
     const d = await getJson(`https://gutendex.com/books/?search=${encodeURIComponent(q)}`);
-    return (d.results || []).slice(0, 10).map(b => ({ title: b.title, url: `https://www.gutenberg.org/ebooks/${b.id}`, thumb: b.formats?.["image/jpeg"], via: "Project Gutenberg", meta: ["Free e-book", b.authors?.[0]?.name].filter(Boolean).join(" · ") }));
+    return (d.results || []).slice(0, 10).map(b => ({ title: b.title, url: `https://www.gutenberg.org/ebooks/${b.id}`, thumb: b.formats?.["image/jpeg"], via: "Project Gutenberg", author: b.authors?.[0]?.name, free: true, read: b.formats?.["text/html"], meta: ["Free e-book", b.authors?.[0]?.name].filter(Boolean).join(" · ") }));
   }},
 };
 
@@ -254,11 +265,13 @@ const PAPER_SOURCES = {
   openalex: { name: "OpenAlex", async run(q) {
     const d = await getJson(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=12`);
     return (d.results || []).map(w => ({ title: w.display_name, url: w.open_access?.oa_url || w.primary_location?.landing_page_url || w.doi || w.id, via: "OpenAlex",
+      authors: w.authorships?.map(a => a.author?.display_name).filter(Boolean) || [], venue: w.primary_location?.source?.display_name, year: w.publication_year, cites: w.cited_by_count, free: !!w.open_access?.is_oa, doi: w.doi,
       meta: [w.authorships?.slice(0, 3).map(a => a.author?.display_name).join(", "), w.primary_location?.source?.display_name, w.publication_year, `cited ${w.cited_by_count}×`, w.open_access?.is_oa && "free to read"].filter(Boolean).join(" · ") }));
   }},
   crossref: { name: "Crossref", async run(q) {
     const d = await getJson(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=10&select=DOI,title,author,issued,container-title,URL`);
     return (d.message?.items || []).filter(w => w.title?.[0]).map(w => ({ title: w.title[0], url: w.URL, via: "Crossref",
+      authors: (w.author || []).map(a => [a.given, a.family].filter(Boolean).join(" ")), venue: w["container-title"]?.[0], year: w.issued?.["date-parts"]?.[0]?.[0], doi: w.DOI && "https://doi.org/" + w.DOI,
       meta: [w.author?.slice(0, 3).map(a => [a.given, a.family].filter(Boolean).join(" ")).join(", "), w["container-title"]?.[0], w.issued?.["date-parts"]?.[0]?.[0]].filter(Boolean).join(" · ") }));
   }},
   wikipedia: { name: "Wikipedia", async run(q) { return SOURCES.wikipedia.run(q); } },
@@ -267,7 +280,8 @@ const PAPER_SOURCES = {
 const PLACE_SOURCES = {
   osm: { name: "OpenStreetMap", async run(q) {
     const d = await getJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&limit=12`);
-    return d.map(p => ({ title: p.name || p.display_name.split(",")[0], url: `https://www.openstreetmap.org/${p.osm_type}/${p.osm_id}`, via: "OpenStreetMap", snippet: p.display_name, meta: [p.type?.replace(/_/g, " "), `${(+p.lat).toFixed(4)}, ${(+p.lon).toFixed(4)}`].filter(Boolean).join(" · ") }));
+    return d.map(p => ({ title: p.name || p.display_name.split(",")[0], url: `https://www.openstreetmap.org/${p.osm_type}/${p.osm_id}`, via: "OpenStreetMap", snippet: p.display_name,
+      lat: +p.lat, lon: +p.lon, bbox: p.boundingbox?.map(Number), kind: p.type?.replace(/_/g, " "), meta: [p.type?.replace(/_/g, " "), `${(+p.lat).toFixed(4)}, ${(+p.lon).toFixed(4)}`].filter(Boolean).join(" · ") }));
   }},
 };
 
@@ -279,6 +293,12 @@ const CODE_SOURCES = {
     return (d.objects || []).map(({ package: p }) => ({ title: p.name, url: p.links?.npm || `https://www.npmjs.com/package/${p.name}`, snippet: short(p.description), via: "npm", meta: `v${p.version}` }));
   }},
 };
+
+// With the helper, each tab also searches the engines' own sections (Bing News, Google News, …).
+for (const [tabId, sources] of Object.entries({ news: NEWS_SOURCES, images: IMAGE_SOURCES, videos: VIDEO_SOURCES })) {
+  for (const [id, src] of Object.entries(HELPER_VERTICALS[tabId])) sources["helper_" + id] = { ...src, enabled: () => !!helperVersion() };
+}
+const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => n.startsWith("helper_")).map(([, s]) => s.name);
 
 // The tabs. "kind" picks how results are drawn.
 const TABS = [
@@ -388,7 +408,7 @@ function renderSources(settled, sources, extraLocked = []) {
 function renderNotice() {
   fill($("notice"),
     el("strong", { textContent: "Unitex is only partly working in this browser." }),
-    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, DuckDuckGo's web results, Yahoo, Brave, Ecosia and Mojeek can't be searched until you install it." }),
+    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, Brave and Mojeek can't be searched until you install it." }),
     el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
   $("notice").hidden = !!helperVersion();
 }
@@ -484,7 +504,7 @@ const settle = (sources, q) => Promise.all(Object.entries(sources)
   .filter(([, s]) => !s.enabled || s.enabled())
   .map(([n, s]) => s.run(q).then(r => ({ n, r }), err => ({ n, err }))));
 const MAIN_SOURCES = Object.fromEntries(Object.entries(SOURCES).filter(([, s]) => s.group === "main"));
-const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ duckduckgo: "DuckDuckGo web results", searxng: "SearXNG result pages" }[e.id] || e.name));
+const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ searxng: "SearXNG result pages" }[e.id] || e.name));
 const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
 const empty = text => el("li", { className: "empty", textContent: text });
 
@@ -499,7 +519,7 @@ async function go() {
   renderTopics();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview"]) $(id).hidden = true;
+  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview", "tab-bar"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
   document.body.classList.toggle("mode-on", modeOn && !!MODES[topicId] && tab === "all");
   $("results").replaceChildren();
@@ -513,27 +533,10 @@ async function go() {
     if (t.kind === "list") $("results").replaceChildren(...skeletons(4));
     const settled = await settle(t.sources, query);
     if (id !== runId) return;
-    renderSources(settled, t.sources);
-    const lists = settled.map(s => s.r || []);
-    let count = 0;
-    if (t.kind === "images") {
-      const tiles = roundRobin(lists, i => i.thumb).map(imageTile).filter(Boolean);
-      fill($("image-grid"), ...tiles);
-      $("image-grid").hidden = false;
-      count = tiles.length;
-    } else if (t.kind === "list") {
-      const items = roundRobin(lists).map(resultItem).filter(Boolean);
-      $("results").replaceChildren(...items);
-      count = items.length;
-    } else {
-      const cards = roundRobin(lists).map(i => mediaCard(i, t.kind)).filter(Boolean);
-      fill($("media-grid"), ...cards);
-      $("media-grid").className = "media-grid " + t.kind;
-      $("media-grid").hidden = false;
-      count = cards.length;
-    }
-    $("status").textContent = count ? `${count} ${t.noun}` : "";
-    if (!count) $("results").replaceChildren(empty(`No ${t.noun} found for this search.`));
+    renderSources(settled, t.sources, lockedFor(t.sources));
+    // Engines' own sections first (they're the biggest indexes), then the open sources.
+    const lists = [...settled.filter(s => s.n.startsWith("helper_")), ...settled.filter(s => !s.n.startsWith("helper_"))].map(s => s.r || []);
+    showTab(roundRobin(lists, t.kind === "images" ? i => i.thumb : undefined));
     return;
   }
 

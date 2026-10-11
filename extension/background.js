@@ -4,7 +4,8 @@
 // Use the chrome.* API: Chrome only has this one, and Firefox supports it with callbacks too
 // (Firefox's browser.* API is promise-based and rejects the callback style used here).
 const api = globalThis.chrome || globalThis.browser;
-const ALLOWED_HOSTS = ["www.google.com", "www.bing.com", "html.duckduckgo.com", "search.yahoo.com", "search.brave.com", "www.ecosia.org", "www.mojeek.com",
+// Only engines with their own index (no resellers of Google's or Bing's results).
+const ALLOWED_HOSTS = ["www.google.com", "www.bing.com", "search.brave.com", "www.mojeek.com",
   // Public SearXNG servers (open-source metasearch)
   "priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
