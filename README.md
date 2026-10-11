@@ -30,7 +30,7 @@ One search box for the whole web: Unitex's own results, every major engine and A
 - **"Search for" row** under the search bar picks which Unitex tab a search opens (Shopping, Images, Maps…); the engine button in the search bar still picks any of the 45 engines – a big "Search everywhere with Unitex" button starts both rows; or type, then click any single engine or AI to send the query straight there. Click the engine in the search bar to pick from all of them.
 - **Open-source alternatives** – type things like "alternative to Photoshop", "slack alternative", "foss google drive" or just "Notion", and Unitex shows well-known open-source replacements with their licenses, plus links to AlternativeTo, GitHub, what people say, and Claude/ChatGPT. The curated list lives in `alternatives.js`.
 - **Bangs** – type `!g`, `!c` (Claude), `!gpt`, `!r`, `!gh`, `!w`… anywhere in a query to use that engine for one search. Each engine's bang is shown in the picker.
-- **News from everywhere** – Google News, Bing News and Yahoo News feeds plus about 130 news websites' own feeds (updated every 30 minutes) across every continent (BBC, Guardian, Al Jazeera, NPR, NYT, DW, France 24, Times of India, SCMP, Japan Times, ABC Australia, Africanews, MercoPress, plus Google News for Reuters, AP and thousands more), in Top, World, Business, Tech, Science, Sport, Culture and Open source tabs. Stories are shown like Unitex search results (website, headline, summary) and say which feeds found them ("found by Google News · Bing News"); a story found by several feeds is shown once. Every story links to **What people think** (a search of Reddit, HN, Lobsters and Stack Exchange) and **Other coverage**.
+- **Live news from everywhere** – the home page reads the news live every time it opens, and again every 3 minutes: Google News, Bing News and Yahoo News for each section, plus that section's news websites' own feeds (BBC, Guardian, Al Jazeera, NPR, NYT, DW, ABC Australia, Times of India and about 100 more, listed in `scripts/feeds.json`), in Top, World, Business, Tech, Science, Sport, Culture and Open source. They're read through Unitex Helper (news feeds don't let other websites read them); GDELT, Reddit and Hacker News are read directly, with or without it. Stories are big tiles with the website, headline, summary, picture and "found by Google News · Bing News · Yahoo News"; a story found in several places is shown once. Every story links to **What people think** and **Other coverage**. Code in `livenews.js`.
 - Light/dark theme, `/` to focus search, works on phones.
 - **Default search engine** – add `https://catancats.github.io/Unitex/?q=%s` as a custom search engine in your browser (`%s` is where the browser puts your query).
 
@@ -42,7 +42,7 @@ GitHub Pages serves the `main` branch directly.
 
 ## How the news works
 
-`.github/workflows/news.yml` runs every hour. It reads the feed list in `scripts/feeds.json`, fetches them all with `scripts/fetch_news.py`, and commits the result to `news.json` on `main`. The page reads that file. To add an outlet, add its RSS/Atom feed to `scripts/feeds.json`. Run it locally with `pip install feedparser && python scripts/fetch_news.py`.
+Nothing is pre-built: `livenews.js` reads the feeds in your browser when the page opens. To add a news website, add its RSS/Atom feed to `scripts/feeds.json` (and its host to the extension's `host_permissions` and `ALLOWED_HOSTS`).
 
 ## Adding an engine
 

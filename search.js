@@ -165,18 +165,6 @@ const SOURCES = {
       meta: `${h.points} points · ${h.num_comments} comments · ${ago(h.created_at_i)}`,
     }));
   }},
-  news: { paged: true, name: "Unitex News", group: "main", async run(q, { page: P = 0 } = {}) {
-    const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    if (!words.length) return [];
-    let d;
-    try { d = await getJson(`https://raw.githubusercontent.com/CatanCats/Unitex/main/news.json?t=${Math.floor(Date.now() / 300000)}`); }
-    catch { d = await getJson("news.json"); }
-    const seen = new Set();
-    return d.categories.flatMap(c => c.items)
-      .filter(i => { const t = (i.title + " " + i.summary).toLowerCase(); return words.every(w => t.includes(w)) && !seen.has(i.url) && seen.add(i.url); })
-      .slice(P * 6, P * 6 + 6)
-      .map(i => ({ title: i.title, url: i.url, snippet: i.summary, via: "Unitex News", domain: i.domain, image: i.image, meta: `${i.source}${i.published ? " · " + ago(i.published) : ""}` }));
-  }},
   github: { paged: true, name: "GitHub", group: "code", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&per_page=5&page=${P + 1}`);
     return d.items.map(r => ({
@@ -248,16 +236,6 @@ const VIDEO_SOURCES = {
 };
 
 const NEWS_SOURCES = {
-  unitex: { name: "Unitex News (100+ outlets)", async run(q) {
-    const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    let d;
-    try { d = await getJson(`https://raw.githubusercontent.com/CatanCats/Unitex/main/news.json?t=${Math.floor(Date.now() / 300000)}`); }
-    catch { d = await getJson("news.json"); }
-    const seen = new Set();
-    return d.categories.flatMap(c => c.items)
-      .filter(i => { const t = (i.title + " " + i.summary).toLowerCase(); return words.length && words.every(w => t.includes(w)) && !seen.has(i.url) && seen.add(i.url); })
-      .map(i => ({ title: i.title, url: i.url, thumb: i.image, snippet: i.summary, via: i.source, outlet: i.source, region: i.region, ts: i.published, meta: i.published ? ago(i.published) : "" }));
-  }},
   gdelt: { name: "GDELT (world news index)", async run(q) {
     const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=25&format=json&sort=datedesc`);
     return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
@@ -712,7 +690,7 @@ function mergeMain(settled) {
   const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
   const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
   const indexLists = ["searxng", "qwant", "mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
-  const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews", "news"].map(n => by[n] || []);
+  const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews"].map(n => by[n] || []);
   // On a topic, the engines' site-restricted listings come first; other sources follow.
   const main = topicId !== "all"
     ? [...fuse(engineLists), ...fuse([...indexLists, ...otherLists])].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)

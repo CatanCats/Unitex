@@ -1,6 +1,7 @@
 // The newest Unitex Helper version, and what changed. Bump this together with extension/manifest.json.
-const HELPER_LATEST = "1.4.0";
+const HELPER_LATEST = "1.5.0";
 const HELPER_CHANGES = {
+  "1.5.0": "Reads the news live: Google News, Bing News, Yahoo News and over 100 news websites' own feeds, fresh every time you open Unitex.",
   "1.4.0": "Adds more stores for Shopping: Walmart, Best Buy, Target, Kogan, Big W, Kmart, JB Hi-Fi, Officeworks, The Good Guys, Harvey Norman, Argos, Currys, John Lewis, PB Tech, Noel Leeming, Gumtree, Trade Me, Kijiji and more.",
   "1.3.0": "Adds Amazon and eBay for the new Shopping area, Yandex Images, and SearXNG's image and video pages.",
   "1.2.0": "Drops Ecosia, Yahoo and DuckDuckGo web results (they repeat Bing's and Google's), so searches are faster with fewer duplicates.",

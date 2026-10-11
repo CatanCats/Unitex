@@ -745,3 +745,9 @@ body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(220px, 1f
 .news-results { display: grid; gap: 18px; padding: 0; list-style: none; }
 .news-results .result { max-width: 760px; }
 .news-results .r-meta a { color: var(--accent); font-weight: 600; text-decoration: none; }
+
+/* Home news tiles: which engines or websites found each story */
+.card-via { display: inline-block; margin-top: 8px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.72rem; font-weight: 700; }
+.card-meta .card-site { color: var(--muted); }
+.news-list .more-row { list-style: none; column-span: all; }
+#news-status a { color: var(--accent); }

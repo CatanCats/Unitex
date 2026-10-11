@@ -106,109 +106,95 @@ $("find-alts").onclick = () => {
 };
 
 // ---------- news ----------
-// news.json is rebuilt hourly by .github/workflows/news.yml from ~50 outlets
-// worldwide (scripts/feeds.json). Read it from raw GitHub first so it's fresh
-// even before Pages redeploys.
-
-const NEWS_URLS = [
-  `https://raw.githubusercontent.com/CatanCats/Unitex/main/news.json?t=${Math.floor(Date.now() / 300000)}`,
-  "news.json",
-];
+// Live: read from Google News, Bing News, Yahoo News and the news websites each time (livenews.js).
 
 const ago = t => {
   const s = Date.now() / 1000 - t;
+  if (s < 60) return "just now";
   if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
   return `${Math.round(s / 86400)}d ago`;
 };
 
-let news = null;
-let feedId = store.get("unitex.feed", "all");
-
-async function fetchNews() {
-  for (const url of NEWS_URLS) {
-    try {
-      const r = await fetch(url, { cache: "no-cache" });
-      if (r.ok) return await r.json();
-    } catch {}
-  }
-  throw new Error("news unavailable");
-}
-
-function tabsFor(data) {
-  // "Top" takes turns between categories (World first) so no single topic or outlet dominates.
-  const queues = data.categories.map(c => c.items.map(i => ({ ...i, category: c.name })));
-  const top = [];
-  for (let n = 0; top.length < 60 && queues.some(q => q.length); n++) {
-    const item = queues[n % queues.length].shift();
-    if (item) top.push(item);
-  }
-  return [{ id: "all", name: "Top", items: top }, ...data.categories];
-}
-
+let feedId = NEWS_SECTIONS.some(s => s.id === store.get("unitex.feed")) ? store.get("unitex.feed") : "top";
 const PAGE = 24;
 let shown = PAGE;
+let current = { stories: [], report: [], pending: 0, at: 0 };
 
 function renderTabs() {
-  const tabs = tabsFor(news);
-  if (!tabs.some(t => t.id === feedId)) feedId = "all";
-  $("news-tabs").replaceChildren(...tabs.map(t => {
+  $("news-tabs").replaceChildren(...NEWS_SECTIONS.map(t => {
     const b = el("button", { type: "button", role: "tab", textContent: t.name });
     b.setAttribute("aria-selected", t.id === feedId);
-    b.onclick = () => { feedId = t.id; shown = PAGE; store.set("unitex.feed", t.id); renderTabs(); renderNews(); };
+    b.onclick = () => { if (feedId === t.id) return; feedId = t.id; shown = PAGE; store.set("unitex.feed", t.id); renderTabs(); loadNews(); };
     return b;
   }));
 }
 
-// Each story is drawn like a Unitex search result: the website, the headline, a summary, and which
-// news feeds found it (Google News, Bing News, Yahoo News, or the outlet's own feed).
-function newsResult(i) {
-  const via = (i.via || [i.source]).filter(v => v !== i.source);
-  const thumb = i.image && el("img", { className: "r-thumb", src: i.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
-  return el("li", { className: "result news-result" },
-    el("div", { className: "r-body" },
-      el("div", { className: "r-src" }, domainIcon(i.domain), el("strong", { textContent: i.source }), i.domain && el("span", { className: "r-site", textContent: i.domain })),
-      el("a", { className: "r-title", href: i.url, target: "_blank", rel: "noopener", textContent: i.title }),
-      i.summary && el("p", { className: "r-snippet", textContent: i.summary }),
-      el("p", { className: "r-meta" },
-        via.length > 0 && el("span", { className: "via", textContent: "found by " + via.join(" · ") }),
-        i.published && el("span", { textContent: ago(i.published) }),
-        i.region && el("span", { textContent: i.region }),
-        el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
-        el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }))),
-    thumb);
+// A big tile: the website, the headline, a summary, and which news engines or websites found it.
+function card(i, featured) {
+  const img = i.image && el("img", { src: i.image, alt: "", loading: "lazy", className: "card-img", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
+  const meta = el("div", { className: "card-meta" }, domainIcon(i.domain), el("strong", { textContent: i.source }),
+    i.domain && i.domain !== i.source && el("span", { className: "card-site", textContent: i.domain }),
+    i.published && el("span", { textContent: ago(i.published) }));
+  // "found by" leaves out the website itself (a story from bbc.com's own feed doesn't say "found by BBC").
+  const via = i.via.filter(v => v !== i.source && !(i.own || []).includes(v));
+  const main = el("a", { className: "card-main", href: i.url, target: "_blank", rel: "noopener" },
+    img, el("div", { className: "card-body" }, meta, el("h3", { textContent: i.title }), i.summary && el("p", { textContent: i.summary }),
+      via.length > 0 && el("span", { className: "card-via", textContent: "found by " + via.join(" · ") })));
+  const actions = el("div", { className: "card-actions" },
+    el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
+    el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }));
+  return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
 }
 
 function renderNews() {
-  const tab = tabsFor(news).find(t => t.id === feedId);
   const list = $("news-list");
-  if (!tab.items.length) {
-    list.replaceChildren(el("li", { className: "empty", textContent: "Nothing here right now." }));
-    return;
+  const items = current.stories;
+  if (!items.length) {
+    list.replaceChildren(...(current.pending ? Array.from({ length: 6 }, () => el("li", { className: "skeleton" })) : [el("li", { className: "empty", textContent: "No stories came back from the news sources. They may be blocking reads right now; Unitex will try again in a few minutes." })]));
+  } else {
+    // Lead with the first story that has a picture.
+    const lead = items.findIndex(i => i.image);
+    const order = lead > 0 ? [items[lead], ...items.filter((_, n) => n !== lead)] : items;
+    list.replaceChildren(...order.slice(0, shown).map((i, n) => card(i, n === 0)));
+    if (order.length > shown) list.append(el("li", { className: "more-row" }, el("button", { type: "button", className: "show-more", textContent: "Show more news", onclick() { shown += PAGE; renderNews(); } })));
   }
-  const items = tab.items;
-  list.replaceChildren(...items.slice(0, shown).map(newsResult));
-  if (items.length > shown) {
-    list.append(el("li", { className: "more-li" }, el("button", {
-      type: "button", className: "show-more", textContent: "Show more news",
-      onclick() { shown += PAGE; renderNews(); },
-    })));
-  }
-  const feeds = [...new Set(news.categories.flatMap(c => c.items.flatMap(i => i.via || [])))].filter(v => /News$/.test(v) && /Google|Bing|Yahoo/.test(v));
-  $("news-status").textContent = `From ${feeds.join(", ") || "news feeds"} and ${news.sources.length} news websites · updated ${ago(news.generated)}`;
+  renderNewsStatus();
 }
 
+function renderNewsStatus() {
+  const r = current.report;
+  const engines = r.filter(x => !x.outlet && x.n).map(x => x.name);
+  const sites = r.filter(x => x.outlet && x.n).length, siteTotal = r.filter(x => x.outlet).length;
+  const failed = r.filter(x => x.err);
+  const box = $("news-status");
+  box.replaceChildren(
+    current.pending ? `Reading live from ${r.length} of ${r.length + current.pending} sources…` :
+      `Live from ${engines.join(", ") || "no news engines"}${siteTotal ? ` and ${sites} of ${siteTotal} news websites` : ""} · ${current.at ? ago(current.at / 1000) : ""} · refreshes by itself`,
+    failed.length > 0 && !current.pending ? el("span", { className: "hint", title: failed.map(f => `${f.name}: ${f.err}`).join("\n"), textContent: ` · ${failed.length} didn't answer` }) : "",
+    !helperVersion() ? el("span", {}, " · Google News, Bing News, Yahoo News and the news websites need ", el("a", { href: "install.html", textContent: "Unitex Helper" })) : "");
+}
+
+let loadSeq = 0;
 async function loadNews() {
-  $("news-list").replaceChildren(...Array.from({ length: 6 }, () => el("li", { className: "skeleton" })));
-  try {
-    news = await fetchNews();
-  } catch {
-    $("news-list").replaceChildren(el("li", { className: "empty", textContent: "Couldn't load the news right now. Try again in a minute." }));
-    return;
-  }
-  renderTabs();
+  const section = NEWS_SECTIONS.find(s => s.id === feedId);
+  const seq = ++loadSeq;
+  const cached = liveCache.get(section.id);
+  current = cached ? { ...cached, pending: 0 } : { stories: [], report: [], pending: 1, at: 0 };
+  renderNews();
+  const result = await loadSection(section, (stories, report, pending) => {
+    if (seq !== loadSeq || (cached && pending)) return; // a refresh replaces the tiles once, when it's done
+    current = { stories, report, pending, at: Date.now() };
+    renderNews();
+  });
+  if (seq !== loadSeq) return;
+  current = { ...result, pending: 0 };
   renderNews();
 }
+// Fresh stories every few minutes while the page is open, and when you come back to the tab.
+setInterval(() => { if (!document.hidden) loadNews(); }, NEWS_REFRESH_MS);
+setInterval(renderNewsStatus, 30000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - current.at > NEWS_REFRESH_MS) loadNews(); });
 
 // ---------- helper update banner ----------
 
@@ -224,5 +210,7 @@ if (initial && initial !== "%s") {
   renderEngine();
   renderTopics();
   renderAlternatives($("alts"), $("q").value);
-  loadNews();
+  renderTabs();
+  // Unitex Helper marks the page when it loads; give it a moment so the first read includes it.
+  setTimeout(loadNews, document.documentElement.dataset.unitexHelper ? 0 : 400);
 }
