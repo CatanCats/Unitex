@@ -18,10 +18,14 @@ const ENGINE_GROUPS = [
     { id: "yandex",     name: "Yandex",     bang: "ya",  domain: "yandex.com",        url: "https://yandex.com/search/?text={q}" },
     { id: "baidu",      name: "Baidu",      bang: "bd",  domain: "baidu.com",         url: "https://www.baidu.com/s?wd={q}" },
   ]},
-  { name: "AI answers", engines: [
-    { id: "perplexity", name: "Perplexity", bang: "px",  domain: "perplexity.ai",     url: "https://www.perplexity.ai/search?q={q}" },
+  { name: "AI", ai: true, engines: [
+    { id: "chatgpt",    name: "ChatGPT",    bang: "gpt", domain: "chatgpt.com",       url: "https://chatgpt.com/?q={q}" },
     { id: "claude",     name: "Claude",     bang: "c",   domain: "claude.ai",         url: "https://claude.ai/new?q={q}" },
-    { id: "phind",      name: "Phind",      bang: "ph",  domain: "phind.com",         url: "https://www.phind.com/search?q={q}" },
+    { id: "perplexity", name: "Perplexity", bang: "px",  domain: "perplexity.ai",     url: "https://www.perplexity.ai/search?q={q}" },
+    { id: "aimode",     name: "Google AI", bang: "ai", domain: "gemini.google.com", url: "https://www.google.com/search?udm=50&q={q}" },
+    { id: "copilot",    name: "Copilot",    bang: "co",  domain: "copilot.microsoft.com", url: "https://copilot.microsoft.com/?q={q}" },
+    { id: "grok",       name: "Grok",       bang: "gk",  domain: "grok.com",          url: "https://grok.com/?q={q}" },
+    { id: "lechat",     name: "Le Chat",    bang: "lc",  domain: "chat.mistral.ai",   url: "https://chat.mistral.ai/chat?q={q}" },
   ]},
   { name: "Opinions & communities", engines: [
     { id: "reddit",     name: "Reddit",         bang: "r",   domain: "reddit.com",          url: "https://www.reddit.com/search/?q={q}" },
@@ -55,12 +59,5 @@ const ENGINE_GROUPS = [
   ]},
 ];
 
-// Focus modes add site: filters to web-engine queries.
-const FOCUS = [
-  { id: "all",        name: "Everything",  sites: [],
-    hint: "No filters." },
-  { id: "opinions",   name: "Opinions",    sites: ["reddit.com", "news.ycombinator.com", "lobste.rs", "stackexchange.com"],
-    hint: "Real people: Reddit, Hacker News, Lobsters, Stack Exchange." },
-  { id: "opensource", name: "Open source", sites: ["github.com", "gitlab.com", "codeberg.org", "sourceforge.net"],
-    hint: "Projects & code: GitHub, GitLab, Codeberg, SourceForge." },
-];
+// Sites where real people discuss things; used by the news panel's "What people think" links.
+const OPINION_SITES = ["reddit.com", "news.ycombinator.com", "lobste.rs", "stackexchange.com"];

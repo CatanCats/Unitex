@@ -1,6 +1,8 @@
-const ENGINES = ENGINE_GROUPS.flatMap(g => g.engines.map(e => ({ ...e, web: !!g.web, group: g.name })));
+const ENGINES = ENGINE_GROUPS.flatMap(g => g.engines.map(e => ({ ...e, web: !!g.web, ai: !!g.ai, group: g.name })));
+const AI_ENGINES = ENGINES.filter(e => e.ai);
 const byId = id => ENGINES.find(e => e.id === id);
 const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter(Boolean)); return n; };
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
@@ -8,10 +10,10 @@ const store = {
 };
 
 let engineId = byId(store.get("unitex.engine")) ? store.get("unitex.engine") : "google";
-let focusId = FOCUS.some(f => f.id === store.get("unitex.focus")) ? store.get("unitex.focus") : "all";
-let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit", "github"]).filter(byId);
+let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit"]).filter(id => byId(id) && !byId(id).ai).slice(0, 5);
 
 const iconUrl = e => `https://icons.duckduckgo.com/ip3/${e.domain}.ico`;
+const domainIcon = d => el("img", { src: `https://icons.duckduckgo.com/ip3/${d}.ico`, alt: "", width: 16, height: 16, loading: "lazy", onerror() { this.style.visibility = "hidden"; } });
 
 function icon(e) {
   const img = document.createElement("img");
@@ -19,7 +21,7 @@ function icon(e) {
   img.alt = "";
   img.width = img.height = 18;
   img.loading = "lazy";
-  img.onerror = () => { img.replaceWith(Object.assign(document.createElement("span"), { className: "letter", textContent: e.name[0] })); };
+  img.onerror = () => { img.replaceWith(el("span", { className: "letter", textContent: e.name[0] })); };
   return img;
 }
 
@@ -28,33 +30,34 @@ function icon(e) {
 function selectEngine(id) {
   engineId = id;
   store.set("unitex.engine", id);
-  recent = [id, ...recent.filter(r => r !== id)].slice(0, 7);
-  store.set("unitex.recent", recent);
+  if (!byId(id).ai) {
+    recent = [id, ...recent.filter(r => r !== id)].slice(0, 5);
+    store.set("unitex.recent", recent);
+  }
   renderEngine();
+}
+
+// Clicking a chip picks that engine; if something is already typed, it searches right away.
+function chip(e) {
+  const b = el("button", { type: "button", className: "chip" + (e.id === engineId ? " active" : "") }, icon(e), e.name);
+  b.setAttribute("aria-pressed", e.id === engineId);
+  b.onclick = () => {
+    selectEngine(e.id);
+    if ($("q").value.trim()) $("search").requestSubmit();
+    else $("q").focus();
+  };
+  return b;
 }
 
 function renderEngine() {
   const e = byId(engineId);
   $("engine-icon").replaceChildren(icon(e));
   $("engine-name").textContent = e.name;
-  $("q").placeholder = `Search ${e.name}…`;
+  $("q").placeholder = e.ai ? `Ask ${e.name}…` : `Search ${e.name}…`;
 
-  const quick = $("quick");
-  quick.replaceChildren(...recent.map(id => {
-    const r = byId(id);
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "chip" + (id === engineId ? " active" : "");
-    b.setAttribute("aria-pressed", id === engineId);
-    b.append(icon(r), r.name);
-    b.onclick = () => { selectEngine(id); $("q").focus(); };
-    return b;
-  }), Object.assign(document.createElement("button"), {
-    type: "button", className: "chip more", textContent: `All ${ENGINES.length} engines`, onclick: openPicker,
-  }));
-
-  document.body.classList.toggle("site-engine", !e.web);
-  renderFocusHint();
+  $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), ...recent.map(id => chip(byId(id))),
+    el("button", { type: "button", className: "chip more", textContent: `All ${ENGINES.length}`, onclick: openPicker }));
+  $("quick-ai").replaceChildren(el("span", { className: "row-label", textContent: "Ask AI" }), ...AI_ENGINES.map(chip));
 }
 
 // ---------- picker ----------
@@ -64,24 +67,15 @@ function renderPicker(filter = "") {
   const groups = ENGINE_GROUPS.map(g => {
     const items = g.engines.filter(e => !f || e.name.toLowerCase().includes(f) || e.bang === f.replace(/^!/, ""));
     if (!items.length) return null;
-    const sec = document.createElement("div");
-    sec.className = "pgroup";
-    sec.append(Object.assign(document.createElement("h3"), { textContent: g.name }));
-    const grid = document.createElement("div");
-    grid.className = "pgrid";
-    for (const e of items) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "pitem" + (e.id === engineId ? " active" : "");
-      b.append(icon(e), Object.assign(document.createElement("span"), { className: "name", textContent: e.name }),
-               Object.assign(document.createElement("small"), { textContent: "!" + e.bang }));
+    const grid = el("div", { className: "pgrid" }, ...items.map(e => {
+      const b = el("button", { type: "button", className: "pitem" + (e.id === engineId ? " active" : "") },
+        icon(e), el("span", { className: "name", textContent: e.name }), el("small", { textContent: "!" + e.bang }));
       b.onclick = () => { selectEngine(e.id); closePicker(); $("q").focus(); };
-      grid.append(b);
-    }
-    sec.append(grid);
-    return sec;
+      return b;
+    }));
+    return el("div", { className: "pgroup" }, el("h3", { textContent: g.name }), grid);
   }).filter(Boolean);
-  $("picker-groups").replaceChildren(...(groups.length ? groups : [Object.assign(document.createElement("p"), { className: "hint", textContent: "No engines match." })]));
+  $("picker-groups").replaceChildren(...(groups.length ? groups : [el("p", { className: "hint", textContent: "No engines match." })]));
 }
 
 function openPicker() {
@@ -107,30 +101,11 @@ document.addEventListener("keydown", e => {
   if (e.key === "/" && !e.target.matches("input, textarea")) { e.preventDefault(); $("q").focus(); }
 });
 
-// ---------- focus ----------
-
-function renderFocus() {
-  $("focus").replaceChildren(...FOCUS.map(f => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.role = "radio";
-    b.textContent = f.name;
-    b.setAttribute("aria-checked", f.id === focusId);
-    b.onclick = () => { focusId = f.id; store.set("unitex.focus", f.id); renderFocus(); };
-    return b;
-  }));
-  renderFocusHint();
-}
-function renderFocusHint() {
-  const e = byId(engineId);
-  $("focus-hint").textContent = e.web ? FOCUS.find(f => f.id === focusId).hint : `Focus filters don't apply to ${e.name}.`;
-}
-
 // ---------- search ----------
 
 function buildUrl(rawQuery, opts = {}) {
   let query = rawQuery.trim();
-  let engine = byId(engineId);
+  let engine = byId(opts.engine || engineId);
 
   // "!r cats" or "cats !r" overrides the engine for this one search.
   const bang = query.match(/(?:^|\s)!(\w+)(?=\s|$)/);
@@ -139,9 +114,8 @@ function buildUrl(rawQuery, opts = {}) {
     if (hit) { engine = hit; query = query.replace(bang[0], " ").trim(); }
   }
 
-  const focus = FOCUS.find(f => f.id === (opts.focus || focusId));
-  if (engine.web && focus.sites.length && query) {
-    query += " (" + focus.sites.map(s => "site:" + s).join(" OR ") + ")";
+  if (engine.web && opts.sites && query) {
+    query += " (" + opts.sites.map(s => "site:" + s).join(" OR ") + ")";
   }
   return engine.url.replace("{q}", encodeURIComponent(query));
 }
@@ -151,6 +125,85 @@ $("search").addEventListener("submit", e => {
   const q = $("q").value;
   if (q.trim()) location.href = buildUrl(q);
 });
+
+// ---------- open-source alternatives ----------
+
+const norm = s => s.toLowerCase().replace(/[^a-z0-9.+ ]/g, "").replace(/\s+/g, " ").trim();
+// Product names too generic to trigger the hint when typed on their own.
+const TOO_GENERIC = new Set(["x", "make", "office", "word", "pages", "numbers", "things", "teams", "mint", "adobe", "google", "kit", "box", "render", "spark", "arc", "copilot", "unity", "maya", "edge", "opera", "bear", "mural", "excel", "audition", "linear", "keeper", "threads"]);
+
+function findProduct(product) {
+  const p = norm(product);
+  let best = null, bestLen = 0;
+  for (const entry of ALTERNATIVES) {
+    for (const name of entry.names) {
+      const n = norm(name);
+      if (n === p) return { entry, name };
+      if (n.length > bestLen && n.length >= 4 && new RegExp(`(^| )${n.replace(/[.+]/g, "\\$&")}( |$)`).test(p)) { best = { entry, name }; bestLen = n.length; }
+    }
+  }
+  return best;
+}
+
+function detectAlternatives(q) {
+  const s = q.trim().replace(/\s+/g, " ").replace(/(?:^|\s)!\w+(?=\s|$)/g, "").trim();
+  if (!s) return null;
+  for (const re of ALT_PATTERNS) {
+    const m = s.match(re);
+    if (m) {
+      const product = m[1].replace(/^(?:the|an?)\s+/i, "").trim();
+      if (product.length < 2) continue;
+      return { product, explicit: true, match: findProduct(product) };
+    }
+  }
+  const match = findProduct(s);
+  if (match && norm(match.name) === norm(s) && !TOO_GENERIC.has(norm(s))) return { product: match.name, explicit: false, match };
+  return null;
+}
+
+function altLinks(product) {
+  const ask = `What are the best open-source alternatives to ${product}? Compare them on features, license, maturity, and what users say.`;
+  return [
+    ["AlternativeTo", "alternativeto.net", `https://alternativeto.net/browse/search/?q=${encodeURIComponent(product)}`],
+    ["GitHub", "github.com", `https://github.com/search?q=${encodeURIComponent(product + " alternative")}&type=repositories&s=stars&o=desc`],
+    ["What people say", "reddit.com", buildUrl(`open source alternative to ${product}`, { engine: "google", sites: OPINION_SITES })],
+    ["Ask Claude", "claude.ai", byId("claude").url.replace("{q}", encodeURIComponent(ask))],
+    ["Ask ChatGPT", "chatgpt.com", byId("chatgpt").url.replace("{q}", encodeURIComponent(ask))],
+  ];
+}
+
+function renderAlternatives() {
+  const box = $("alts");
+  const found = detectAlternatives($("q").value);
+  if (!found) { box.hidden = true; box.replaceChildren(); return; }
+
+  const product = found.match ? found.match.name : found.product;
+  const alts = found.match ? found.match.entry.alts : [];
+  const head = el("div", { className: "alts-head" },
+    el("span", { className: "badge", textContent: "Open source" }),
+    el("h2", { textContent: found.explicit || !alts.length ? `Alternatives to ${product}` : `Want to replace ${product}?` }));
+
+  const list = alts.length && el("ul", { className: "alts-list" }, ...alts.map(([name, url, desc, license]) =>
+    el("li", {}, el("a", { href: url, target: "_blank", rel: "noopener" },
+      domainIcon(new URL(url).hostname),
+      el("span", { className: "alt-text" }, el("strong", { textContent: name }), el("small", { textContent: desc })),
+      el("span", { className: "license", textContent: license })))));
+
+  const more = el("div", { className: "alts-more" }, el("span", { textContent: alts.length ? "Find more:" : "Find them on:" }),
+    ...altLinks(product).map(([label, domain, href]) => el("a", { href, target: "_blank", rel: "noopener" }, domainIcon(domain), label)));
+
+  box.replaceChildren(head, list, more);
+  box.hidden = false;
+}
+
+$("q").addEventListener("input", renderAlternatives);
+$("find-alts").onclick = () => {
+  const q = $("q").value.trim();
+  if (q && !detectAlternatives(q)?.explicit) $("q").value = `open source alternatives to ${q}`;
+  else if (!q) $("q").value = "open source alternatives to ";
+  $("q").focus();
+  renderAlternatives();
+};
 
 // ---------- theme ----------
 
@@ -180,7 +233,6 @@ const ago = t => {
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
   return `${Math.round(s / 86400)}d ago`;
 };
-const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter(Boolean)); return n; };
 
 let news = null;
 let feedId = store.get("unitex.feed", "all");
@@ -228,7 +280,7 @@ function card(i, featured) {
   const main = el("a", { className: "card-main", href: i.url, target: "_blank", rel: "noopener" },
     img, el("div", { className: "card-body" }, meta, el("h3", { textContent: i.title }), i.summary && el("p", { textContent: i.summary })));
   const actions = el("div", { className: "card-actions" },
-    el("a", { href: buildUrl(i.title.slice(0, 140), { focus: "opinions" }), target: "_blank", rel: "noopener", textContent: "What people think" }),
+    el("a", { href: buildUrl(i.title.slice(0, 140), { sites: OPINION_SITES }), target: "_blank", rel: "noopener", textContent: "What people think" }),
     el("a", { href: `https://news.google.com/search?q=${encodeURIComponent(i.title.slice(0, 140))}`, target: "_blank", rel: "noopener", textContent: "Other coverage" }));
   return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
 }
@@ -273,6 +325,6 @@ if (initial && initial !== "%s") {
   location.replace(buildUrl(initial));
 } else {
   renderEngine();
-  renderFocus();
+  renderAlternatives();
   loadNews();
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unitex Search</title>
-<meta name="description" content="One search box, your choice of engine: Google, Bing, Ecosia, DuckDuckGo, Reddit, GitHub and 30+ more. With a live news panel.">
+<meta name="description" content="One search box, your choice of engine: Google, Bing, Ecosia, ChatGPT, Claude, Perplexity, Reddit, GitHub and 30+ more. With a live news panel.">
 <meta name="color-scheme" content="light dark">
 <link rel="search" type="application/opensearchdescription+xml" title="Unitex" href="opensearch.xml">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bd6'/%3E%3Cpath d='M10 9v9a6 6 0 0 0 12 0V9' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -45,12 +45,15 @@
       </div>
     </form>
 
-    <div id="quick" class="quick" aria-label="Recent engines"></div>
+    <section id="alts" class="alts" aria-live="polite" hidden></section>
 
-    <div class="focus-row">
-      <div id="focus" class="segmented" role="radiogroup" aria-label="Focus"></div>
-      <p id="focus-hint" class="hint"></p>
-    </div>
+    <div id="quick" class="quick" aria-label="Search engines"></div>
+    <div id="quick-ai" class="quick" aria-label="AI assistants"></div>
+
+    <button id="find-alts" class="find-alts" type="button">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+      Find open-source alternatives
+    </button>
   </section>
 
   <section class="news" aria-labelledby="news-title">
@@ -67,11 +70,12 @@
 
 <footer>
   Queries go straight from your browser to the engine you pick. Unitex never sees them.
-  · Tip: type <kbd>!g</kbd>, <kbd>!r</kbd>, <kbd>!gh</kbd>… to switch engine for one search
+  · Tip: type <kbd>!g</kbd>, <kbd>!c</kbd>, <kbd>!gpt</kbd>, <kbd>!gh</kbd>… to switch engine for one search
   · <a href="https://github.com/CatanCats/Unitex">Source</a>
 </footer>
 
 <script src="engines.js"></script>
+<script src="alternatives.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
