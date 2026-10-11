@@ -49,7 +49,7 @@ const HELPER_ENGINES = [
 
 // Public SearXNG servers, tried in order until one answers.
 const SEARX_HOSTS = ["priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io"];
-const engineName = e => ({ duckduckgo: "DuckDuckGo", bing: "Bing", google: "Google", brave: "Brave", qwant: "Qwant", startpage: "Startpage", yahoo: "Yahoo", mojeek: "Mojeek", wikipedia: "Wikipedia", presearch: "Presearch", yandex: "Yandex" }[e.toLowerCase()] || e.replace(/^./, c => c.toUpperCase()));
+const engineName = e => ({ duckduckgo: "DuckDuckGo", bing: "Bing", google: "Google", brave: "Brave", qwant: "Qwant", startpage: "Startpage", yahoo: "Yahoo", mojeek: "Mojeek", wikipedia: "Wikipedia", presearch: "Presearch", yandex: "Yandex", youtube: "YouTube", vimeo: "Vimeo", dailymotion: "Dailymotion", flickr: "Flickr", unsplash: "Unsplash", pinterest: "Pinterest", openverse: "Openverse", wikicommons: "Wikimedia Commons", peertube: "PeerTube", sepiasearch: "PeerTube", invidious: "YouTube (Invidious)", piped: "YouTube (Piped)", deviantart: "DeviantArt", imgur: "Imgur", artic: "Art Institute of Chicago", "google videos": "Google", "bing videos": "Bing" }[e.toLowerCase()] || e.replace(/^./, c => c.toUpperCase()));
 
 // SearXNG lists which engines found each result; credit them: "Google (through SearXNG)".
 function parseSearx(html, base) {
@@ -170,6 +170,100 @@ async function helperDoc(url) {
   return { doc: new DOMParser().parseFromString(res.html, "text/html"), base: res.url || url, html: res.html };
 }
 
+// SearXNG's images/videos pages: each result names the engines that found it.
+async function searxPages(q, category, parse) {
+  let last;
+  for (const host of SEARX_HOSTS) {
+    try {
+      const { doc, base } = await helperDoc(`https://${host}/search?q=${encodeURIComponent(q)}&categories=${category}&language=all`);
+      const items = parse(doc, base);
+      if (items.length) return items;
+    } catch (e) { last = e; }
+  }
+  throw last || new Error("no SearXNG server returned results");
+}
+const searxVia = (art, kind) => {
+  const e = [...art.querySelectorAll(".engines span")].map(x => x.textContent.trim()).filter(Boolean)[0];
+  return e ? `${engineName(e.replace(/\s*(images?|videos?)$/i, ""))} ${kind} (through SearXNG)` : `SearXNG ${kind}`;
+};
+
+// ---------- stores: Amazon, eBay, Google Shopping, Bing Shopping ----------
+// Each returns product cards: { title, url, image, domain, via, card: { kind: "product", name, price, rating, reviews, condition, site } }.
+
+const STORE_DOMAINS = {
+  amazon: { AU: "www.amazon.com.au", UK: "www.amazon.co.uk", US: "www.amazon.com", CA: "www.amazon.ca", NZ: "www.amazon.com.au", "*": "www.amazon.com" },
+  ebay:   { AU: "www.ebay.com.au",   UK: "www.ebay.co.uk",   US: "www.ebay.com",   CA: "www.ebay.ca",   NZ: "www.ebay.com.au", "*": "www.ebay.com" },
+};
+const storeHost = (store, region) => STORE_DOMAINS[store][region] || STORE_DOMAINS[store]["*"];
+const txt = n => (n?.textContent || "").replace(/\s+/g, " ").trim();
+const PRICE_TEXT = /(?:[A-Z]{1,3}\s?)?[$£€]\s?\d[\d,]*(?:\.\d\d)?/;
+const product = (o, via, site) => o.url && o.title && { title: o.title, url: o.url, image: o.image, domain: (() => { try { return new URL(o.url).hostname.replace(/^www\./, ""); } catch { return ""; } })(), via,
+  card: { kind: "product", name: o.title, price: o.price, rating: o.rating, reviews: o.reviews, condition: o.condition, site } };
+
+function parseAmazon(doc, base, via) {
+  const site = "Amazon";
+  return [...doc.querySelectorAll("[data-component-type='s-search-result'][data-asin]")].filter(c => c.dataset.asin && !c.querySelector(".puis-sponsored-label-text, .s-sponsored-label-info-icon")).map(c => {
+    const a = c.querySelector("h2 a[href], a.a-link-normal[href*='/dp/']");
+    const rating = parseFloat(txt(c.querySelector(".a-icon-alt"))) || undefined;
+    return product({ title: txt(c.querySelector("h2")), url: a && unwrapLink(a.getAttribute("href"), base)?.replace(/\/ref=.*$/, ""), image: c.querySelector("img.s-image")?.getAttribute("src"),
+      price: txt(c.querySelector(".a-price:not(.a-text-price) .a-offscreen")) || undefined, rating,
+      reviews: txt(c.querySelector("[aria-label$='ratings'], .s-underline-text")).replace(/[^\d,.K]/g, "") || undefined }, via, site);
+  }).filter(Boolean).slice(0, 20);
+}
+
+function parseEbay(doc, base, via) {
+  const site = "eBay";
+  return [...doc.querySelectorAll("li.s-item, li.s-card, .s-item__wrapper")].map(c => {
+    const a = c.querySelector("a.s-item__link[href], a.su-link[href], a[href*='/itm/']");
+    const title = txt(c.querySelector(".s-item__title, .s-card__title")).replace(/^New listing\s*/i, "");
+    if (!a || !title || /^shop on ebay$/i.test(title)) return null;
+    const img = c.querySelector("img");
+    return product({ title, url: unwrapLink(a.getAttribute("href"), base)?.replace(/\?.*$/, ""), image: img?.getAttribute("src")?.startsWith("http") ? img.getAttribute("src") : img?.getAttribute("data-src"),
+      price: txt(c.querySelector(".s-item__price, .s-card__price")) || undefined, condition: txt(c.querySelector(".SECONDARY_INFO, .s-card__subtitle")) || undefined }, via, site);
+  }).filter(Boolean).slice(0, 20);
+}
+
+// For pages without known markup: any small block that has a price, a picture and a link is a product.
+function parsePriced(doc, base, via, skipHost) {
+  const out = [], seen = new Set();
+  for (const n of doc.querySelectorAll("span, div, b, strong")) {
+    if (n.children.length > 2 || !PRICE_TEXT.test(n.textContent) || n.textContent.length > 30) continue;
+    let box = n;
+    for (let i = 0; i < 7 && box.parentElement && !(box.querySelector("img") && box.querySelector("a[href]")); i++) box = box.parentElement;
+    if (!box.querySelector("img") || seen.has(box) || box.textContent.length > 700) continue;
+    seen.add(box);
+    const a = [...box.querySelectorAll("a[href]")].find(x => { const u = unwrapLink(x.getAttribute("href"), base); return u && !skipHost.test(new URL(u).hostname); }) || box.querySelector("a[href]");
+    const url = a && unwrapLink(a.getAttribute("href"), base);
+    const title = txt(box.querySelector("h3, h4, [role=heading]")) || [...box.querySelectorAll("a, span, div")].map(txt).filter(t => t.length > 12 && !PRICE_TEXT.test(t)).sort((x, y) => y.length - x.length)[0];
+    const img = [...box.querySelectorAll("img")].map(i => i.getAttribute("src") || i.getAttribute("data-src")).find(s => /^https?:/.test(s || ""));
+    let site;
+    try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { continue; }
+    const store = txt(box.querySelector("cite, .merchant, [class*=merchant], [class*=seller]")) || site;
+    if (url && title && !out.some(o => o.url === url)) out.push(product({ title, url, image: img, price: n.textContent.match(PRICE_TEXT)[0] }, via, store));
+  }
+  return out.filter(Boolean).slice(0, 20);
+}
+
+const STORE_SOURCES = {
+  amazon: { name: "Amazon", async run(q, { region, used } = {}) {
+    const { doc, base, html } = await helperDoc(`https://${storeHost("amazon", region)}/s?k=${encodeURIComponent(q)}${used ? "&rh=p_n_condition-type%3AUsed" : ""}`);
+    if (/captcha|robot check/i.test(html.slice(0, 20000)) && !/s-search-result/.test(html)) throw new Error("asked for a CAPTCHA (open Amazon once yourself to clear it)");
+    return parseAmazon(doc, base, "Amazon");
+  }},
+  ebay: { name: "eBay", async run(q, { region, used } = {}) {
+    const { doc, base } = await helperDoc(`https://${storeHost("ebay", region)}/sch/i.html?_nkw=${encodeURIComponent(q)}${used ? "&LH_ItemCondition=3000" : ""}`);
+    return parseEbay(doc, base, "eBay");
+  }},
+  googleshop: { name: "Google Shopping", async run(q) {
+    const { doc, base } = await helperDoc(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=shop&hl=en&gbv=1`);
+    return parsePriced(doc, base, "Google Shopping", /(^|\.)google\./);
+  }},
+  bingshop: { name: "Bing Shopping", async run(q) {
+    const { doc, base } = await helperDoc(`https://www.bing.com/shop?q=${encodeURIComponent(q)}`);
+    return parsePriced(doc, base, "Bing Shopping", /(^|\.)bing\.com$/);
+  }},
+};
+
 const HELPER_VERTICALS = {
   news: {
     bing: { name: "Bing News", async run(q) {
@@ -222,16 +316,61 @@ const HELPER_VERTICALS = {
         return url && src && !/mojeek\.com/.test(new URL(url).hostname) && { thumb: src, url, title: img.getAttribute("alt") || new URL(url).hostname, via: "Mojeek Images" };
       }).filter(Boolean).slice(0, 20);
     }},
+    searxng: { name: "SearXNG Images (many engines)", async run(q) {
+      return searxPages(q, "images", (doc, base) => [...doc.querySelectorAll("article.result")].map(art => {
+        const img = art.querySelector("img");
+        const links = [...art.querySelectorAll("a[href]")].map(a => unwrapLink(a.getAttribute("href"), base)).filter(Boolean);
+        const thumb = img && unwrapLink(img.getAttribute("src") || img.getAttribute("data-src"), base);
+        const page = art.querySelector(".result-url a, a.result-url, .result-source a")?.getAttribute("href");
+        const url = (page && unwrapLink(page, base)) || links.find(l => !/\.(jpe?g|png|gif|webp)(\?|$)/i.test(l)) || links[0];
+        const full = links.find(l => /\.(jpe?g|png|gif|webp)(\?|$)/i.test(l));
+        return thumb && url && { thumb, full, url, title: (art.querySelector(".title, h3")?.textContent || img.alt || "").trim(), via: searxVia(art, "Images") };
+      }).filter(Boolean));
+    }},
+    yandex: { name: "Yandex Images", async run(q) {
+      const { doc, base, html } = await helperDoc(`https://yandex.com/images/search?text=${encodeURIComponent(q)}`);
+      if (/showcaptcha|smartcaptcha/i.test(base + html.slice(0, 5000))) throw new Error("asked for a CAPTCHA (open yandex.com/images once yourself to clear it)");
+      const out = [];
+      for (const img of doc.querySelectorAll("img[src*='avatars.mds.yandex.net'], img[src*='yandex-images']")) {
+        const a = img.closest("a[href]");
+        let full;
+        try { full = new URL(a.getAttribute("href"), base).searchParams.get("img_url"); } catch {}
+        const thumb = unwrapLink(img.getAttribute("src").replace(/^\/\//, "https://"), base);
+        if (thumb) out.push({ thumb, full: full || undefined, url: full || thumb, title: img.alt || "", via: "Yandex Images" });
+      }
+      return out.slice(0, 24);
+    }},
     bing: { name: "Bing Images", async run(q) {
       const { doc } = await helperDoc(`https://www.bing.com/images/search?q=${encodeURIComponent(q)}&form=HDRSC2`);
       return [...doc.querySelectorAll("a.iusc[m]")].map(a => attrJson(a, "m")).filter(m => m?.turl && m?.purl)
         .map(m => ({ thumb: m.turl, full: m.murl, url: m.purl, title: m.t || m.desc, via: "Bing Images", site: (() => { try { return new URL(m.purl).hostname; } catch { return ""; } })() }));
     }},
   },
+  books: {
+    google: { name: "Google Books (search page)", async run(q) {
+      const res = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=bks&hl=en`);
+      return parseResultsPage(res.html, res.url, "Google Books").map(r => ({ title: r.title, url: r.url, thumb: r.image, via: "Google Books", author: r.snippet?.split(/ · |\s-\s/)[0]?.slice(0, 60) }));
+    }},
+    amazon: { name: "Amazon Books", async run(q) {
+      const { doc, base } = await helperDoc(`https://${storeHost("amazon", typeof regionId === "string" ? regionId : "*")}/s?k=${encodeURIComponent(q)}&i=stripbooks`);
+      return parseAmazon(doc, base, "Amazon Books").map(p => ({ title: p.title, url: p.url, thumb: p.image, via: "Amazon Books", price: p.card.price }));
+    }},
+  },
   videos: {
     google: { name: "Google Videos", async run(q) {
       const res = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=vid&hl=en`);
       return parseResultsPage(res.html, res.url, "Google Videos").map(r => ({ title: r.title, url: r.url, thumb: r.image, via: "Google Videos", by: r.domain, embed: ytEmbed(r.url) }));
+    }},
+    searxng: { name: "SearXNG Videos (many engines)", async run(q) {
+      return searxPages(q, "videos", (doc, base) => [...doc.querySelectorAll("article.result")].map(art => {
+        const a = art.querySelector("h3 a[href], a.url_header[href], a[href]");
+        const url = a && unwrapLink(a.getAttribute("href"), base);
+        const img = art.querySelector("img");
+        const iframe = art.querySelector("iframe[data-src], iframe[src]");
+        return url && { title: (art.querySelector("h3")?.textContent || a.textContent).trim() || url, url, thumb: img && unwrapLink(img.getAttribute("src") || img.getAttribute("data-src"), base),
+          secs: durSecs(art.querySelector(".result_length, .length")?.textContent?.replace(/[^\d:]/g, "")), by: art.querySelector(".result_author, .author")?.textContent?.replace(/^\s*Author:?\s*/i, "").trim(),
+          via: searxVia(art, "Videos"), embed: ytEmbed(url) || iframe?.getAttribute("data-src") || iframe?.getAttribute("src") || undefined };
+      }).filter(Boolean));
     }},
     bing: { name: "Bing Videos", async run(q) {
       const { doc, base } = await helperDoc(`https://www.bing.com/videos/search?q=${encodeURIComponent(q)}`);

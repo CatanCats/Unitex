@@ -1,6 +1,8 @@
-// Home page: search bar, engine/AI/topic rows, open-source alternatives, news.
+// Home page: search bar, engine/AI rows, the "Search for" row (Unitex tabs), open-source alternatives, news.
 let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit"]).filter(id => byId(id) && !byId(id).ai && !byId(id).local).slice(0, 5);
-let topicId = topicById(store.get("unitex.topic")).id;
+// Which Unitex tab a search opens on (the same tabs as the results page).
+const HOME_TABS = [["all", "All"], ["ai", "AI"], ["shopping", "Shopping"], ["images", "Images"], ["videos", "Videos"], ["news", "News"], ["maps", "Maps"], ["books", "Books"], ["jobs", "Jobs"], ["travel", "Travel"]];
+let homeTab = HOME_TABS.some(([id]) => id === store.get("unitex.hometab")) ? store.get("unitex.hometab") : "all";
 
 // ---------- engine selection ----------
 
@@ -43,26 +45,26 @@ function renderEngine() {
   const e = byId(engineId);
   $("engine-icon").replaceChildren(icon(e));
   $("engine-name").textContent = e.name;
-  const topic = topicById(topicId);
-  $("q").placeholder = topic.id !== "all" ? topic.hint : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
+  const name = HOME_TABS.find(([id]) => id === homeTab)[1];
+  $("q").placeholder = homeTab !== "all" ? (homeTab === "shopping" ? "Search every store with Unitex…" : `Search ${name.toLowerCase()} with Unitex…`) : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
 
   $("quick").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), everywhere(), ...recent.map(id => chip(byId(id))),
     el("button", { type: "button", className: "chip more", textContent: `All ${ENGINES.length}`, onclick: openPicker }));
   $("quick-ai").replaceChildren(el("span", { className: "row-label", textContent: "Ask AI" }), everywhere(), ...AI_ENGINES.map(chip));
 }
 
-// ---------- topics ----------
+// ---------- what to search for (Unitex tabs) ----------
 
 function renderTopics() {
-  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Looking for" }), ...TOPICS.map(t => {
-    const b = el("button", { type: "button", className: "chip topic" + (t.id === topicId ? " active" : ""), textContent: t.name });
-    b.setAttribute("aria-pressed", t.id === topicId);
+  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Search for" }), ...HOME_TABS.map(([id, name]) => {
+    const b = el("button", { type: "button", className: "chip topic" + (id === homeTab ? " active" : ""), textContent: name });
+    b.setAttribute("aria-pressed", id === homeTab);
     b.onclick = () => {
-      topicId = t.id;
-      store.set("unitex.topic", t.id);
+      homeTab = id;
+      store.set("unitex.hometab", id);
       renderTopics();
       renderEngine();
-      if (t.id !== "all" && $("q").value.trim()) $("search").requestSubmit();
+      if (id !== "all" && $("q").value.trim()) $("search").requestSubmit();
       else $("q").focus();
     };
     return b;
@@ -112,8 +114,8 @@ document.addEventListener("keydown", e => {
 
 // ---------- search ----------
 
-// A topic always goes through Unitex search, which fans out to that topic's sites.
-const searchUrl = q => buildUrl(q, topicId !== "all" ? { engine: "unitex", topic: topicId } : {});
+// A tab other than All always goes through Unitex search.
+const searchUrl = q => buildUrl(q, homeTab !== "all" ? { engine: "unitex", tab: homeTab } : {});
 
 $("search").addEventListener("submit", e => {
   e.preventDefault();

@@ -4,8 +4,15 @@
 
 const params = new URLSearchParams(location.search);
 let query = (params.get("q") || "").trim();
-let topicId = topicById(params.get("topic") || "all").id;
 let tab = params.get("tab") || "all";
+let sub = params.get("sub") || "";
+let topicId = "all"; // set from the tab and sub-filter in go()
+// Old links: ?topic=houses → Shopping › Houses, ?tab=places → Maps, ?tab=papers → Books › Research papers.
+const OLD_TOPICS = { houses: ["shopping", "houses"], cars: ["shopping", "cars"], marketplace: ["shopping", "secondhand"], shopping: ["shopping", "products"], reviews: ["shopping", "reviews"],
+  jobs: ["jobs", ""], travel: ["travel", ""], recipes: ["all", "recipes"], events: ["all", "events"], movies: ["all", "movies"], learn: ["all", "learn"], opensource: ["all", "opensource"], academic: ["books", "research"] };
+if (params.get("topic") && OLD_TOPICS[params.get("topic")] && !params.get("tab")) [tab, sub] = OLD_TOPICS[params.get("topic")];
+if (tab === "places") tab = "maps";
+if (tab === "papers") [tab, sub] = ["books", "research"];
 
 const strip = html => new DOMParser().parseFromString(html || "", "text/html").body.textContent.replace(/\s+/g, " ").trim();
 const safeUrl = u => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; } };
@@ -353,25 +360,101 @@ Object.assign(VIDEO_SOURCES, {
   }},
 });
 
+// Engines' own image and video sections that let other websites read them: SearXNG servers (each
+// result names the engine that found it: Google, Bing, Flickr, Unsplash, Vimeo, YouTube…) and Qwant.
+async function searxJson(q, category) {
+  const reasons = [];
+  for (const server of SEARX_HOSTS) {
+    try {
+      const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=${category}&language=all`, 6000);
+      if (d.results?.length) return d.results;
+    } catch (e) { reasons.push(e.message); }
+  }
+  throw new Error(reasons[0] ? `public servers: ${reasons[0]}` : "no public server answered");
+}
+const searxEngine = (r, kind) => `${engineName(String(r.engine || r.engines?.[0] || "SearXNG").replace(/[ .]*(images?|videos?)$/i, ""))} ${kind} (through SearXNG)`;
+const qwantSecs = d => d > 36000 ? Math.round(d / 1000) : d;
+Object.assign(IMAGE_SOURCES, {
+  searxng: { name: "SearXNG Images (Google, Bing, Flickr, Unsplash…)", async run(q) {
+    return (await searxJson(q, "images")).filter(r => r.thumbnail_src || r.img_src).slice(0, 30).map(r => ({ thumb: r.thumbnail_src || r.img_src, full: r.img_src, url: r.url, title: strip(r.title), via: searxEngine(r, "Images"), site: host(r.url) }));
+  }},
+  qwant: { name: "Qwant Images", async run(q) {
+    const d = await getJson(`https://api.qwant.com/v3/search/images?q=${encodeURIComponent(q)}&count=30&offset=0&locale=en_GB&device=desktop&safesearch=1`);
+    return (d.data?.result?.items || []).map(i => ({ thumb: i.thumbnail, full: i.media, url: i.url, title: i.title, via: "Qwant Images", site: host(i.url) }));
+  }},
+});
+Object.assign(VIDEO_SOURCES, {
+  searxng: { name: "SearXNG Videos (YouTube, Vimeo, Bing…)", async run(q) {
+    return (await searxJson(q, "videos")).slice(0, 24).map(r => ({ title: strip(r.title), url: r.url, thumb: r.thumbnail || r.img_src, by: r.author, secs: durSecs(r.length), via: searxEngine(r, "Videos"), embed: ytEmbed(r.url) || r.iframe_src || undefined }));
+  }},
+  qwant: { name: "Qwant Videos", async run(q) {
+    const d = await getJson(`https://api.qwant.com/v3/search/videos?q=${encodeURIComponent(q)}&count=20&offset=0&locale=en_GB&device=desktop&safesearch=1`);
+    return (d.data?.result?.items || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail, secs: qwantSecs(v.duration), by: v.channel || v.source, via: "Qwant Videos", embed: ytEmbed(v.url) }));
+  }},
+});
+Object.assign(BOOK_SOURCES, {
+  archive: { name: "Internet Archive (books)", async run(q) {
+    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(texts)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=12&output=json`);
+    return (d.response?.docs || []).map(b => ({ title: b.title, url: `https://archive.org/details/${b.identifier}`, thumb: `https://archive.org/services/img/${b.identifier}`, via: "Internet Archive", author: [].concat(b.creator || [])[0], year: +b.year || undefined, free: true, read: `https://archive.org/details/${b.identifier}` }));
+  }},
+  loc: { name: "Library of Congress", async run(q) {
+    const d = await getJson(`https://www.loc.gov/books/?q=${encodeURIComponent(q)}&fo=json&c=12`);
+    return (d.results || []).filter(b => b.title).map(b => ({ title: b.title, url: b.url || b.id, thumb: [].concat(b.image_url || [])[0], via: "Library of Congress", author: [].concat(b.contributor || [])[0], year: +year(b.date) || undefined, free: b.online_format?.length > 0 }));
+  }},
+});
+Object.assign(PLACE_SOURCES, {
+  photon: { name: "Photon (Komoot)", async run(q) {
+    const d = await getJson(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=10`);
+    return (d.features || []).map(f => { const p = f.properties, [lon, lat] = f.geometry.coordinates; const where = [p.street, p.city, p.state, p.country].filter(Boolean).join(", ");
+      return { title: p.name || where, url: `https://www.openstreetmap.org/${{ N: "node", W: "way", R: "relation" }[p.osm_type] || "node"}/${p.osm_id}`, via: "Photon", snippet: where, lat, lon,
+        bbox: p.extent && [p.extent[3], p.extent[1], p.extent[0], p.extent[2]], kind: (p.osm_value || "").replace(/_/g, " ") }; });
+  }},
+});
+
 // With the helper, each tab also searches the engines' own sections (Bing News, Google News, …).
-for (const [tabId, sources] of Object.entries({ news: NEWS_SOURCES, images: IMAGE_SOURCES, videos: VIDEO_SOURCES })) {
+for (const [tabId, sources] of Object.entries({ news: NEWS_SOURCES, images: IMAGE_SOURCES, videos: VIDEO_SOURCES, books: BOOK_SOURCES })) {
   for (const [id, src] of Object.entries(HELPER_VERTICALS[tabId])) sources["helper_" + id] = { ...src, enabled: () => !!helperVersion() };
+}
+// Shopping: with the helper, stores' and engines' shopping pages are read and become product cards.
+const SHOP_FOR = { shopping: ["amazon", "ebay", "googleshop", "bingshop"], marketplace: ["ebay", "amazon"], reviews: ["amazon"] };
+function cardSourcesFor(topic) {
+  const out = {};
+  if (CARD_SOURCES[topic]) out[topic] = CARD_SOURCES[topic];
+  for (const id of SHOP_FOR[topic] || []) out["helper_" + id] = { name: STORE_SOURCES[id].name, enabled: () => !!helperVersion(), run: q => STORE_SOURCES[id].run(q, { region: regionId, used: topic === "marketplace" }) };
+  return out;
 }
 const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => n.startsWith("helper_")).map(([, s]) => s.name);
 
-// The tabs. "kind" picks how results are drawn.
+// The tabs. "kind" picks how results are drawn; "subs" are the filters under a tab. A sub can set a
+// topic (its specialist sites and cards), add a word to the search ("suffix"), or bring its own sources.
 const TABS = [
-  { id: "all",    name: "All",       kind: "web" },
-  { id: "ai",     name: "AI",        kind: "ai" },
-  { id: "images", name: "Images",    kind: "images", sources: IMAGE_SOURCES, noun: "images" },
-  { id: "videos", name: "Videos",    kind: "cards",  sources: VIDEO_SOURCES, noun: "videos" },
-  { id: "news",   name: "News",      kind: "list",   sources: NEWS_SOURCES, noun: "news stories" },
-  { id: "books",  name: "Books",     kind: "covers", sources: BOOK_SOURCES, noun: "books" },
-  { id: "papers", name: "Research",  kind: "list",   sources: PAPER_SOURCES, noun: "papers" },
-  { id: "places", name: "Places",    kind: "list",   sources: PLACE_SOURCES, noun: "places" },
-  { id: "code",   name: "Code",      kind: "list",   sources: CODE_SOURCES, noun: "results" },
+  { id: "all",      name: "All",      kind: "web", subs: [
+    { id: "all", name: "Everything" }, { id: "recipes", name: "Recipes", topic: "recipes" }, { id: "events", name: "Events", topic: "events" },
+    { id: "movies", name: "Movies & TV", topic: "movies" }, { id: "learn", name: "Learn", topic: "learn" }, { id: "opensource", name: "Open source", topic: "opensource" }, { id: "reviews", name: "Reviews", topic: "reviews" }] },
+  { id: "ai",       name: "AI",       kind: "ai" },
+  { id: "shopping", name: "Shopping", kind: "web", shop: true, subs: [
+    { id: "products", name: "🛍️ Products", topic: "shopping" }, { id: "houses", name: "🏠 Houses", topic: "houses" }, { id: "cars", name: "🚗 Cars", topic: "cars" },
+    { id: "secondhand", name: "♻️ Second-hand", topic: "marketplace" }, { id: "reviews", name: "★ Reviews", topic: "reviews" }] },
+  { id: "images",   name: "Images",   kind: "images", sources: IMAGE_SOURCES, noun: "images" },
+  { id: "videos",   name: "Videos",   kind: "cards",  sources: VIDEO_SOURCES, noun: "videos", subs: [
+    { id: "all", name: "All videos" }, { id: "movies", name: "Movies & TV", topic: "movies", suffix: "trailer" }, { id: "learn", name: "Learn", suffix: "tutorial" }] },
+  { id: "news",     name: "News",     kind: "list",   sources: NEWS_SOURCES, noun: "news stories" },
+  { id: "maps",     name: "Maps",     kind: "list",   sources: PLACE_SOURCES, noun: "places" },
+  { id: "books",    name: "Books",    kind: "covers", sources: BOOK_SOURCES, noun: "books", subs: [
+    { id: "all", name: "Books" }, { id: "free", name: "Free to read", free: true }, { id: "learn", name: "Learn", suffix: "textbook" },
+    { id: "research", name: "Research papers", kind: "list", sources: PAPER_SOURCES, view: "papers", noun: "papers" }] },
+  { id: "jobs",     name: "Jobs",     kind: "web", topic: "jobs", more: true },
+  { id: "travel",   name: "Travel",   kind: "web", topic: "travel", more: true },
+  { id: "code",     name: "Code",     kind: "list", sources: CODE_SOURCES, noun: "results", more: true, subs: [
+    { id: "all", name: "Code" }, { id: "opensource", name: "Open source", kind: "web", topic: "opensource" }] },
 ];
 if (!TABS.some(t => t.id === tab)) tab = "all";
+// The current tab with its sub-filter applied.
+function cur() {
+  const t = TABS.find(x => x.id === tab);
+  const s = t.subs?.find(x => x.id === sub) || t.subs?.[0] || {};
+  return { ...t, ...s, id: t.id, name: t.name, sub: s.id || "", subName: s.name, view: s.view || t.id, topic: s.topic || t.topic || "all", noun: s.noun || t.noun };
+}
 
 // ---------- drawing ----------
 
@@ -480,7 +563,7 @@ function renderTopicSites(hits, settled) {
   const box = $("topic-sites");
   const topic = topicById(topicId);
   const sites = topicSites(topic);
-  if (topic.id === "all" || !query || tab !== "all") { box.hidden = true; return; }
+  if (topic.id === "all" || !query || cur().kind !== "web") { box.hidden = true; return; }
 
   const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
   region.onchange = () => { setRegion(region.value); go(); };
@@ -504,23 +587,43 @@ function renderTopicSites(hits, settled) {
 
 // ---------- rows & tabs ----------
 
-function renderTopics() {
-  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Looking for" }), ...TOPICS.map(t => {
-    const b = el("button", { type: "button", className: "chip topic" + (t.id === topicId ? " active" : ""), textContent: t.name });
-    b.setAttribute("aria-pressed", t.id === topicId);
-    b.onclick = () => { topicId = t.id; store.set("unitex.topic", t.id); tab = "all"; go(); };
-    return b;
-  }));
+const closeMore = () => document.querySelectorAll(".more-menu").forEach(m => { m.hidden = true; });
+document.addEventListener("click", e => { if (!e.target.closest(".more-wrap")) closeMore(); });
+addEventListener("scroll", closeMore, { passive: true });
+
+function tabButton(t) {
+  const b = el("button", { type: "button", role: "tab", textContent: t.name });
+  b.setAttribute("aria-selected", t.id === tab);
+  b.onclick = () => { if (tab !== t.id) { tab = t.id; sub = ""; } go(); };
+  return b;
 }
 
 function renderTabs() {
-  fill($("tabs"), ...TABS.map(t => {
-    const b = el("button", { type: "button", role: "tab", textContent: t.name });
-    b.setAttribute("aria-selected", t.id === tab);
-    b.onclick = () => { tab = t.id; go(); };
+  const main = TABS.filter(t => !t.more), more = TABS.filter(t => t.more);
+  const active = more.find(t => t.id === tab);
+  const menu = el("div", { className: "more-menu", hidden: true }, ...more.map(t => { const b = tabButton(t); b.onclick = () => { menu.hidden = true; tab = t.id; sub = ""; go(); }; return b; }));
+  const moreBtn = el("button", { type: "button", className: "more-btn", textContent: "More ▾", ariaHaspopup: "true" });
+  moreBtn.onclick = e => {
+    e.stopPropagation();
+    const r = moreBtn.getBoundingClientRect();
+    Object.assign(menu.style, { top: r.bottom + "px", left: Math.min(r.left, innerWidth - 190) + "px" });
+    menu.hidden = !menu.hidden;
+  };
+  fill($("tabs"), ...main.map(tabButton), active && tabButton(active), el("div", { className: "more-wrap" }, moreBtn, menu));
+  document.body.dataset.tab = tab;
+
+  // The filters under the tab.
+  const c = cur(), t = TABS.find(x => x.id === tab);
+  const box = $("subtabs");
+  if (!t.subs) { box.hidden = true; return; }
+  fill(box, el("span", { className: "row-label", textContent: t.shop ? "Shop for" : "Show" }), ...t.subs.map(s => {
+    const b = el("button", { type: "button", className: "chip sub" + (s.id === c.sub ? " active" : ""), textContent: s.name });
+    b.setAttribute("aria-pressed", s.id === c.sub);
+    b.onclick = () => { sub = s.id; go(); };
     return b;
   }));
-  document.body.dataset.tab = tab;
+  box.className = "subtabs" + (t.shop ? " departments" : "");
+  box.hidden = false;
 }
 // ---------- answer card ----------
 
@@ -585,27 +688,35 @@ function mergeMain(settled) {
 // The strip of images on the All tab uses a few fast sources; the Images tab uses them all.
 const STRIP_SOURCES = Object.fromEntries(Object.entries(IMAGE_SOURCES).filter(([n]) => ["openverse", "commons", "wikipedia", "nasa", "helper_bing", "helper_google"].includes(n)));
 
+let wasShop = false;
 async function go() {
+  const c = cur();
+  topicId = c.topic;
+  // The Shopping tab is always the full shopping area; other tabs keep the mode the person chose.
+  if (c.shop) modeOn = true; else if (wasShop) modeOn = false;
+  wasShop = !!c.shop;
   const p = new URLSearchParams({ q: query });
-  if (topicId !== "all") p.set("topic", topicId);
   if (tab !== "all") p.set("tab", tab);
+  if (c.sub && c.sub !== TABS.find(t => t.id === tab).subs?.[0].id) p.set("sub", c.sub);
+  if (modeOn && !c.shop && MODES[topicId]) p.set("mode", "1");
   history.replaceState(null, "", "search.html?" + p);
   document.title = query ? `${query} – Unitex` : "Unitex Search";
   $("q").value = query;
+  $("q").placeholder = topicId !== "all" ? topicById(topicId).hint : c.shop ? "Search every store…" : `Search ${c.name === "All" ? "the web" : c.name.toLowerCase()} with Unitex…`;
   renderTabs();
-  renderTopics();
   renderNotice();
   renderAlternatives($("alts"), query);
   for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
-  document.body.classList.toggle("mode-on", modeOn && !!MODES[topicId] && tab === "all");
+  document.body.classList.toggle("mode-on", modeOn && !!MODES[topicId] && c.kind === "web");
+  document.body.classList.toggle("shop-area", !!c.shop);
+  document.body.classList.toggle("web-tab", c.kind === "web");
   $("results").replaceChildren();
 
-  if (!query) { $("status").textContent = "Type something to search."; return; }
+  if (!query) { $("status").textContent = c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
-  const t = TABS.find(x => x.id === tab);
 
-  if (t.kind === "ai") {
+  if (c.kind === "ai") {
     $("status").textContent = "Searching, so the AI can read the results…";
     const settled = await settle(MAIN_SOURCES, query);
     if (id !== runId) return;
@@ -615,41 +726,45 @@ async function go() {
     return;
   }
 
-  if (t.kind !== "web") {
-    $("status").textContent = `Searching ${t.name.toLowerCase()}…`;
-    if (t.kind === "list") $("results").replaceChildren(...skeletons(4));
-    const settled = await settle(t.sources, query);
+  if (c.kind !== "web") {
+    const q = c.suffix && !query.toLowerCase().includes(c.suffix) ? `${query} ${c.suffix}` : query;
+    $("status").textContent = `Searching ${(c.subName && c.sub !== "all" ? c.subName : c.name).toLowerCase()}…`;
+    if (c.kind === "list") $("results").replaceChildren(...skeletons(4));
+    const cardSrc = c.topic !== "all" ? cardSourcesFor(c.topic) : {};
+    const [settled, cardSettled] = await Promise.all([settle(c.sources, q), settle(cardSrc, query)]);
     if (id !== runId) return;
-    renderSources(settled, t.sources, lockedFor(t.sources));
+    renderSources([...cardSettled, ...settled], { ...cardSrc, ...c.sources }, lockedFor(c.sources));
+    if (Object.keys(cardSrc).length) showCards([], cardSettled.flatMap(s => s.r || []));
     // Engines' own sections first (they're the biggest indexes), then the open sources.
     const lists = [...settled.filter(s => s.n.startsWith("helper_")), ...settled.filter(s => !s.n.startsWith("helper_"))].map(s => s.r || []);
-    showTab(roundRobin(lists, t.kind === "images" ? i => i.thumb : undefined));
+    showTab(roundRobin(lists, c.kind === "images" ? i => i.thumb : undefined));
     return;
   }
 
   renderTopicSites();
-  aiOverviewStart();
+  if (!c.shop) aiOverviewStart();
   $("results").replaceChildren(...skeletons(5));
-  $("status").textContent = "Searching…";
+  $("status").textContent = c.shop ? "Searching every store…" : "Searching…";
 
-  const cardSource = CARD_SOURCES[topicId];
-  const [settled, images, cardSettled] = await Promise.all([settle(MAIN_SOURCES, query), topicId === "all" ? settle(STRIP_SOURCES, query) : [], cardSource ? settle({ [topicId]: cardSource }, query) : []]);
+  const cardSrc = cardSourcesFor(topicId);
+  const [settled, images, cardSettled] = await Promise.all([settle(MAIN_SOURCES, query), tab === "all" && topicId === "all" ? settle(STRIP_SOURCES, query) : [], settle(cardSrc, query)]);
   wikiAnswer(query).catch(() => {});
   if (id !== runId) return;
 
   const { main, engineLists } = mergeMain(settled);
   if (topicId !== "all") renderTopicSites(engineLists.flat().length, settled);
-  renderSources([...cardSettled, ...settled], { ...(cardSource ? { [topicId]: cardSource } : {}), ...MAIN_SOURCES }, LOCKED_ENGINES());
+  renderSources([...cardSettled, ...settled], { ...cardSrc, ...MAIN_SOURCES }, [...LOCKED_ENGINES(), ...lockedFor(cardSrc)]);
 
-  // On a topic, results from its specialist sites become cards; the rest stay as a list.
-  const rest = showCards(main, cardSettled.flatMap(s => s.r || []));
+  // On a topic, results from its specialist sites (and the stores) become cards; the rest stay as a list.
+  const rest = showCards(main, roundRobin(cardSettled.map(s => s.r || [])));
   $("results").replaceChildren(...rest.map(resultItem).filter(Boolean));
   if (!main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
+  if (c.shop && rest.length) $("results").prepend(el("li", { className: "results-head" }, el("h2", { textContent: "More from the web" })));
 
-  renderAiOverview(query, main);
+  if (!c.shop) renderAiOverview(query, main);
   const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
-  if (tiles.length && topicId === "all") {
-    fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; go(); } }));
+  if (tiles.length && tab === "all" && topicId === "all") {
+    fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; sub = ""; go(); } }));
     $("image-strip").hidden = false;
   }
 

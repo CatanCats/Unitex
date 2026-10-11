@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Unitex Helper",
-  "version": "1.2.0",
-  "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek and SearXNG by loading their result pages in your own browser.",
+  "version": "1.3.0",
+  "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek, Yandex and SearXNG, and products from Amazon and eBay, by loading their pages in your own browser.",
   "host_permissions": [
     "https://www.google.com/*",
     "https://www.bing.com/*",
@@ -12,7 +12,16 @@
     "https://searx.be/*",
     "https://baresearch.org/*",
     "https://search.inetol.net/*",
-    "https://paulgo.io/*"
+    "https://paulgo.io/*",
+    "https://yandex.com/*",
+    "https://www.amazon.com/*",
+    "https://www.amazon.com.au/*",
+    "https://www.amazon.co.uk/*",
+    "https://www.amazon.ca/*",
+    "https://www.ebay.com/*",
+    "https://www.ebay.com.au/*",
+    "https://www.ebay.co.uk/*",
+    "https://www.ebay.ca/*"
   ],
   "background": {
     "service_worker": "background.js",

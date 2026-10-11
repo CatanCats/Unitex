@@ -5,9 +5,9 @@
 
 // ---------- reading facts out of titles and snippets ----------
 
-const PRICE_RE = /(?:AU|A|US|NZ|CA|C)?\$\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?(?:\s?(?:pw|p\.w\.|per week|\/\s?wk|\/\s?week|per month|pcm|\/mo))?/i;
+const PRICE_RE = /(?:AU|A|US|NZ|CA|C)?[$£€]\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?(?:\s?(?:pw|p\.w\.|per week|\/\s?wk|\/\s?week|per month|pcm|\/mo))?/i;
 const money = s => {
-  const m = String(s || "").match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|million)?/i);
+  const m = String(s || "").match(/[$£€]\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|million)?/i);
   if (!m) return null;
   const n = parseFloat(m[1].replace(/,/g, ""));
   return n * ({ k: 1e3, m: 1e6, million: 1e6 }[(m[2] || "").toLowerCase()] || 1);
@@ -21,13 +21,13 @@ const cleanTitle = t => {
   return (parts.length > 1 && parts[parts.length - 1].length <= 30 ? parts.slice(0, -1).join(" - ") : String(t || "")).trim() || t;
 };
 
-const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show" };
+const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show" };
 
 // Turns an ordinary result from one of the topic's specialist sites into a card.
 function cardFor(r, topic) {
   if (r.card) return r;
   const kind = CARD_KINDS[topic.id];
-  if (!kind) return null;
+  if (!kind || topic.id === "reviews") return null; // review articles stay as results; products come from the stores
   const site = topicSites(topic).find(s => r.domain === s.domain || r.domain?.endsWith("." + s.domain) || urlKey(r.url).startsWith(s.domain));
   if (!site) return null;
   const t = textOf(r);
@@ -79,6 +79,7 @@ const MODES = {
   jobs:        { name: "Job-hunting mode",   icon: "💼", noun: "jobs" },
   recipes:     { name: "Cooking mode",       icon: "🍳", noun: "recipes" },
   movies:      { name: "Watch mode",         icon: "🎬", noun: "shows" },
+  reviews:     { name: "Reviews",            icon: "★", noun: "rated products" },
 };
 
 let modeOn = new URLSearchParams(location.search).get("mode") === "1";
@@ -86,6 +87,7 @@ let filters = {};
 let lastCards = [];
 
 function priceOf(c) { return money(c.card.price); }
+const reviewCount = c => { const t = String(c.card.reviews || "").replace(/,/g, ""); return /k$/i.test(t) ? parseFloat(t) * 1000 : parseFloat(t) || 0; };
 
 function applyFilters(cards) {
   let out = cards.filter(c => {
@@ -98,10 +100,14 @@ function applyFilters(cards) {
     if (filters.salaryOnly && !k.salary) return false;
     if (filters.category && k.category !== filters.category && k.cuisine !== filters.category) return false;
     if (filters.genre && !(k.genres || []).includes(filters.genre)) return false;
+    if (filters.ratingMin && !(k.rating >= filters.ratingMin)) return false;
+    if (filters.priced && p == null) return false;
+    if (filters.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
+    if (filters.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
     return true;
   });
   const by = { "price-asc": (a, b) => (priceOf(a) ?? Infinity) - (priceOf(b) ?? Infinity), "price-desc": (a, b) => (priceOf(b) ?? -1) - (priceOf(a) ?? -1),
-    "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[filters.sort];
+    "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[filters.sort];
   if (by) out = [...out].sort(by);
   return out;
 }
@@ -118,9 +124,9 @@ function filterBar(topic, cards) {
     s.onchange = () => { filters[key] = s.value || undefined; drawCards(); };
     return s;
   };
-  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating"], car: ["price-asc", "price-desc", "year"], show: ["rating"] }[kind] || [];
+  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"] }[kind] || [];
   const sortSel = sorts.length && (() => {
-    const names = { "price-asc": "Price: low to high", "price-desc": "Price: high to low", rating: "Rating", year: "Newest" };
+    const names = { "price-asc": "Price: low to high", "price-desc": "Price: high to low", rating: "Best rated", reviews: "Most reviews", year: "Newest" };
     const s = el("select", { className: "f-input", ariaLabel: "Sort" }, el("option", { value: "", textContent: "Sort: best match" }), ...sorts.map(o => el("option", { value: o, textContent: names[o], selected: filters.sort === o })));
     s.onchange = () => { filters.sort = s.value || undefined; drawCards(); };
     return s;
@@ -147,7 +153,10 @@ function filterBar(topic, cards) {
     kind === "job" && (() => { const c = el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.salaryOnly, onchange() { filters.salaryOnly = this.checked; drawCards(); } }), " Shows salary"); return c; })(),
     kind === "recipe" && select("category", "Any kind", [...new Set(cards.flatMap(c => [c.card.category, c.card.cuisine]).filter(Boolean))]),
     kind === "show" && select("genre", "Any genre", [...new Set(cards.flatMap(c => c.card.genres || []))]),
-    sites.length > 1 && select("site", "All websites", sites),
+    kind === "product" && select("ratingSel", "Any rating", ["4★ & up", "3★ & up"]),
+    kind === "product" && select("condition", "New or used", ["new", "used"]),
+    ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
+    sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
     sortSel);
 }
 
@@ -156,8 +165,8 @@ function filterBar(topic, cards) {
 const fact = (icon, value, label) => value != null && value !== "" && el("span", { className: "fact", title: label }, icon, " ", String(value));
 
 function siteBadge(c) {
-  const d = c.card.site || c.domain || host(c.url);
-  return el("span", { className: "site-badge" }, domainIcon(d), d);
+  const d = c.domain || host(c.url);
+  return el("span", { className: "site-badge" }, domainIcon(d), c.card.site || d);
 }
 
 function saveButton(c, topic) {
@@ -173,7 +182,7 @@ function cardFacts(c) {
   const k = c.card;
   return ({
     house: [k.beds && `${k.beds} bed`, k.baths && `${k.baths} bath`, k.cars && `${k.cars} car`, k.type].filter(Boolean),
-    product: [k.rating && `★ ${k.rating}`].filter(Boolean),
+    product: [k.rating && `★ ${k.rating}`, k.condition].filter(Boolean),
     car: [k.year, k.km && `${k.km} km`, k.gearbox].filter(Boolean),
     job: [k.company, k.location, k.salary, k.worktype].filter(Boolean),
     recipe: [k.category, k.cuisine, k.ingredients && `${k.ingredients.length} ingredients`].filter(Boolean),
@@ -186,10 +195,10 @@ function renderCard(c, topic) {
   const url = safeUrl(c.url);
   if (!url) return null;
   const img = c.image && el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
-  const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: "View at store", car: "View car", job: "View job", recipe: "Full recipe", show: "Show info" }[k.kind] || "Open" });
+  const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: `Buy at ${k.site || "store"}`, car: "View car", job: "View job", recipe: "Full recipe", show: "Show info" }[k.kind] || "Open" });
   const facts = {
     house: [fact("🛏", k.beds, "Bedrooms"), fact("🛁", k.baths, "Bathrooms"), fact("🚗", k.cars, "Car spaces"), k.type && el("span", { className: "fact" }, k.type)],
-    product: [k.rating && fact("★", k.rating, "Rating")],
+    product: [k.rating && fact("★", k.reviews ? `${k.rating} (${k.reviews})` : k.rating, "Rating"), k.condition && el("span", { className: "fact", textContent: k.condition })],
     car: [fact("📅", k.year, "Year"), fact("🛣", k.km && `${k.km} km`, "Kilometres"), fact("⚙️", k.gearbox, "Transmission")],
     job: [fact("🏢", k.company, "Company"), fact("📍", k.location, "Location"), fact("🕒", k.worktype, "Work type")],
     recipe: [fact("🍽", k.category, "Category"), fact("🌍", k.cuisine, "Cuisine"), k.ingredients && fact("🧂", `${k.ingredients.length} ingredients`, "Ingredients")],
@@ -223,11 +232,12 @@ function renderCard(c, topic) {
 
 function renderShortlist(topic) {
   const box = $("shortlist");
-  if (!box || !modeOn || !MODES[topic.id]) { if (box) box.hidden = true; return; }
+  if (!box || !modeOn || !MODES[topic.id] || cur().kind !== "web") { if (box) box.hidden = true; return; }
   const items = saved.all().filter(s => s.topic === topic.id);
   const mode = MODES[topic.id];
   fill(box,
-    el("h2", { textContent: `Your shortlist (${items.length})` }),
+    el("h2", { textContent: `${cur().shop ? "🛒 Your list" : "Your shortlist"} (${items.length})` }),
+    cur().shop && items.some(s => money(s.price) != null) && el("p", { className: "list-total", textContent: `Total: $${items.reduce((t, s) => t + (money(s.price) || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}` }),
     !items.length && el("p", { className: "hint", textContent: `Tap ♡ Save on any of the ${mode.noun} to keep it here. Saved items stay in this browser.` }),
     items.length && el("ul", { className: "shortlist" }, ...items.map(s => el("li", {},
       s.image && el("img", { src: s.image, alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
@@ -249,17 +259,28 @@ function drawCards() {
   const topic = topicById(topicId);
   const box = $("cards");
   if (filters.bedsSel) filters.beds = parseInt(filters.bedsSel); else delete filters.beds;
+  if (filters.ratingSel) filters.ratingMin = parseInt(filters.ratingSel); else delete filters.ratingMin;
+  const shop = cur().shop;
   const shown = applyFilters(lastCards);
   const mode = MODES[topic.id];
   fill(box,
     el("div", { className: "cards-head" },
       el("h2", { textContent: `${mode?.icon || ""} ${shown.length} ${shown.length === 1 ? (mode?.noun || "results").replace(/e?s$/, "") : mode?.noun || "results"}${lastCards.length !== shown.length ? ` of ${lastCards.length}` : ""}` }),
-      mode && el("button", { type: "button", className: modeOn ? "btn-ghost" : "btn-primary", textContent: modeOn ? "Leave " + mode.name.toLowerCase() : `${mode.icon} Open ${mode.name.toLowerCase()}`, onclick: () => setMode(!modeOn) })),
-    modeOn && filterBar(topic, lastCards),
-    el("div", { className: "xcards" }, ...(modeOn ? shown : shown.slice(0, 6)).map(c => renderCard(c, topic)).filter(Boolean)),
-    !modeOn && shown.length > 6 && el("button", { type: "button", className: "chip more", textContent: `See all ${shown.length} in ${mode.name.toLowerCase()}`, onclick: () => setMode(true) }),
+      shop && el("span", { className: "hint", textContent: shopFrom() }),
+      mode && !shop && cur().kind === "web" && el("button", { type: "button", className: modeOn ? "btn-ghost" : "btn-primary", textContent: modeOn ? "Leave " + mode.name.toLowerCase() : `${mode.icon} Open ${mode.name.toLowerCase()}`, onclick: () => setMode(!modeOn) })),
+    shop && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping and Bing Shopping need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
+    el("div", { className: "shop-layout" },
+      modeOn && el("aside", { className: "shop-filters" }, el("h3", { textContent: "Filters" }), filterBar(topic, lastCards)),
+      el("div", { className: "xcards" }, ...(modeOn ? shown : shown.slice(0, 6)).map(c => renderCard(c, topic)).filter(Boolean))),
+    !modeOn && shown.length > 6 && cur().kind === "web" && el("button", { type: "button", className: "chip more", textContent: `See all ${shown.length} in ${mode.name.toLowerCase()}`, onclick: () => setMode(true) }),
     !shown.length && el("p", { className: "hint", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode?.noun || "cards"} could be read for this search.` }));
   box.hidden = !lastCards.length && !modeOn;
+}
+
+// "142 products from Amazon, eBay and 3 more"
+function shopFrom() {
+  const sites = [...new Set(lastCards.map(c => c.card.site).filter(Boolean))];
+  return sites.length ? `from ${sites.slice(0, 3).join(", ")}${sites.length > 3 ? ` and ${sites.length - 3} more` : ""}` : "";
 }
 
 function setMode(on) {

@@ -221,7 +221,7 @@ function modelSelect(avail, current, onchange) {
 
 // Shown as soon as a search starts, so it's clear the overview is coming.
 function aiOverviewStart() {
-  if (tab !== "all") return;
+  if (cur().kind !== "web") return;
   fill($("ai-overview"), el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("span", { className: "hint", textContent: "Generating…" })),
     el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: "Generating…" })));
   $("ai-overview").hidden = false;
@@ -230,7 +230,7 @@ function aiOverviewStart() {
 async function renderAiOverview(q, results) {
   const box = $("ai-overview");
   const id = runId;
-  if (!q || tab !== "all" || !results.length) { box.hidden = true; return; }
+  if (!q || cur().kind !== "web" || !results.length) { box.hidden = true; return; }
   const ctx = aiContext(results);
   const body = el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: "Generating…" }));
   const bar = progressBar();
@@ -250,7 +250,7 @@ async function renderAiOverview(q, results) {
     bar.set(0, "");
     status.textContent = `by ${model.name} · from the results below`;
     body.append(el("p", { className: "ai-foot hint" }, "Written on this computer from the results below · check important facts · ",
-      el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; go(); } })));
+      el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } })));
   } catch (e) {
     if (id !== runId) return;
     bar.set(0, ""); status.textContent = "";

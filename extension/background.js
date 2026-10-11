@@ -1,5 +1,5 @@
-// Fetches search result pages for Unitex, in your browser and with your cookies (so results match
-// what you'd see visiting the engine yourself). Only the search engines below can be fetched, and
+// Fetches search result pages (and store search pages) for Unitex, in your browser and with your cookies (so results match
+// what you'd see visiting the engine yourself). Only the sites below can be fetched, and
 // only Unitex pages can ask, so no other site can use the helper.
 // Use the chrome.* API: Chrome only has this one, and Firefox supports it with callbacks too
 // (Firefox's browser.* API is promise-based and rejects the callback style used here).
@@ -7,7 +7,11 @@ const api = globalThis.chrome || globalThis.browser;
 // Only engines with their own index (no resellers of Google's or Bing's results).
 const ALLOWED_HOSTS = ["www.google.com", "www.bing.com", "search.brave.com", "www.mojeek.com",
   // Public SearXNG servers (open-source metasearch)
-  "priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io"];
+  "priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io",
+  // Yandex (its own index, for images)
+  "yandex.com",
+  // Stores, for the Shopping area
+  "www.amazon.com", "www.amazon.com.au", "www.amazon.co.uk", "www.amazon.ca", "www.ebay.com", "www.ebay.com.au", "www.ebay.co.uk", "www.ebay.ca"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {

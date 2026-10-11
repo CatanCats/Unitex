@@ -103,7 +103,7 @@ function bookCard(b) {
       !b.free && b.borrow && el("span", { className: "free-badge borrow", textContent: "Free to borrow" })),
     el("div", { className: "bbody" },
       el("strong", { textContent: b.title }),
-      el("small", { textContent: [b.author, b.year].filter(Boolean).join(" · ") }),
+      el("small", { textContent: [b.author, b.year, b.price].filter(Boolean).join(" · ") }),
       el("span", { className: "via", textContent: b.via })),
     el("div", { className: "bactions" },
       b.read && el("a", { href: b.read, rel: "noopener", className: "btn-primary", textContent: "Read now" }),
@@ -129,26 +129,45 @@ function paperItem(p) {
       el("p", { className: "r-meta" }, el("span", { className: "via", textContent: "found by " + p.via }), copy, tabSave(p, "papers"))));
 }
 
-// ---------- places: list + live map ----------
+// ---------- maps: list + live map, with a choice of maps ----------
+
+const zoomFor = (s, n, w, e) => Math.max(3, Math.min(17, Math.round(Math.log2(360 / Math.max(n - s, e - w, 0.002)))));
+const osm = layer => (p, [s, n, w, e], pad) => `https://www.openstreetmap.org/export/embed.html?bbox=${w - pad},${s - pad},${e + pad},${n + pad}&layer=${layer}&marker=${p.lat},${p.lon}`;
+const MAPS = [
+  { id: "osm",       name: "OpenStreetMap",         by: "© OpenStreetMap contributors", url: osm("mapnik") },
+  { id: "google",    name: "Google Maps",           by: "Map data © Google", url: (p, b) => `https://maps.google.com/maps?q=${p.lat},${p.lon}&z=${zoomFor(...b)}&output=embed` },
+  { id: "satellite", name: "Satellite (Google)",    by: "Imagery © Google", url: (p, b) => `https://maps.google.com/maps?q=${p.lat},${p.lon}&z=${zoomFor(...b)}&t=k&output=embed` },
+  { id: "bing",      name: "Bing Maps",             by: "© Microsoft", url: (p, b) => `https://www.bing.com/maps/embed?h=500&w=700&cp=${p.lat}~${p.lon}&lvl=${zoomFor(...b)}&typ=d&sty=r&src=SHELL&FORM=MBEDV8` },
+  { id: "cycle",     name: "CyclOSM (bikes)",       by: "© OpenStreetMap contributors, CyclOSM", url: osm("cyclosm") },
+  { id: "transport", name: "Public transport",      by: "© OpenStreetMap contributors, Thunderforest", url: osm("transportmap") },
+  { id: "hot",       name: "Humanitarian",          by: "© OpenStreetMap contributors, HOT", url: osm("hot") },
+];
+let mapId = MAPS.some(m => m.id === store.get("unitex.map")) ? store.get("unitex.map") : "osm";
 
 function mapFor(p) {
   const [s, n, w, e] = p.bbox?.length === 4 ? p.bbox : [p.lat - 0.01, p.lat + 0.01, p.lon - 0.015, p.lon + 0.015];
   const pad = Math.max((n - s), (e - w)) * 0.15 || 0.005;
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${w - pad},${s - pad},${e + pad},${n + pad}&layer=mapnik&marker=${p.lat},${p.lon}`;
+  return MAPS.find(m => m.id === mapId).url(p, [s, n, w, e], pad);
 }
 
 function drawPlaces(list) {
   let current = list[0];
-  const frame = el("iframe", { className: "map-frame", title: "Map", src: mapFor(current), loading: "lazy", referrerPolicy: "no-referrer" });
+  const frame = el("iframe", { className: "map-frame", title: "Map", src: mapFor(current), loading: "lazy", referrerPolicy: "no-referrer-when-downgrade", allowFullscreen: true });
+  const credit = el("small", { className: "hint", textContent: "Map " + MAPS.find(m => m.id === mapId).by });
+  const picker = el("div", { className: "map-picker", role: "radiogroup", ariaLabel: "Map" }, ...MAPS.map(m => {
+    const b = el("button", { type: "button", className: "chip" + (m.id === mapId ? " active" : ""), textContent: m.name });
+    b.onclick = () => { mapId = m.id; store.set("unitex.map", m.id); frame.src = mapFor(current); credit.textContent = "Map " + m.by; for (const x of picker.children) x.classList.toggle("active", x === b); };
+    return b;
+  }));
   const items = list.map(p => {
     const li = el("li", { className: "place" + (p === current ? " on" : "") },
       el("button", { type: "button", className: "place-pick", onclick: () => { current = p; frame.src = mapFor(p); for (const x of items) x.classList.toggle("on", x === li); } },
         el("strong", { textContent: p.title }), el("small", { textContent: [p.kind, p.snippet].filter(Boolean).join(" · ") })),
-      el("div", { className: "place-actions" }, el("a", { href: p.url, rel: "noopener", className: "btn-ghost small-btn", textContent: "OpenStreetMap" }),
+      el("div", { className: "place-actions" }, el("span", { className: "via", textContent: p.via }),
         el("a", { href: `https://www.openstreetmap.org/directions?to=${p.lat},${p.lon}`, rel: "noopener", className: "btn-ghost small-btn", textContent: "Directions" }), tabSave(p, "places")));
     return li;
   });
-  return el("div", { className: "places-wrap" }, el("ul", { className: "places" }, ...items), el("div", { className: "map-box" }, frame, el("small", { className: "hint", textContent: "Map © OpenStreetMap contributors" })));
+  return el("div", { className: "places-wrap" }, el("ul", { className: "places" }, ...items), el("div", { className: "map-box" }, picker, frame, credit));
 }
 
 // ---------- news ----------
@@ -162,28 +181,30 @@ function newsItem(n) {
 // ---------- draw the current tab ----------
 
 function drawTab() {
-  const t = TABS.find(x => x.id === tab);
+  const t = cur(), v = t.view;
   let list = [...tabItems];
+  if (t.free) list = list.filter(b => b.free || b.borrow);
   const bar = [];
-  if (t.id === "videos") {
+  if (v === "videos") {
     if (tabFilters.len) list = list.filter(v => v.secs && v.secs >= VIDEO_LEN[tabFilters.len][0] && v.secs < VIDEO_LEN[tabFilters.len][1]);
     if (tabFilters.src) list = list.filter(v => v.via === tabFilters.src);
     if (tabFilters.playable) list = list.filter(playable);
     bar.push(tabSelect("len", "Any length", [["short", "Under 4 min"], ["medium", "4–20 min"], ["long", "Over 20 min"]]), tabSelect("src", "All sources", opts(tabItems.map(v => v.via))), tabCheck("playable", "Plays here"));
-  } else if (t.id === "images") {
+  } else if (v === "images") {
     if (tabFilters.src) list = list.filter(v => v.via === tabFilters.src);
     bar.push(tabSelect("src", "All sources", opts(tabItems.map(v => v.via))));
-  } else if (t.id === "books") {
+  } else if (v === "books") {
     if (tabFilters.free) list = list.filter(b => b.free || b.borrow);
+    if (tabFilters.src) list = list.filter(b => b.via === tabFilters.src);
     if (tabFilters.sort === "new") list.sort((a, b) => (b.year || 0) - (a.year || 0));
     if (tabFilters.sort === "old") list.sort((a, b) => (a.year || 9999) - (b.year || 9999));
-    bar.push(tabCheck("free", "Free to read or borrow"), tabSelect("sort", "Sort: best match", [["new", "Newest first"], ["old", "Oldest first"]]));
-  } else if (t.id === "papers") {
+    bar.push(!t.free && tabCheck("free", "Free to read or borrow"), tabSelect("src", "All sources", opts(tabItems.map(b => b.via))), tabSelect("sort", "Sort: best match", [["new", "Newest first"], ["old", "Oldest first"]]));
+  } else if (v === "papers") {
     if (tabFilters.free) list = list.filter(p => p.free);
     if (tabFilters.sort === "cites") list.sort((a, b) => (b.cites || 0) - (a.cites || 0));
     if (tabFilters.sort === "new") list.sort((a, b) => (b.year || 0) - (a.year || 0));
     bar.push(tabCheck("free", "Free to read"), tabSelect("sort", "Sort: best match", [["cites", "Most cited"], ["new", "Newest first"]]));
-  } else if (t.id === "news") {
+  } else if (v === "news") {
     if (tabFilters.outlet) list = list.filter(n => n.outlet === tabFilters.outlet);
     if (tabFilters.region) list = list.filter(n => n.region === tabFilters.region);
     if (tabFilters.sort !== "match") list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
@@ -193,15 +214,15 @@ function drawTab() {
   const grid = $("media-grid"), results = $("results"), images = $("image-grid");
   for (const x of [grid, results, images]) x.replaceChildren();
   grid.hidden = images.hidden = true;
-  $("tab-bar").hidden = !bar.length;
+  $("tab-bar").hidden = !bar.filter(Boolean).length;
   fill($("tab-bar"), ...bar, el("span", { className: "hint", textContent: `${list.length} of ${tabItems.length}` }));
 
-  if (t.id === "videos") { fill(grid, ...list.map(videoCard)); grid.className = "media-grid videos"; grid.hidden = false; }
-  else if (t.id === "images") { fill(images, ...list.map((im, i) => { const a = imageTile(im); if (a) a.onclick = e => { e.preventDefault(); viewImage(list, i); }; return a; }).filter(Boolean)); images.hidden = false; }
-  else if (t.id === "books") { fill(grid, ...list.map(bookCard)); grid.className = "media-grid books"; grid.hidden = false; }
-  else if (t.id === "papers") results.replaceChildren(...list.map(paperItem));
-  else if (t.id === "places") { if (list.length) results.replaceChildren(el("li", { className: "places-li" }, drawPlaces(list))); }
-  else if (t.id === "news") results.replaceChildren(...list.map(newsItem).filter(Boolean));
+  if (v === "videos") { fill(grid, ...list.map(videoCard)); grid.className = "media-grid videos"; grid.hidden = false; }
+  else if (v === "images") { fill(images, ...list.map((im, i) => { const a = imageTile(im); if (a) a.onclick = e => { e.preventDefault(); viewImage(list, i); }; return a; }).filter(Boolean)); images.hidden = false; }
+  else if (v === "books") { fill(grid, ...list.map(bookCard)); grid.className = "media-grid books"; grid.hidden = false; }
+  else if (v === "papers") results.replaceChildren(...list.map(paperItem));
+  else if (v === "maps") { if (list.length) results.replaceChildren(el("li", { className: "places-li" }, drawPlaces(list))); }
+  else if (v === "news") results.replaceChildren(...list.map(newsItem).filter(Boolean));
   else results.replaceChildren(...list.map(resultItem).filter(Boolean));
 
   $("status").textContent = list.length ? `${list.length} ${t.noun}` : "";
@@ -210,7 +231,7 @@ function drawTab() {
 
 // Called by search.js with the merged items for a media tab.
 function showTab(items) {
-  if (tabFiltersFor !== tab) { tabFilters = {}; tabFiltersFor = tab; }
+  if (tabFiltersFor !== tab + "/" + sub) { tabFilters = {}; tabFiltersFor = tab + "/" + sub; }
   tabItems = items;
   drawTab();
 }

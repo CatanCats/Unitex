@@ -86,6 +86,7 @@ function buildUrl(rawQuery, opts = {}) {
   if (engine.local) {
     const p = new URLSearchParams({ q: query });
     if (opts.topic && opts.topic !== "all") p.set("topic", opts.topic);
+    if (opts.tab && opts.tab !== "all") p.set("tab", opts.tab);
     return "search.html?" + p;
   }
   if (engine.web && opts.sites && query) {
