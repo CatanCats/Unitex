@@ -201,6 +201,21 @@ const STORE_DOMAINS = {
   ebay:   { AU: "www.ebay.com.au",   UK: "www.ebay.co.uk",   US: "www.ebay.com",   CA: "www.ebay.ca",   NZ: "www.ebay.com.au", "*": "www.ebay.com" },
 };
 const storeHost = (store, region) => STORE_DOMAINS[store][region] || STORE_DOMAINS[store]["*"];
+// Stores load pictures late: the real address is in data-src, data-defer-load, srcset… and src is a
+// tiny placeholder. This finds the real picture.
+const PLACEHOLDER_IMG = /^data:|s_1x2|1x1|spacer|blank|placeholder|transparent|loading|grey\.gif|pixel/i;
+function bestImg(img, base) {
+  if (!img) return undefined;
+  const fromSet = v => v && v.split(",").map(x => x.trim().split(/\s+/)[0]).filter(Boolean).pop();
+  const cands = [img.getAttribute("data-defer-load"), img.getAttribute("data-src"), img.getAttribute("data-lazy-src"), img.getAttribute("data-original"), img.getAttribute("data-image"),
+    fromSet(img.getAttribute("data-srcset")), fromSet(img.getAttribute("srcset")), fromSet(img.closest("picture")?.querySelector("source")?.getAttribute("srcset")), img.getAttribute("src")];
+  for (const c of cands) {
+    if (!c || PLACEHOLDER_IMG.test(c)) continue;
+    const u = unwrapLink(c.replace(/^\/\//, "https://"), base);
+    if (u) return u;
+  }
+  return undefined;
+}
 const txt = n => (n?.textContent || "").replace(/\s+/g, " ").trim();
 const PRICE_TEXT = /(?:[A-Z]{1,3}\s?)?[$£€]\s?\d[\d,]*(?:\.\d\d)?/;
 const product = (o, via, site) => o.url && o.title && { title: o.title, url: o.url, image: o.image, domain: (() => { try { return new URL(o.url).hostname.replace(/^www\./, ""); } catch { return ""; } })(), via,
@@ -211,7 +226,7 @@ function parseAmazon(doc, base, via) {
   return [...doc.querySelectorAll("[data-component-type='s-search-result'][data-asin]")].filter(c => c.dataset.asin && !c.querySelector(".puis-sponsored-label-text, .s-sponsored-label-info-icon")).map(c => {
     const a = c.querySelector("h2 a[href], a.a-link-normal[href*='/dp/']");
     const rating = parseFloat(txt(c.querySelector(".a-icon-alt"))) || undefined;
-    return product({ title: txt(c.querySelector("h2")), url: a && unwrapLink(a.getAttribute("href"), base)?.replace(/\/ref=.*$/, ""), image: c.querySelector("img.s-image")?.getAttribute("src"),
+    return product({ title: txt(c.querySelector("h2")), url: a && unwrapLink(a.getAttribute("href"), base)?.replace(/\/ref=.*$/, ""), image: bestImg(c.querySelector("img.s-image"), base),
       price: txt(c.querySelector(".a-price:not(.a-text-price) .a-offscreen")) || undefined, rating,
       reviews: txt(c.querySelector("[aria-label$='ratings'], .s-underline-text")).replace(/[^\d,.K]/g, "") || undefined }, via, site);
   }).filter(Boolean).slice(0, 20);
@@ -223,8 +238,9 @@ function parseEbay(doc, base, via) {
     const a = c.querySelector("a.s-item__link[href], a.su-link[href], a[href*='/itm/']");
     const title = txt(c.querySelector(".s-item__title, .s-card__title")).replace(/^New listing\s*/i, "");
     if (!a || !title || /^shop on ebay$/i.test(title)) return null;
-    const img = c.querySelector("img");
-    return product({ title, url: unwrapLink(a.getAttribute("href"), base)?.replace(/\?.*$/, ""), image: img?.getAttribute("src")?.startsWith("http") ? img.getAttribute("src") : img?.getAttribute("data-src"),
+    // eBay's real photo is in data-defer-load / srcset; src is a 1×2 placeholder until it scrolls into view.
+    const image = bestImg(c.querySelector(".s-item__image img, .s-card__image img, img"), base);
+    return product({ title, url: unwrapLink(a.getAttribute("href"), base)?.replace(/\?.*$/, ""), image: image?.replace(/\/s-l\d+\./, "/s-l500."),
       price: txt(c.querySelector(".s-item__price, .s-card__price")) || undefined, condition: txt(c.querySelector(".SECONDARY_INFO, .s-card__subtitle")) || undefined }, via, site);
   }).filter(Boolean).slice(0, 20);
 }
@@ -241,7 +257,7 @@ function parsePriced(doc, base, via, skipHost) {
     const a = [...box.querySelectorAll("a[href]")].find(x => { const u = unwrapLink(x.getAttribute("href"), base); return u && !skipHost.test(new URL(u).hostname); }) || box.querySelector("a[href]");
     const url = a && unwrapLink(a.getAttribute("href"), base);
     const title = txt(box.querySelector("h3, h4, [role=heading]")) || [...box.querySelectorAll("a, span, div")].map(txt).filter(t => t.length > 12 && !PRICE_TEXT.test(t)).sort((x, y) => y.length - x.length)[0];
-    const img = [...box.querySelectorAll("img")].map(i => i.getAttribute("src") || i.getAttribute("data-src")).find(s => /^https?:/.test(s || ""));
+    const img = [...box.querySelectorAll("img")].map(i => bestImg(i, base)).find(Boolean);
     let site;
     try { site = new URL(url).hostname.replace(/^www\./, ""); } catch { continue; }
     const store = txt(box.querySelector("cite, .merchant, [class*=merchant], [class*=seller]")) || site;

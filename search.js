@@ -235,7 +235,27 @@ const VIDEO_SOURCES = {
   }},
 };
 
+// A news story counts only if it's about the search: every word for short searches, most words for long ones.
+const NEWS_STOP = new Set("the a an of in on for to and or with at by from is are was were be what how why who when where news latest today new".split(" "));
+function newsMatches(item, q) {
+  const ws = q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2 && !NEWS_STOP.has(w));
+  if (!ws.length) return true;
+  const text = `${item.title || ""} ${item.snippet || ""}`.toLowerCase();
+  const hits = ws.filter(w => new RegExp(`(^|[^\\p{L}])${w.replace(/(es|s)$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|es)?($|[^\\p{L}])`, "u").test(text)).length;
+  return ws.length <= 2 ? hits === ws.length : hits >= Math.ceil(ws.length * 0.6);
+}
+// News search feeds (Google News, Bing News, Yahoo News) and every news website's own feed, read like the home page.
+const newsItem_ = s => ({ title: s.title, url: s.url, thumb: s.image, snippet: s.summary, via: s.via[0], outlet: s.source, region: s.region, ts: s.published, meta: s.published ? ago(s.published) : "" });
 const NEWS_SOURCES = {
+  googlenews: { name: "Google News", async run(q) { return parseFeed(await readFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&${gnParams()}`), "Google News").map(newsItem_); } },
+  bingnews: { name: "Bing News", async run(q) { return parseFeed(await readFeed(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`), "Bing News").map(newsItem_); } },
+  yahoonews: { name: "Yahoo News", async run(q) { return parseFeed(await readFeed(`https://news.search.yahoo.com/rss?p=${encodeURIComponent(q)}`), "Yahoo News").map(newsItem_); } },
+  websites: { name: "News websites (100+ feeds)", async run(q) {
+    if (!feedConfig) await outletFeeds(NEWS_SECTIONS[0]);
+    const feeds = Object.values(feedConfig || {}).flatMap(c => c.feeds).filter(f => !f.aggregator);
+    const lists = await Promise.all(feeds.map(f => withTimeout(readFeed(f.url)).then(x => parseFeed(x, f.source, f.source).map(i => ({ ...i, source: f.source, region: f.region })), () => [])));
+    return lists.flat().filter(i => newsMatches({ title: i.title, snippet: i.summary }, q)).map(newsItem_);
+  }},
   gdelt: { name: "GDELT (world news index)", async run(q) {
     const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=25&format=json&sort=datedesc`);
     return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
@@ -254,7 +274,7 @@ const BOOK_SOURCES = {
   }},
   googlebooks: { paged: true, name: "Google Books", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12&startIndex=${P * 12}`);
-    return (d.items || []).map(({ volumeInfo: v, accessInfo: a }) => ({ title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180),
+    return (d.items || []).map(({ volumeInfo: v, accessInfo: a, saleInfo: sale }) => ({ price: sale?.saleability === "FREE" ? "$0" : sale?.retailPrice ? `${sale.retailPrice.currencyCode === "GBP" ? "£" : "$"}${sale.retailPrice.amount}` : undefined, title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180),
       author: v.authors?.slice(0, 2).join(", "), year: +year(v.publishedDate) || undefined, free: a?.viewability === "ALL_PAGES" || a?.epub?.isAvailable && a?.accessViewStatus === "FULL_PUBLIC_DOMAIN", meta: [v.authors?.slice(0, 2).join(", "), year(v.publishedDate)].filter(Boolean).join(" · ") }));
   }},
   gutenberg: { paged: true, name: "Project Gutenberg (free e-books)", async run(q, { page: P = 0 } = {}) {
@@ -596,7 +616,34 @@ function renderNotice() {
 
 // ---------- topic box ----------
 
-function renderTopicSites() { $("topic-sites").hidden = true; }
+// The topic's specialist sites (realestate.com.au, Domain, SEEK, carsales…), each with what happened:
+// read directly (with how many listings), searched through the engines, needs Unitex Helper, or switched off.
+function renderTopicSites(settled) {
+  const box = $("topic-sites");
+  const topic = topicById(topicId);
+  const sites = topic.id !== "all" ? topicSites(topic) : [];
+  if (!sites.length || cur().kind !== "web") { box.hidden = true; return; }
+  const direct = directSites();
+  const byName = Object.fromEntries((settled || []).map(x => [x.n, x]));
+  const on = !!helperVersion();
+  const found = d => (settled || []).flatMap(x => x.r || []).filter(r => { const h = host(r.url); return h === d || h.endsWith("." + d); }).length;
+  fill(box,
+    el("span", { className: "row-label", textContent: `${topic.name} sites` }),
+    ...sites.map(st => {
+      const id = Object.keys(LISTING_SITES).find(k => LISTING_SITES[k].name === st.domain && direct.includes(k));
+      const r = id && byName["listing_" + id];
+      const isOff = offSites.has(st.domain);
+      const n = settled ? found(st.domain) : 0;
+      const state = isOff ? "off" : r ? (r.err ? "bad" : "ok") : on ? "ok" : id ? "ok" : "locked";
+      const note = isOff ? "switched off" : r ? (r.err ? r.err.message : `${r.r.length} read directly`) : on ? (settled ? `${n} found` : "searching…") : id ? "reading directly…" : "needs Unitex Helper";
+      const b = el("button", { type: "button", className: "src " + state, title: (isOff ? "Click to search it again" : "Click to leave it out") + " · " + note },
+        { ok: "✓ ", bad: "✕ ", off: "○ ", locked: "🔒 " }[state], domainIcon(st.domain), " ", st.name, el("small", { textContent: " " + note }));
+      b.onclick = () => { isOff ? offSites.delete(st.domain) : offSites.add(st.domain); store.set("unitex.offsites", [...offSites]); go(); };
+      return b;
+    }),
+    !on && el("a", { className: "src locked", href: "install.html", textContent: "Get Unitex Helper to search them all" }));
+  box.hidden = false;
+}
 
 // ---------- rows & tabs ----------
 
@@ -677,9 +724,30 @@ function renderAnswer(a) {
 let runId = 0;
 let lastTopic = topicId;
 document.addEventListener("unitex-saved-changed", () => { if (MODES[topicId] && !$("cards").hidden) drawCards(); });
-const settle = (sources, q, page = 0) => Promise.all(Object.entries(sources)
-  .filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n) && (!page || s.paged))
-  .map(([n, s]) => s.run(q, { page }).then(r => ({ n, r: r || [] }), err => ({ n, err }))));
+// Each source's answer is kept for 2 minutes, so going back to a tab or a search is instant.
+// onEach gets the answers so far every time one more source answers, so results show as they arrive.
+const settleCache = new Map();
+function runCached(n, s, q, page) {
+  const key = [n, q, page, topicId, regionId, [...offSites].join(",")].join("|");
+  const hit = settleCache.get(key);
+  if (hit && Date.now() - hit.t < 120000) return hit.p;
+  const p = Promise.resolve().then(() => s.run(q, { page })).then(r => ({ n, r: r || [] }), err => ({ n, err }));
+  settleCache.set(key, { t: Date.now(), p });
+  p.then(x => { if (x.err) settleCache.delete(key); });
+  return p;
+}
+const settle = (sources, q, page = 0, onEach) => {
+  const done = [];
+  return Promise.all(Object.entries(sources)
+    .filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n) && (!page || s.paged))
+    .map(([n, s]) => runCached(n, s, q, page).then(x => { done.push(x); onEach?.(done.slice()); return x; })));
+};
+// Runs fn at most every 150 ms while answers keep coming in.
+function throttled(fn) {
+  let t = null;
+  const run = () => { t = null; fn(); };
+  return { now() { clearTimeout(t); t = null; }, soon() { if (!t) t = setTimeout(run, 150); } };
+}
 const MAIN_SOURCES = Object.fromEntries(Object.entries(SOURCES).filter(([, s]) => s.group === "main"));
 const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ searxng: "SearXNG result pages" }[e.id] || e.name));
 const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
@@ -705,16 +773,38 @@ const STRIP_SOURCES = Object.fromEntries(Object.entries(IMAGE_SOURCES).filter(([
 // It keeps going as long as any source returns something new.
 let more = null;
 const STEP = { web: 10, images: 40, videos: 24, books: 24, news: 20, papers: 15, maps: 50, code: 15 };
+// When the Show more button comes near the screen, the next page is fetched ahead, so it's ready on click.
+const moreObserver = "IntersectionObserver" in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) prefetchMore(); }, { rootMargin: "1500px" }) : null;
+function prefetchMore() {
+  const m = more;
+  if (!m || m.busy || m.done || m.pf || m.aheadEmpty >= 2) return;
+  m.pf = (async () => {
+    m.page++;
+    const n = await m.fetch(m.page);
+    m.aheadEmpty = n ? 0 : (m.aheadEmpty || 0) + 1;
+  })().finally(() => { m.pf = null; });
+}
 function moreButton(kind, label) {
   if (!more) return null;
   const b = el("button", { type: "button", className: "show-more", textContent: more.done ? "That's everything the sources returned" : more.busy ? "Loading more…" : label, disabled: more.done || more.busy });
   b.onclick = () => showMore(kind);
+  moreObserver?.observe(b);
   return b;
 }
 async function showMore(kind) {
   const m = more;
   if (!m || m.busy || m.done) return;
-  if (m.reveal(kind)) return;
+  // A page being fetched ahead: show its first answers as soon as there are any.
+  if (m.pf) {
+    if (m.reveal(kind)) { return; }
+    m.busy = true; m.redraw();
+    while (m.pf && m === more && !m.reveal(kind)) await new Promise(r => setTimeout(r, 150));
+    m.busy = false;
+    if (m !== more) return;
+    if (!m.pf) { if (m.reveal(kind)) return; }
+    else { m.redraw(); return; }
+  }
+  if (m.reveal(kind)) { setTimeout(prefetchMore, 300); return; }
   m.busy = true; m.redraw();
   let added = 0;
   for (let tries = 0; tries < 3 && !added; tries++) {
@@ -784,25 +874,35 @@ async function go() {
     $("status").textContent = `Searching ${(c.subName && c.sub !== "all" ? c.subName : c.name).toLowerCase()}…`;
     if (c.kind === "list") $("results").replaceChildren(...skeletons(4));
     const cardSrc = c.topic !== "all" ? cardSourcesFor(c.topic) : {};
-    const [settled, cardSettled] = await Promise.all([settle(c.sources, q), settle(cardSrc, query)]);
+    const keyOf = c.kind === "images" ? i => i.thumb : r => urlKey(r.url);
+    // News: only stories that are really about the search.
+    const relevantOnly = list => c.view === "news" ? list.map(s => ({ ...s, r: (s.r || []).filter(i => newsMatches(i, q)) })) : list;
+    // Engines' own sections first (they're the biggest indexes), then the open sources.
+    const order = list => relevantOnly([...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))]).map(s => s.r || []);
+    const step = STEP[c.view] || 20;
+    tabLimit = step;
+    // Show items as each source answers.
+    let soFar = [];
+    const paint = throttled(() => { if (id === runId && soFar.some(s => s.r?.length)) showTab(roundRobin(order(soFar), keyOf)); });
+    const [settled, cardSettled] = await Promise.all([settle(c.sources, q, 0, s => { soFar = s; paint.soon(); }), settle(cardSrc, query)]);
+    paint.now();
     if (id !== runId) return;
     renderSources([...cardSettled, ...settled], { ...cardSrc, ...c.sources }, lockedFor(c.sources));
     if (Object.keys(cardSrc).length) showCards([], cardSettled.flatMap(s => s.r || []));
-    const keyOf = c.kind === "images" ? i => i.thumb : r => urlKey(r.url);
-    // Engines' own sections first (they're the biggest indexes), then the open sources.
-    const order = list => [...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))].map(s => s.r || []);
-    const step = STEP[c.view] || 20;
-    tabLimit = step;
     more = {
       page: 0,
       reveal(kind, force) { if (force || tabLimit < filteredCount()) { tabLimit += step; drawTab(); return !force; } return false; },
       async fetch(page) {
-        const next = await settle(c.sources, q, page);
-        if (id !== runId) return 0;
-        const seen = new Set(tabItems.map(keyOf));
-        const fresh = roundRobin(order(next), keyOf).filter(i => !seen.has(keyOf(i)));
-        tabItems.push(...fresh);
-        return fresh.length;
+        let added = 0, n = 0;
+        await settle(c.sources, q, page, d => {
+          if (id !== runId) return;
+          const seen = new Set(tabItems.map(keyOf));
+          const fresh = roundRobin(order(d.slice(n)), keyOf).filter(i => !seen.has(keyOf(i)));
+          n = d.length;
+          tabItems.push(...fresh);
+          added += fresh.length;
+        });
+        return id === runId ? added : 0;
       },
       redraw: () => drawTab(),
     };
@@ -811,15 +911,34 @@ async function go() {
   }
 
   if (!c.shop && !MODES[topicId]) aiOverviewStart();
+  renderTopicSites();
   $("results").replaceChildren(...skeletons(5));
   $("status").textContent = c.shop ? "Searching every store…" : "Searching…";
 
   const cardSrc = cardSourcesFor(topicId);
-  const [settled, images, cardSettled] = await Promise.all([settle(MAIN_SOURCES, query), tab === "all" && topicId === "all" ? settle(STRIP_SOURCES, query) : [], settle(cardSrc, query)]);
   wikiAnswer(query).catch(() => {});
+  // Draw results as each source answers, instead of waiting for the slowest one.
+  let mainSoFar = [], cardsSoFar = [], aiStarted = false;
+  const total = Object.entries({ ...MAIN_SOURCES, ...cardSrc }).filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n)).length;
+  const paint = throttled(() => {
+    if (id !== runId) return;
+    const { main } = mergeMain(mainSoFar);
+    const rest = showCards(main.filter(r => !siteOff(r)), roundRobin(cardsSoFar.map(s => s.r || [])).filter(r => !siteOff(r)));
+    if (rest.length || lastCards.length) { drawResults(rest, c); if (!MODES[topicId]) drawCards(); }
+    $("status").textContent = `Searching… ${mainSoFar.length + cardsSoFar.length} of ${total} sources answered`;
+    renderTopicSites([...mainSoFar, ...cardsSoFar]);
+    // The AI overview starts once there's enough to read.
+    if (!aiStarted && !c.shop && !MODES[topicId] && main.length >= 8) { aiStarted = true; renderAiOverview(query, main); }
+  });
+  const [settled, images, cardSettled] = await Promise.all([
+    settle(MAIN_SOURCES, query, 0, s => { mainSoFar = s; paint.soon(); }),
+    tab === "all" && topicId === "all" ? settle(STRIP_SOURCES, query) : [],
+    settle(cardSrc, query, 0, s => { cardsSoFar = s; paint.soon(); })]);
+  paint.now();
   if (id !== runId) return;
 
   const { main } = mergeMain(settled);
+  renderTopicSites([...settled, ...cardSettled]);
   renderSources([...cardSettled, ...settled], { ...cardSrc, ...MAIN_SOURCES }, [...LOCKED_ENGINES(), ...lockedFor(cardSrc)]);
 
   // On a topic, results from its specialist sites (and the stores) become cards; the rest stay as a list.
@@ -834,15 +953,20 @@ async function go() {
       if (force || shown < rest.length) { shown += STEP.web; drawResults(rest, c); return !force; }
       return false;
     },
+    // Next page: each source's answer is added as soon as it arrives.
     async fetch(page) {
-      const [s1, s2] = await Promise.all([settle(MAIN_SOURCES, query, page), settle(cardSrc, query, page)]);
-      if (id !== runId) return 0;
-      const fresh = mergeMain(s1).main.filter(r => !seen.has(urlKey(r.url)) && !siteOff(r));
-      const freshCards = roundRobin(s2.map(s => s.r || [])).filter(r => !seen.has(urlKey(r.url)) && !siteOff(r));
-      for (const r of [...fresh, ...freshCards]) seen.add(urlKey(r.url));
-      const newRest = appendCards(fresh, freshCards);
-      rest = [...rest, ...newRest];
-      return fresh.length + freshCards.length;
+      let added = 0, n1 = 0, n2 = 0;
+      const take = (list, isCard) => {
+        if (id !== runId) return;
+        for (const x of list) {
+          const items = (isCard ? x.r || [] : mergeMain([x]).main).filter(r => !seen.has(urlKey(r.url)) && !siteOff(r));
+          for (const r of items) seen.add(urlKey(r.url));
+          if (isCard) appendCards([], items); else rest = [...rest, ...appendCards(items, [])];
+          added += items.length;
+        }
+      };
+      await Promise.all([settle(MAIN_SOURCES, query, page, d => { take(d.slice(n1), false); n1 = d.length; }), settle(cardSrc, query, page, d => { take(d.slice(n2), true); n2 = d.length; })]);
+      return id === runId ? added : 0;
     },
     redraw() { drawResults(rest, c); drawCards(); },
   };
@@ -850,7 +974,7 @@ async function go() {
   drawCards();
   if (!c.shop && !MODES[topicId] && !main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
-  if (!c.shop && !MODES[topicId]) renderAiOverview(query, main);
+  if (!c.shop && !MODES[topicId] && !aiStarted) renderAiOverview(query, main);
   const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
   if (tiles.length && tab === "all" && topicId === "all") {
     fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; sub = ""; go(); } }));

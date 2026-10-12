@@ -98,15 +98,20 @@ function viewImage(list, i) {
 
 // ---------- books ----------
 
+// A book that costs $0 is free, whatever the store calls it.
+const bookFree = b => b.free || (b.price != null && money(String(b.price)) === 0);
 function bookCard(b) {
+  const free = bookFree(b);
+  const price = free ? "Free" : b.price;
   return el("article", { className: "bcard" },
     el("a", { className: "bcover", href: b.url, rel: "noopener" },
       b.thumb ? el("img", { src: b.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }) : el("span", { textContent: b.title }),
-      b.free && el("span", { className: "free-badge", textContent: "Free to read" }),
-      !b.free && b.borrow && el("span", { className: "free-badge borrow", textContent: "Free to borrow" })),
+      free && el("span", { className: "free-badge", textContent: b.read || b.free ? "Free to read" : "Free" }),
+      !free && b.borrow && el("span", { className: "free-badge borrow", textContent: "Free to borrow" })),
     el("div", { className: "bbody" },
       el("strong", { textContent: b.title }),
-      el("small", { textContent: [b.author, b.year, b.price].filter(Boolean).join(" · ") }),
+      el("small", { textContent: [b.author, b.year].filter(Boolean).join(" · ") }),
+      price && el("span", { className: "book-price" + (free ? " free" : ""), textContent: price }),
       !isSelf(b.via, b.url) && el("span", { className: "via", textContent: b.via })),
     el("div", { className: "bactions" },
       b.read && el("a", { href: b.read, rel: "noopener", className: "btn-primary", textContent: "Read now" }),
@@ -186,7 +191,7 @@ function newsItem(n) {
 function drawTab() {
   const t = cur(), v = t.view;
   let list = [...tabItems];
-  if (t.free) list = list.filter(b => b.free || b.borrow);
+  if (t.free) list = list.filter(b => bookFree(b) || b.borrow);
   const bar = [];
   if (v === "videos") {
     if (tabFilters.len) list = list.filter(v => v.secs && v.secs >= VIDEO_LEN[tabFilters.len][0] && v.secs < VIDEO_LEN[tabFilters.len][1]);
@@ -197,7 +202,7 @@ function drawTab() {
     if (tabFilters.src) list = list.filter(v => v.via === tabFilters.src);
     bar.push(tabSelect("src", "All sources", opts(tabItems.map(v => v.via))));
   } else if (v === "books") {
-    if (tabFilters.free) list = list.filter(b => b.free || b.borrow);
+    if (tabFilters.free) list = list.filter(b => bookFree(b) || b.borrow);
     if (tabFilters.src) list = list.filter(b => b.via === tabFilters.src);
     if (tabFilters.sort === "new") list.sort((a, b) => (b.year || 0) - (a.year || 0));
     if (tabFilters.sort === "old") list.sort((a, b) => (a.year || 9999) - (b.year || 9999));

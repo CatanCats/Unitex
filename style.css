@@ -769,3 +769,11 @@ body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(220px, 1f
 .tf-actions button { border: 0; cursor: pointer; }
 @media (max-width: 560px) { .tf-field.wide { grid-column: 1 / -1; } .tf-grid { grid-template-columns: 1fr 1fr; } }
 .tf-field .f-input { font-weight: 400; }
+
+/* Specialist sites row (realestate.com.au, Domain, SEEK…) */
+.ts-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -6px 0 16px; padding: 0; border: 0; background: none; box-shadow: none; }
+body.mode-on #topic-sites:not([hidden]) { display: flex !important; }
+.ts-row .row-label { width: auto; margin-right: 4px; }
+.ts-row button.src { display: inline-flex; align-items: center; gap: 4px; }
+.ts-row button.src small { font-weight: 500; }
+.book-price { font-weight: 700; font-size: 0.85rem; } .book-price.free { color: #1f8a4c; }

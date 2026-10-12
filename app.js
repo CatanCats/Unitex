@@ -126,6 +126,7 @@ function renderTabs() {
     const b = el("button", { type: "button", role: "tab", textContent: t.name });
     b.setAttribute("aria-selected", t.id === feedId);
     b.onclick = () => { if (feedId === t.id) return; feedId = t.id; shown = PAGE; store.set("unitex.feed", t.id); renderTabs(); loadNews(); };
+    b.onpointerenter = () => preloadSection(t); // start reading a section as soon as the pointer is on its tab
     return b;
   }));
 }
@@ -164,13 +165,36 @@ function renderNews() {
 
 function renderNewsStatus() {}
 
-let loadSeq = 0;
-async function loadNews() {
+// Sections read ahead of time (in the background, or when hovering their tab), so switching is instant.
+const preloading = new Map();
+function preloadSection(section) {
+  const have = liveCache.get(section.id);
+  if (have && Date.now() - have.at < NEWS_REFRESH_MS) return Promise.resolve(have);
+  if (!preloading.has(section.id)) preloading.set(section.id, loadSection(section).finally(() => preloading.delete(section.id)));
+  return preloading.get(section.id);
+}
+async function preloadOtherSections() {
+  for (const s of NEWS_SECTIONS) {
+    if (s.id === feedId) continue;
+    await new Promise(r => (window.requestIdleCallback || setTimeout)(r, { timeout: 2000 }));
+    await preloadSection(s).catch(() => {});
+  }
+}
+
+let loadSeq = 0, preloadStarted = false;
+async function loadNews(force) {
   const section = NEWS_SECTIONS.find(s => s.id === feedId);
   const seq = ++loadSeq;
   const cached = liveCache.get(section.id);
   current = cached ? { ...cached, pending: 0 } : { stories: [], report: [], pending: 1, at: 0 };
   renderNews();
+  // Read in the last few minutes (preloaded): show it as it is.
+  if (cached && !force && Date.now() - cached.at < NEWS_REFRESH_MS) return;
+  if (!cached && preloading.has(section.id)) {
+    const r = await preloading.get(section.id).catch(() => null);
+    if (seq !== loadSeq) return;
+    if (r) { current = { ...r, pending: 0 }; renderNews(); return; }
+  }
   const result = await loadSection(section, (stories, report, pending) => {
     if (seq !== loadSeq || (cached && pending)) return; // a refresh replaces the tiles once, when it's done
     current = { stories, report, pending, at: Date.now() };
@@ -179,10 +203,11 @@ async function loadNews() {
   if (seq !== loadSeq) return;
   current = { ...result, pending: 0 };
   renderNews();
+  if (!preloadStarted) { preloadStarted = true; setTimeout(preloadOtherSections, 1500); }
 }
 // Fresh stories every few minutes while the page is open, and when you come back to the tab.
-setInterval(() => { if (!document.hidden) loadNews(); }, NEWS_REFRESH_MS);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - current.at > NEWS_REFRESH_MS) loadNews(); });
+setInterval(() => { if (!document.hidden) loadNews(true); }, NEWS_REFRESH_MS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - current.at > NEWS_REFRESH_MS) loadNews(true); });
 
 // ---------- helper update banner ----------
 

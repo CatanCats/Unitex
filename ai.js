@@ -101,8 +101,9 @@ async function aiAvailability(m) {
       return { state: "no", why: "needs Chrome 138 or newer on a computer that supports built-in AI" };
     }
     if (!navigator.gpu) return { state: "no", why: "this browser doesn't have WebGPU (use a recent Chrome or Edge on a computer)" };
-    if (!webllm) webllm = await import(WEBLLM_URL);
-    return { state: await webllm.hasModelInCache(await webModelId(m)) ? "ready" : "download" };
+    // Checking WebLLM's cache would mean downloading WebLLM (several MB) on every page, so Unitex
+    // remembers which models it has already downloaded instead.
+    return { state: store.get("unitex.ai.downloaded", {})[m.id] ? "ready" : "download" };
   } catch (e) { return { state: "no", why: e.message }; }
 }
 
@@ -166,6 +167,7 @@ async function aiGenerate(m, messages, onText, onProgress) {
   if (!webEngine_) { webEngine_ = await webllm.CreateMLCEngine(id, { initProgressCallback: progress }); webEngineModel = id; }
   else if (webEngineModel !== id) { webEngine_.setInitProgressCallback?.(progress); await webEngine_.reload(id); webEngineModel = id; }
   onProgress?.(1, "");
+  store.set("unitex.ai.downloaded", { ...store.get("unitex.ai.downloaded", {}), [m.id]: true });
   const msgs = m.base.startsWith("Qwen3") ? messages.map((x, i) => i === messages.length - 1 ? { ...x, content: x.content + " /no_think" } : x) : messages;
   const chunks = await webEngine_.chat.completions.create({ messages: msgs, stream: true, temperature: 0.3, max_tokens: 500 });
   let out = "";
