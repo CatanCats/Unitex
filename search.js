@@ -733,7 +733,6 @@ function drawResults(rest, c) {
   const list = rest.filter(r => !siteOff(r));
   const items = list.slice(0, shown).map(resultItem).filter(Boolean);
   $("results").replaceChildren(...items);
-  if (c.shop || MODES[topicId]) items.length && $("results").prepend(el("li", { className: "results-head" }, el("h2", { textContent: "More from the web" })));
   const b = moreButton("web", "Show more results");
   if (b && list.length) $("results").append(el("li", { className: "more-li" }, b));
 }
