@@ -24,6 +24,15 @@ const cleanTitle = t => {
 const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event" };
 
 // Turns an ordinary result from one of the topic's sites into a card.
+// What one listing's address looks like on each kind of site (eBay /itm/123, Gumtree /s-ad/…, Amazon /dp/…).
+const LISTING_PATH = {
+  product: /\/(itm|dp|gp\/product|p|ip|product|products|prod|item|items|listing|listings|s-ad|a|buy|sku|offer|marketplace\/item)\/|\/[a-z0-9-]*\d{5,}|\.html$|-p\d+/,
+  car: /\/(cars?-for-sale|car|cars\/details|details|vehicle|vehicles|listing|listings|s-ad|a|motors\/[a-z-]+\/listing)\/|\d{6,}/,
+  house: /\/(property|properties|listing|listings|homedetails|rent|sale|buy|s-ad|a|for-sale|to-rent)[\/-]|\d{6,}/,
+  job: /\/(job|jobs\/view|viewjob|rc\/clk|job-detail|jobs?\/[a-z0-9-]+-\d+|vacanc(y|ies)|s-ad|a)\b|\d{6,}/,
+  event: /\/(e|event|events|whats-on|tickets?)\/|\d{6,}/,
+  recipe: /recipe/,
+};
 function cardFor(r, topic) {
   if (r.card) return r;
   const kind = CARD_KINDS[topic.id];
@@ -32,6 +41,13 @@ function cardFor(r, topic) {
   if (!site) return null;
   const t = textOf(r);
   const price = t.match(PRICE_RE)?.[0];
+  // A search engine's link only becomes a card when it is one listing (an item, a job ad, a property),
+  // not the site's news, blog, help or search pages.
+  let path = "";
+  try { path = new URL(r.url).pathname.toLowerCase(); } catch { return null; }
+  if (/\/(news|blog|blogs|article|articles|story|stories|guide|guides|advice|help|about|info|press|careers|magazine|insights?|community|forum|faq)(\/|$)/.test(path) || path.length < 3) return null;
+  if (!(LISTING_PATH[kind] || /./).test(path)) return null;
+  if (["product", "car"].includes(kind) && !(price && priceNum(price) > 0) && !/\bfree\b/i.test(r.title)) return null; // no price, no card
   const base = { title: cleanTitle(r.title), price, site: site.name };
   const card = {
     house: () => ({ kind, address: base.title, price, beds: num(/(\d+)\s*(?:bed|br\b|bedroom)/i, t), baths: num(/(\d+)\s*(?:bath)/i, t), cars: num(/(\d+)\s*(?:car|parking|garage)/i, t),
@@ -107,18 +123,25 @@ function eventInRange(when, range) {
   return { Today: t >= start && t < start + day, Tonight: t >= start && t < start + day && d.getHours() >= 17, "This weekend": (() => { const sat = start + ((6 - now.getDay() + 7) % 7) * day; return t >= sat - (now.getDay() === 0 ? day : 0) && t < sat + 2 * day; })(),
     "This week": t >= start && t < start + 7 * day, "This month": t >= start && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() }[range] ?? true;
 }
+// The filter fields for the current search. Choices saved in the filters belong to the search they
+// made; a newly typed search fills the fields from its own words ("casual jobs in gold coast").
+function formState(id = topicId) {
+  const saved = store.get("unitex.form." + id, {});
+  return saved._q && saved._q === query ? saved : guessForm(id, query);
+}
+const many = x => [].concat(x || []).filter(Boolean);
 function formMatches(c) {
-  const v = store.get("unitex.form." + topicId, {});
+  const v = formState();
   const k = c.card, t = lc([cardTitle(c), c.title, c.snippet, k.company, k.location, k.worktype, k.type, k.condition, k.cuisine, k.category, (k.genres || []).join(" "), k.network, (c.tags || []).join(" "), k.venue, k.place, k.price].join(" "));
   const extras = (v.extras || []).every(x => EXTRA_WORDS[x] ? EXTRA_WORDS[x].test(t) : has(t, x));
   if (!extras) return false;
   switch (topicId) {
     case "jobs":
-      if (v.worktype && !has(lc(`${k.worktype} ${t}`), v.worktype)) return false;
+      if (many(v.worktype).length && !many(v.worktype).some(w => has(lc(`${k.worktype} ${t}`), w))) return false;
       if (v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
       if (v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
       if (v.salary && !(salaryTop(k.salary) >= +String(v.salary).replace(/\D/g, ""))) return false;
-      if (v.where && !has(lc(k.location), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && /remote|anywhere/i.test(k.location || ""))) return false;
+      if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && /remote|anywhere/i.test(k.location || ""))) return false;
       return true;
     case "houses":
       if (v.type && !has(lc(`${k.type} ${t}`), v.type)) return false;
@@ -152,28 +175,31 @@ function formMatches(c) {
 }
 
 function applyFilters(cards) {
+  const form = TOPIC_FORMS[topicId];
+  const fromForm = form?.filters ? Object.fromEntries(Object.entries(form.filters(formState())).filter(([, x]) => x !== undefined && x !== "")) : {};
+  const F = { ...fromForm, ...filters };
   let out = cards.filter(c => {
     const p = priceOf(c), k = c.card;
-    if (filters.min && (p == null || p < filters.min)) return false;
-    if (filters.max && (p == null || p > filters.max)) return false;
-    if (filters.beds && !(k.beds >= filters.beds)) return false;
-    if (filters.site && k.site !== filters.site) return false;
-    if (filters.yearMin && !(k.year >= filters.yearMin)) return false;
-    if (filters.salaryOnly && !k.salary) return false;
-    if (filters.category && k.category !== filters.category && k.cuisine !== filters.category) return false;
-    if (filters.genre && !(k.genres || []).includes(filters.genre)) return false;
-    if (filters.ratingMin && !(k.rating >= filters.ratingMin)) return false;
-    if (filters.baths && !(k.baths >= filters.baths)) return false;
-    if (filters.carsMin && !(k.cars >= filters.carsMin)) return false;
-    if (filters.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") <= filters.kmMax)) return false;
-    if (filters.priced && p == null) return false;
-    if (filters.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
-    if (filters.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
+    if (F.min && (p == null || p < F.min)) return false;
+    if (F.max && (p == null || p > F.max)) return false;
+    if (F.beds && !(k.beds >= F.beds)) return false;
+    if (F.site && k.site !== F.site) return false;
+    if (F.yearMin && !(k.year >= F.yearMin)) return false;
+    if (F.salaryOnly && !k.salary) return false;
+    if (F.category && k.category !== F.category && k.cuisine !== F.category) return false;
+    if (F.genre && !(k.genres || []).includes(F.genre)) return false;
+    if (F.ratingMin && !(k.rating >= F.ratingMin)) return false;
+    if (F.baths && !(k.baths >= F.baths)) return false;
+    if (F.carsMin && !(k.cars >= F.carsMin)) return false;
+    if (F.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") <= F.kmMax)) return false;
+    if (F.priced && p == null) return false;
+    if (F.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
+    if (F.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
     // Every field chosen in the filters must match: a Casual job search shows only casual jobs.
     return formMatches(c);
   });
   const by = { "price-asc": (a, b) => (priceOf(a) ?? Infinity) - (priceOf(b) ?? Infinity), "price-desc": (a, b) => (priceOf(b) ?? -1) - (priceOf(a) ?? -1),
-    "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[filters.sort];
+    "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[F.sort];
   if (by) out = [...out].sort(by);
   return out;
 }
@@ -338,11 +364,26 @@ function guessForm(topicIdNow, q) {
   const where = q.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1];
   const beds = q.match(/(\d)\s*(?:bed|br\b|bedroom)/i)?.[1];
   const type = q.match(/\b(house|apartment|townhouse|unit|villa|land|acreage)s?\b/i)?.[1];
-  const max = q.match(/under\s*\$?([\d,]+k?)/i)?.[1];
-  if (topicIdNow === "houses") return { deal: /\bshare\b/i.test(q) ? "share" : listingKind(q), where, beds: beds && `${beds}+`, type: type && type[0].toUpperCase() + type.slice(1).toLowerCase(), max: max?.replace(/,/g, "") };
-  if (topicIdNow === "jobs") { const p = jobParts(q); return { what: p.what, where: p.where }; }
-  if (topicIdNow === "cars") return { where, max: max?.replace(/,/g, ""), deal: /\bnew\b/i.test(q) ? "new" : "used" };
-  return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim() };
+  const max = q.match(/under\s*\$?([\d,]+k?)/i)?.[1]?.replace(/,/g, "").replace(/k$/i, "000");
+  const pick = (list, re = x => new RegExp(`\\b${x.replace(/ /g, "[- ]?")}\\b`, "i")) => list.filter(x => re(x).test(q));
+  const cap = x => x && x[0].toUpperCase() + x.slice(1).toLowerCase();
+  if (topicIdNow === "houses") return { deal: /\bshare\b/i.test(q) ? "share" : listingKind(q), where, beds: beds && `${beds}+`, type: cap(type), max,
+    extras: pick(["Pets allowed", "Furnished", "Pool", "Garden", "Air conditioning"], x => EXTRA_WORDS[x]) };
+  if (topicIdNow === "jobs") {
+    const p = jobParts(q), sal = q.match(/\$\s?([\d,]+)(k)?\s*\+?/i);
+    return { what: p.what, where: p.where, worktype: pick(["Full time", "Part time", "Casual", "Contract", "Internship"]),
+      level: /\b(senior|lead)\b/i.test(q) ? "Senior" : /\b(entry level|junior|graduate)\b/i.test(q) ? "Entry level" : /\bmid[- ]level\b/i.test(q) ? "Mid level" : "",
+      extras: pick(["Remote", "Work from home", "Visa sponsorship", "No experience needed"]).concat(/\bno experience\b/i.test(q) && !/no experience needed/i.test(q) ? ["No experience needed"] : []),
+      salary: sal ? String(+sal[1].replace(/,/g, "") * (sal[2] ? 1000 : 1)) : "" };
+  }
+  if (topicIdNow === "cars") {
+    const make = q.match(new RegExp(`\\b(${CAR_MAKES})\\b`, "i"))?.[1];
+    const model = make && q.match(new RegExp(`\\b${make}\\s+([a-z0-9-]+)`, "i"))?.[1];
+    return { where, max, deal: /\bnew\b/i.test(q) ? "new" : /\bused\b|second[- ]hand/i.test(q) ? "used" : "any", make: cap(make), model: model && !/^(for|in|under|car|cars)$/i.test(model) ? cap(model) : "",
+      body: cap(q.match(/\b(sedan|hatchback|suv|ute|wagon|van|coupe|convertible)\b/i)?.[1])?.replace(/^Suv$/, "SUV"), fuel: cap(q.match(/\b(petrol|diesel|hybrid|electric)\b/i)?.[1]),
+      gearbox: cap(q.match(/\b(automatic|manual)\b/i)?.[1]), yearMin: q.match(/\b((?:19|20)\d{2})\+/)?.[1] };
+  }
+  return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim(), max, where };
 }
 
 // The topic's fill-in fields as filters: changing a choice searches again; typed fields search on Enter.
@@ -350,15 +391,15 @@ function formFilters(topicIdNow) {
   const form = TOPIC_FORMS[topicIdNow];
   if (!form) return null;
   const key = "unitex.form." + topicIdNow;
-  const v = { ...guessForm(topicIdNow, query), ...store.get(key, {}) };
+  const v = { ...formState(topicIdNow) };
   const apply = () => {
-    store.set(key, v);
-    // Fields that only narrow the results (work type, must-haves…) apply at once; the search runs again too.
-    drawCards();
     const q = form.build(v);
-    if (!q) return;
+    store.set(key, { ...v, _q: q || query });
+    if (!q) { drawCards(); return; }
+    // Fields that only narrow the results (work type, must-haves…) apply at once; the search runs again too.
+    query = q; drawCards();
     const f = form.filters ? Object.fromEntries(Object.entries(form.filters(v)).filter(([, x]) => x !== undefined)) : {};
-    query = q; filters = { ...filters, ...f }; lastTopic = topicId;
+    filters = { ...filters, ...f }; lastTopic = topicId;
     go();
   };
   const control = (k, f) => {
@@ -375,22 +416,18 @@ function formFilters(topicIdNow) {
     return inp;
   };
   return el("div", { className: "mf-form" }, ...Object.entries(form.fields).map(([k, f]) => el("label", { className: "mf-field" }, f.label && el("span", { textContent: f.label }), control(k, f))),
-    el("button", { type: "button", className: "btn-ghost mf-clear", textContent: "Clear filters", onclick: () => { store.set(key, {}); filters = {}; drawCards(); } }));
+    el("button", { type: "button", className: "btn-ghost mf-clear", textContent: "Clear filters", onclick: () => { store.set(key, {}); filters = {}; query = form.build({}) || query; store.set(key, { _q: query }); go(); } }));
 }
 
 // "12 homes for rent in Brunswick VIC", like the listing sites' headline.
 function cardsHeadline(topic, n) {
-  const v = { ...store.get("unitex.form." + topic.id, {}) };
-  // A typed search counts too: "web developer jobs in Melbourne" → what and where.
-  if (topic.id === "jobs" && !v.what) Object.assign(v, (({ what, where }) => ({ what, where: v.where || where }))(jobParts(query)));
-  if (!v.where) v.where = query.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1] || "";
-  if (topic.id === "houses" && !store.get("unitex.form.houses", {}).deal) v.deal = listingKind(query);
+  const v = { ...formState(topic.id) };
   const mode = MODES[topic.id];
   const where = v.where && ` in ${v.where}`;
   const one = mode.noun.replace(/e?s$/, "");
   const noun = n === 1 ? one : mode.noun;
   if (topic.id === "houses") return `${n} ${n === 1 ? "home" : "homes"} ${v.deal === "rent" ? "for rent" : v.deal === "share" ? "to share" : "for sale"}${where || ""}`;
-  if (topic.id === "jobs") return `${n} ${v.what ? v.what + " " : ""}${n === 1 ? "job" : "jobs"}${where || ""}`;
+  if (topic.id === "jobs") return `${n} ${[many(v.worktype).join(" or ").toLowerCase(), v.what].filter(Boolean).join(" ")}${n === 1 ? " job" : " jobs"}${where || ""}`.replace(/^(\d+)\s+/, "$1 ");
   if (topic.id === "cars") return `${n} ${[v.make, v.model].filter(Boolean).join(" ") || ""} ${n === 1 ? "car" : "cars"} for sale${where || ""}`.replace(/\s+/g, " ");
   return `${n} ${noun}${query ? ` for “${query}”` : ""}`;
 }
@@ -426,6 +463,7 @@ function drawCards() {
     extras);
   const top = el("div", { className: "mode-top" },
     el("h2", { textContent: query ? cardsHeadline(topic, shown.length) : `${mode.icon} ${mode.name}` }),
+    query && lastCards.length > shown.length && el("span", { className: "hint mode-hidden", textContent: `${lastCards.length - shown.length} hidden: they don't match your filters` }),
     shop && query && el("span", { className: "hint", textContent: shopFrom() }),
     el("div", { className: "mode-tools" },
       modeOn && sortSelect(kind),
@@ -435,7 +473,7 @@ function drawCards() {
     modeOn && listPanel(topic),
     ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
     !query ? el("p", { className: "hint mode-empty", textContent: "Set the filters on the left, or type a search above." })
-      : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode.noun} could be read for this search yet.` }) : null,
+      : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
     shown.length > 0 && moreBtn);
   fill(box, modeOn ? el("div", { className: "mode-layout" }, side, main) : main);
@@ -508,11 +546,11 @@ const TOPIC_FORMS = {
   jobs: { title: "💼 Find a job", fields: {
       what: { label: "Job title or keywords", placeholder: "e.g. junior web developer", wide: true },
       where: { label: "Where", placeholder: "City or suburb" },
-      worktype: anyOf("Work type", ["Full time", "Part time", "Casual", "Contract", "Internship"]),
+      worktype: { type: "checks", label: "Work type", options: opt(["Full time", "Part time", "Casual", "Contract", "Internship"]) },
       level: anyOf("Experience", ["Entry level", "Mid level", "Senior"]),
       salary: { label: "Minimum salary", placeholder: "$ per year", type: "number" },
       extras: { type: "checks", label: "Options", options: opt(["Remote", "Work from home", "Visa sponsorship", "No experience needed"]) } },
-    build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", v.worktype?.toLowerCase(), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`),
+    build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", many(v.worktype).map(w => w.toLowerCase()), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`),
     filters: v => ({ salaryOnly: !!v.salary || undefined }) },
 
   cars: { title: "🚗 Find a car", fields: {
