@@ -30,20 +30,31 @@ function icon(e) {
 // ---------- regions & topics ----------
 
 function guessRegion() {
-  for (const lang of navigator.languages || [navigator.language || ""]) {
-    const r = (lang.split("-")[1] || "").toUpperCase();
-    const id = r === "GB" ? "UK" : r;
-    if (REGIONS.some(x => x.id === id)) return id;
-  }
-  // Many browsers say just "en" or "en-US"; the time zone is a better hint.
+  // The time zone first: many computers in Australia, NZ and the UK still say "en-US".
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
   if (tz.startsWith("Australia/")) return "AU";
   if (tz === "Pacific/Auckland" || tz === "Pacific/Chatham") return "NZ";
   if (tz === "Europe/London") return "UK";
   if (/^America\/(Toronto|Vancouver|Edmonton|Winnipeg|Halifax|St_Johns|Regina|Montreal)/.test(tz)) return "CA";
   if (/^(America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit)|Pacific\/Honolulu)/.test(tz)) return "US";
+  for (const lang of navigator.languages || [navigator.language || ""]) {
+    const r = (lang.split("-")[1] || "").toUpperCase();
+    const id = r === "GB" ? "UK" : r;
+    if (REGIONS.some(x => x.id === id)) return id;
+  }
   return "*";
 }
+
+// A place in the search decides the country for that search: "jobs in Melbourne" → Australia.
+const PLACE_REGIONS = {
+  AU: /\b(australia|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|canberra|gold coast|sunshine coast|newcastle|geelong|wollongong|cairns|townsville|ballarat|bendigo|toowoomba|launceston|parramatta|nsw|vic|qld|tas|act|new south wales|victoria|queensland|tasmania|western australia|south australia|northern territory)\b/i,
+  NZ: /\b(new zealand|nz|auckland|wellington|christchurch|hamilton|tauranga|dunedin|queenstown)\b/i,
+  UK: /\b(uk|united kingdom|england|scotland|wales|london|manchester|birmingham|leeds|glasgow|edinburgh|liverpool|bristol|sheffield|cardiff|belfast)\b/i,
+  CA: /\b(canada|toronto|vancouver|montreal|calgary|ottawa|edmonton|winnipeg|ontario|quebec|british columbia|alberta)\b/i,
+  US: /\b(usa|united states|new york|los angeles|chicago|houston|san francisco|seattle|boston|austin|miami|denver|atlanta|dallas|phoenix|california|texas|florida)\b/i,
+};
+const regionFromQuery = q => Object.keys(PLACE_REGIONS).find(id => PLACE_REGIONS[id].test(q || "")) || "";
+
 let regionId = REGIONS.some(r => r.id === store.get("unitex.region")) ? store.get("unitex.region") : guessRegion();
 function setRegion(id) { regionId = id; store.set("unitex.region", id); }
 
@@ -52,7 +63,8 @@ const topicById = id => TOPICS.find(t => t.id === id) || TOPICS[0];
 // Sites for a topic in the current region, local ones first.
 function topicSites(topic) {
   if (!topic.sites) return [];
-  const local = regionId !== "*" ? topic.sites[regionId] || [] : [];
+  // Worldwide: every country's sites (SEEK, Indeed, realestate.com.au, Rightmove, Zillow…), not just the global ones.
+  const local = regionId !== "*" ? topic.sites[regionId] || [] : Object.entries(topic.sites).filter(([k]) => k !== "*").flatMap(([, v]) => v);
   const seen = new Set();
   return [...local, ...(topic.sites["*"] || [])]
     .map(([domain, name, url]) => ({ domain, name: name || domain, url }))

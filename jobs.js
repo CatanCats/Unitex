@@ -143,7 +143,7 @@ function jobSourcesFor() {
   // Local job sites first (SEEK, LinkedIn, Indeed, Jora), then the remote-job boards.
   const out = {};
   for (const [id, s] of Object.entries(JOB_SITES)) {
-    if (s.regions && !s.regions.includes(regionId)) continue;
+    if (s.regions && regionId !== "*" && !s.regions.includes(regionId)) continue;
     out["jobsite_" + id] = { ...s, paged: true, enabled: () => !!helperVersion() };
   }
   for (const [id, s] of Object.entries(JOB_BOARDS)) out["jobs_" + id] = s;

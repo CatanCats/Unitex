@@ -926,7 +926,11 @@ function renderDepartment() {
   d.onchange = () => { const [t, s1] = DEPARTMENTS[+d.value]; tab = t; sub = s1; userPicked = true; autoMode = null; go(); };
 }
 
+let savedRegion = null;
 async function go() {
+  // A place in the search ("in Melbourne") picks the country for this search, without changing the setting.
+  if (savedRegion === null) savedRegion = regionId;
+  regionId = regionFromQuery(query) || store.get("unitex.region", savedRegion) || savedRegion;
   // A search on the All tab that clearly needs a mode opens in it.
   autoMode = null;
   if (query && !userPicked && tab === "all" && (!sub || sub === "all") && wholeWebFor !== query) {
