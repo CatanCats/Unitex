@@ -173,6 +173,12 @@ function mapFor(p) {
   return MAPS.find(m => m.id === mapId).url(p, [s, n, w, e], pad);
 }
 
+// No places could be read: the map still shows the search itself (Google's map finds "cafes in brisbane").
+function queryMap() {
+  return el("div", { className: "map-box wide" },
+    el("iframe", { className: "map-frame", title: "Map", src: `https://maps.google.com/maps?q=${encodeURIComponent(query)}&output=embed`, loading: "lazy", referrerPolicy: "no-referrer-when-downgrade", allowFullscreen: true }),
+    el("small", { className: "hint", textContent: "Map data © Google" }));
+}
 function drawPlaces(list) {
   let current = list[0];
   const frame = el("iframe", { className: "map-frame", title: "Map", src: mapFor(current), loading: "lazy", referrerPolicy: "no-referrer-when-downgrade", allowFullscreen: true });
@@ -262,18 +268,18 @@ function drawTab() {
   for (const x of [grid, results, images]) x.replaceChildren();
   grid.hidden = images.hidden = true;
   $("tab-bar").hidden = false;
-  fill($("tab-bar"), sourcesPicker(), ...bar, el("span", { className: "hint", textContent: `${total} of ${tabItems.length}` }));
+  fill($("tab-bar"), sourcesPicker(), ...bar, total < tabItems.length && el("span", { className: "hint", textContent: `${tabItems.length - total} hidden by filters` }));
 
   if (v === "videos") { fill(grid, ...list.map(videoCard)); grid.className = "media-grid videos"; grid.hidden = false; }
   else if (v === "images") { fill(images, ...list.map((im, i) => { const a = imageTile(im); if (a) a.onclick = e => { e.preventDefault(); viewImage(list, i); }; return a; }).filter(Boolean)); images.hidden = false; }
   else if (v === "books") { fill(grid, ...list.map(bookCard)); grid.className = "media-grid books"; grid.hidden = false; }
   else if (v === "papers") results.replaceChildren(...list.map(paperItem));
-  else if (v === "maps") { if (list.length) results.replaceChildren(el("li", { className: "places-li" }, drawPlaces(list))); }
+  else if (v === "maps") results.replaceChildren(el("li", { className: "places-li" }, list.length ? drawPlaces(list) : queryMap()));
   else if (v === "news") results.replaceChildren(...list.map(newsItem).filter(Boolean));
   else results.replaceChildren(...list.map(resultItem).filter(Boolean));
 
   $("status").textContent = list.length ? `Showing ${list.length} ${t.noun}` : "";
-  if (!list.length) results.replaceChildren(empty(tabItems.length ? "Nothing matches these filters." : `No ${t.noun} found for this search.`));
+  if (!list.length && v !== "maps") results.replaceChildren(empty(tabItems.length ? "Nothing matches these filters." : `No ${t.noun} found for this search.`));
   let row = $("tab-more");
   if (!row) { row = el("div", { id: "tab-more", className: "more-row" }); $("media-grid").after(row); }
   fill(row, list.length && v !== "maps" && moreButton(v, `Show more ${t.noun}`));

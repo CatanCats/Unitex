@@ -316,7 +316,9 @@ async function runProvider(id, q, messages, onText, onProgress) {
 
 // The order to try: the chosen one, then (without asking) the engines, AI with your keys and AI on this computer.
 async function providerChain(first) {
-  const { tries } = aiEnabled() ? await pickModel() : { tries: [] };
+  const { tries: all, avail } = aiEnabled() ? await pickModel() : { tries: [], avail: {} };
+  // Models on this computer join in only once downloaded: a big download never starts by itself.
+  const tries = all.filter(m => m === first || avail[m]?.state === "ready");
   const keyed = [settings.keys.anthropic && "key-claude", settings.keys.openai && "key-openai", settings.keys.gemini && "key-gemini"].filter(Boolean);
   const engines = helperVersion() ? ["google", "bing", "brave"] : [];
   return [...new Set([first, ...engines, ...keyed, ...tries])];
@@ -363,7 +365,7 @@ async function renderAiOverview(q, results, chosen = settings.overview || "googl
       if (id !== runId) return;
       bar.set(0, "");
       pick.value = pid;
-      fill(note, failed.length ? `${failed.map(f => `${providerName(f.id)}: ${f.why}`).join(" · ")}. This one is by ${providerName(pid)}. ` : `By ${providerName(pid)}${AI_SOURCES[pid] ? ", from its own results page" : ", from the results below"} · check important facts · `,
+      fill(note, `By ${providerName(pid)}${AI_SOURCES[pid] ? ", from its own results page" : ", from the results below"} · check important facts · `,
         el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } }));
       return;
     } catch (e) {
@@ -373,8 +375,9 @@ async function renderAiOverview(q, results, chosen = settings.overview || "googl
       failed.push({ id: pid, why: e.message });
     }
   }
-  fill(body, el("p", { className: "hint", textContent: `No AI could write an overview: ${failed.map(f => `${providerName(f.id)}: ${f.why}`).join(" · ") || "this browser can't run AI on this computer"}. Pick another AI above, or add a key in ⚙ Settings.` }));
-  fill(note);
+  // Like the engines: when there's no overview, there's no overview box.
+  if (failed.length) console.info("AI overview:", failed.map(f => `${providerName(f.id)}: ${f.why}`).join(" · "));
+  box.hidden = true;
 }
 
 // The AI answers in the engines' own result pages (with Unitex Helper). Only shown when one is found.
@@ -431,7 +434,7 @@ async function renderAiTab(q, results) {
     } catch (e) {
       answer.content = "";
       answer.el = e instanceof NeedsSignIn ? el("div", {}, signInButton(pid, () => { aiThread.turns = aiThread.turns.filter(t => t !== answer); busy = false; ask(question, pid); }))
-        : el("p", { className: "hint", textContent: `${providerName(pid)} couldn't answer: ${e.message}` });
+        : el("p", { className: "hint", textContent: /needs Unitex Helper/.test(e.message) ? `${providerName(pid)} needs Unitex Helper. Pick another AI above.` : `${providerName(pid)} can't be reached right now. Pick another AI above, or add your own key in ⚙ Settings.` });
     }
     bar.set(0, "");
     busy = false;
