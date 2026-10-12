@@ -987,3 +987,12 @@ body:not(.web-tab) .tools-row { max-width: none; }
 .intent-note a { color: var(--accent); font-weight: 700; }
 .vcard .vvia { display: block; opacity: 0.75; font-size: 0.7rem; }
 .vcard .vbody small b { color: var(--fg); }
+
+/* Images: where a picture is from shows on hover (or keyboard focus) only. */
+.img-tile .img-via { opacity: 0; transition: opacity .15s; }
+.img-tile:hover .img-via, .img-tile:focus-visible .img-via { opacity: 1; }
+@media (hover: none) { .img-tile .img-via { display: none; } }
+/* The tools row (Search engines and sources…) sits at the top left and scrolls with the page. */
+.tools-row { position: static; margin: 0 0 12px; }
+body.mode-on .tools-row { max-width: none; }
+.did-you-mean { margin: 0 0 12px; }

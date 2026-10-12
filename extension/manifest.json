@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Unitex Helper",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek, Yandex and SearXNG, live news from Google News, Bing News, Yahoo News and news websites, and products from stores, by loading their pages in your own browser.",
   "host_permissions": [
     "https://www.google.com/*",
@@ -192,7 +192,20 @@
     "https://www.ticketmaster.com/*",
     "https://www.ticketmaster.com.au/*",
     "https://www.zillow.com/*",
-    "https://www.zoopla.co.uk/*"
+    "https://www.zoopla.co.uk/*",
+    "https://cleantechnica.com/*",
+    "https://electrek.co/*",
+    "https://en.wikinews.org/*",
+    "https://globalvoices.org/*",
+    "https://insideevs.com/*",
+    "https://lemmy.ml/*",
+    "https://lemmy.world/*",
+    "https://mander.xyz/*",
+    "https://mastodon.social/*",
+    "https://restofworld.org/*",
+    "https://tildes.net/*",
+    "https://www.democracynow.org/*",
+    "https://www.teslarati.com/*"
   ],
   "background": {
     "service_worker": "background.js",

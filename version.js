@@ -1,6 +1,7 @@
 // The newest Unitex Helper version, and what changed. Bump this together with extension/manifest.json.
-const HELPER_LATEST = "1.7.0";
+const HELPER_LATEST = "1.8.0";
 const HELPER_CHANGES = {
+  "1.8.0": "More news: Teslarati, Electrek, CleanTechnica, InsideEVs, Rest of World, Global Voices, Democracy Now!, Wikinews, Tildes, and Lemmy and Mastodon community feeds.",
   "1.7.0": "Reads houses, cars, events, recipes and films straight from the companies: Homely, rent.com.au, view.com.au, Allhomes, Zoopla, Zillow, Trade Me, carsales, Autotrader, Drive, Gumtree, Cars.com, Eventbrite, Ticketmaster, Moshtix, Meetup, taste.com.au, Allrecipes, BBC Good Food, RecipeTin Eats and IMDb.",
   "1.6.0": "Reads jobs straight from SEEK, LinkedIn, Indeed and Jora, and Yahoo News search.",
   "1.5.0": "Reads the news live: Google News, Bing News, Yahoo News and over 100 news websites' own feeds, fresh every time you open Unitex.",

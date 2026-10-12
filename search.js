@@ -251,7 +251,7 @@ const NEWS_SOURCES = {
   googlenews: { name: "Google News", async run(q) { return parseFeed(await readFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&${gnParams()}`), "Google News").map(newsItem_); } },
   bingnews: { name: "Bing News", async run(q) { return parseFeed(await readFeed(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`), "Bing News").map(newsItem_); } },
   yahoonews: { name: "Yahoo News", async run(q) { return parseFeed(await readFeed(`https://news.search.yahoo.com/rss?p=${encodeURIComponent(q)}`), "Yahoo News").map(newsItem_); } },
-  websites: { name: "News websites (100+ feeds)", async run(q) {
+  websites: { name: "News websites (150+ feeds)", async run(q) {
     if (!feedConfig) await outletFeeds(NEWS_SECTIONS[0]);
     const feeds = Object.values(feedConfig || {}).flatMap(c => c.feeds).filter(f => !f.aggregator);
     const lists = await Promise.all(feeds.map(f => withTimeout(readFeed(f.url)).then(x => parseFeed(x, f.source, f.source).map(i => ({ ...i, source: f.source, region: f.region })), () => [])));
@@ -661,7 +661,7 @@ document.addEventListener("click", e => { if (pickerOpen && !e.target.closest(".
 // The tools row under the tabs on the All tab (and other list pages): engines and sources, and the country.
 function renderTools() {
   const c = cur();
-  if (c.kind !== "web" || modeOn) return;
+  if (c.kind !== "web") return;
   fill($("tab-bar"), sourcesPicker(), el("label", { className: "tool-label" }, "Country ", countrySelect()));
   $("tab-bar").hidden = !query;
 }
@@ -669,8 +669,8 @@ function renderTools() {
 function renderSources(settled, sources, extraLocked = []) {
   panelState = { settled, sources, locked: extraLocked };
   const c = cur();
+  if (c.kind === "web") renderTools();
   if (modeOn && !$("cards").hidden) drawCards();
-  else if (c.kind === "web") renderTools();
   else if (["images", "cards", "list", "covers"].includes(c.kind) && tabItems.length) drawTab();
 }
 
@@ -831,9 +831,17 @@ let more = null;
 let spellHint = "";
 
 // "Did you mean …?" and "Related searches", like the big engines.
-function renderSpelling() {
+// Shown only on the All tab, and only when a word looks misspelled: the suggestion changes a word that
+// the results themselves hardly use (a real word, like "jaguar", turns up in the results).
+function renderSpelling(results = []) {
   const box = $("did-you-mean");
-  const hint = spellHint && spellHint.toLowerCase() !== query.toLowerCase() ? spellHint : "";
+  let hint = cur().id === "all" && !modeOn && spellHint && spellHint.toLowerCase() !== query.toLowerCase() ? spellHint : "";
+  if (hint) {
+    const have = new Set(query.toLowerCase().split(/\s+/)), want = new Set(hint.toLowerCase().split(/\s+/));
+    const changed = [...have].filter(w => !want.has(w) && w.length > 2);
+    const text = results.slice(0, 10).map(r => `${r.title} ${r.snippet || ""}`).join(" ").toLowerCase();
+    if (!changed.length || changed.some(w => (text.match(new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g")) || []).length >= 2)) hint = "";
+  }
   fill(box, hint && el("span", {}, "Did you mean ", el("a", { href: "#", textContent: hint, onclick: e => { e.preventDefault(); query = hint; go(); } }), "?"));
   box.hidden = !hint;
 }
@@ -1093,7 +1101,7 @@ async function go() {
   }
 
   $("status").textContent = MODES[topicId] ? "" : `${main.length} results`;
-  renderSpelling();
+  renderSpelling(main);
   if (!c.shop && !MODES[topicId] && main.length) renderRelated(query, id);
 }
 

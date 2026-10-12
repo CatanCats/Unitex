@@ -362,10 +362,7 @@ function drawCards() {
   const side = modeOn && el("aside", { className: "mode-filters" },
     el("h3", { textContent: "Filters" }),
     formFilters(topic.id),
-    extras,
-    el("h3", { className: "mf-sources", textContent: "Search engines and sources" }),
-    sourcesList(),
-    el("label", { className: "mf-field" }, el("span", { textContent: "Country" }), countrySelect()));
+    extras);
   const top = el("div", { className: "mode-top" },
     el("h2", { textContent: query ? cardsHeadline(topic, shown.length) : `${mode.icon} ${mode.name}` }),
     shop && query && el("span", { className: "hint", textContent: shopFrom() }),

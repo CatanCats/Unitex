@@ -303,6 +303,36 @@
         "region": "Global",
         "url": "https://www.yahoo.com/news/rss",
         "aggregator": true
+      },
+      {
+        "source": "Global Voices",
+        "region": "Global",
+        "url": "https://globalvoices.org/feed/"
+      },
+      {
+        "source": "Democracy Now!",
+        "region": "US",
+        "url": "https://www.democracynow.org/democracynow.rss"
+      },
+      {
+        "source": "Wikinews",
+        "region": "Global",
+        "url": "https://en.wikinews.org/w/index.php?title=Special:NewPages&feed=rss&namespace=0"
+      },
+      {
+        "source": "Tildes",
+        "region": "Community",
+        "url": "https://tildes.net/topics.rss"
+      },
+      {
+        "source": "Lemmy · World News",
+        "region": "Community",
+        "url": "https://lemmy.world/feeds/c/worldnews.xml?sort=Hot"
+      },
+      {
+        "source": "Mastodon · #news",
+        "region": "Community",
+        "url": "https://mastodon.social/tags/news.rss"
       }
     ]
   },
@@ -474,6 +504,36 @@
         "region": "Global",
         "url": "https://www.yahoo.com/tech/rss",
         "aggregator": true
+      },
+      {
+        "source": "Teslarati",
+        "region": "Global",
+        "url": "https://www.teslarati.com/feed/"
+      },
+      {
+        "source": "Electrek",
+        "region": "Global",
+        "url": "https://electrek.co/feed/"
+      },
+      {
+        "source": "CleanTechnica",
+        "region": "Global",
+        "url": "https://cleantechnica.com/feed/"
+      },
+      {
+        "source": "InsideEVs",
+        "region": "Global",
+        "url": "https://insideevs.com/rss/news/all/"
+      },
+      {
+        "source": "Rest of World",
+        "region": "Global",
+        "url": "https://restofworld.org/feed/latest/"
+      },
+      {
+        "source": "Lemmy · Technology",
+        "region": "Community",
+        "url": "https://lemmy.world/feeds/c/technology.xml?sort=Hot"
       }
     ]
   },
@@ -552,6 +612,11 @@
         "region": "Global",
         "url": "https://www.yahoo.com/news/rss/science",
         "aggregator": true
+      },
+      {
+        "source": "Lemmy · Science",
+        "region": "Community",
+        "url": "https://mander.xyz/feeds/c/science.xml?sort=Hot"
       }
     ]
   },
@@ -778,6 +843,21 @@
         "region": "Global",
         "url": "https://www.bing.com/news/search?q=open+source+software&format=rss",
         "aggregator": true
+      },
+      {
+        "source": "Lemmy · Open Source",
+        "region": "Community",
+        "url": "https://lemmy.ml/feeds/c/opensource.xml?sort=Hot"
+      },
+      {
+        "source": "Lemmy · Linux",
+        "region": "Community",
+        "url": "https://lemmy.ml/feeds/c/linux.xml?sort=Hot"
+      },
+      {
+        "source": "Mastodon · #opensource",
+        "region": "Community",
+        "url": "https://mastodon.social/tags/opensource.rss"
       }
     ]
   }

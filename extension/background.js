@@ -19,6 +19,9 @@ ALLOWED_HOSTS.push("9to5google.com", "9to5linux.com", "9to5mac.com", "blog.mozil
 ALLOWED_HOSTS.push("www.seek.com.au", "www.seek.co.nz", "www.linkedin.com", "au.indeed.com", "uk.indeed.com", "www.indeed.com", "ca.indeed.com", "nz.indeed.com", "au.jora.com", "nz.jora.com", "news.search.yahoo.com");
 // Houses, cars, events, recipes and IMDb, read straight from each section's companies.
 ALLOWED_HOSTS.push("flatmates.com.au", "v3.sg.media-imdb.com", "view.com.au", "www.allhomes.com.au", "www.allrecipes.com", "www.autotrader.ca", "www.autotrader.co.uk", "www.autotrader.com", "www.autotrader.com.au", "www.bbcgoodfood.com", "www.cars.com", "www.carsales.com.au", "www.drive.com.au", "www.eventbrite.co.uk", "www.eventbrite.com", "www.eventbrite.com.au", "www.homely.com.au", "www.imdb.com", "www.meetup.com", "www.moshtix.com.au", "www.onthemarket.com", "www.realestate.co.nz", "www.realtor.ca", "www.realtor.com", "www.recipetineats.com", "www.rent.com.au", "www.skiddle.com", "www.taste.com.au", "www.ticketmaster.com", "www.ticketmaster.com.au", "www.zillow.com", "www.zoopla.co.uk");
+// More news: Teslarati, Electrek, CleanTechnica, InsideEVs, Rest of World, Global Voices, Democracy Now!,
+// Wikinews, Tildes, and community feeds on Lemmy and Mastodon.
+ALLOWED_HOSTS.push("cleantechnica.com", "electrek.co", "en.wikinews.org", "globalvoices.org", "insideevs.com", "lemmy.ml", "lemmy.world", "mander.xyz", "mastodon.social", "restofworld.org", "tildes.net", "www.democracynow.org", "www.teslarati.com");
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {
