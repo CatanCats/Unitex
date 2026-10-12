@@ -94,12 +94,49 @@ const AD_SELECTOR = ".result--ad, .b_ad, .b_adTop, .b_adBottom, .b_adLastChild, 
 const AD_LINK = /(^|\.)(googleadservices\.com|doubleclick\.net|googlesyndication\.com|yabs\.yandex\.[a-z.]+|an\.yandex\.ru)$|\/(aclk|pagead)\b|[?&](msclkid|gclid|gad_source|yclid)=/;
 const AD_LABEL = /^(ad|ads|sponsored|sponsored results?|promoted|реклама|anzeige|annonce|publicité|patrocinado)$/i;
 const isAdBox = box => [...box.querySelectorAll("span, div, b, small")].some(n => n.children.length === 0 && AD_LABEL.test(n.textContent.trim().replace(/[·•:]/g, "").trim()));
+// Stores' and job sites' own paid placements.
+const SITE_AD_SELECTOR = "[data-component-type='sp-sponsored-result'], .AdHolder, .s-sponsored-label-info-icon, .puis-sponsored-label-text, [data-testid='sponsored-label'], .sponsoredJob, [data-is-sponsored='true'], .is-sponsored, [data-sponsored='true'], .promoted-listing, [data-ad='true'], [data-ad-slot], [id^='google_ads'], ins.adsbygoogle, iframe[src*='doubleclick'], iframe[src*='googlesyndication']";
+// The element holding one result: climb while the parent still holds just this one result
+// (one heading, no other product), and never into the page's data or a large part of the page.
+function resultBox(n, doc) {
+  let box = n;
+  for (let i = 0; i < 8; i++) {
+    const up = box.parentElement;
+    if (!up || up === doc.body || up === doc.documentElement || up.querySelector("script") || up.textContent.length > 1500
+      || up.querySelectorAll("h2, h3, h4, [role=heading], [data-asin]").length > 1 || new Set([...up.querySelectorAll("a[href]")].map(a => a.getAttribute("href"))).size > 6) break;
+    box = up;
+  }
+  return box;
+}
+// Removes every ad from a page before anything reads it: the engines' ad blocks, links that go through
+// ad-click servers, and any result labelled "Ad", "Sponsored" or "Promoted".
+function stripAds(doc) {
+  for (const n of doc.querySelectorAll(AD_SELECTOR + ", " + SITE_AD_SELECTOR)) n.isConnected && resultBox(n, doc).remove();
+  for (const a of doc.querySelectorAll("a[href]")) if (a.isConnected && AD_LINK.test(a.getAttribute("href"))) resultBox(a, doc).remove();
+  for (const n of doc.querySelectorAll("span, div, b, small, p, label")) if (n.isConnected && n.children.length === 0 && AD_LABEL.test(n.textContent.trim().replace(/[·•:]/g, "").trim())) resultBox(n, doc).remove();
+  return doc;
+}
+const adFreeDoc = html => stripAds(new DOMParser().parseFromString(html || "", "text/html"));
+// Ads hidden in a page's data (stores' and job sites' app state).
+const AD_TYPE = /^(Ad|Ads|Advert\w*|Sponsored\w*|Promoted\w*)$|Sponsored|(^|[a-z])Ad(Slot|Unit|Placement|Banner|Product)/;
+const isAdData = o => o.sponsored === true || o.isSponsored === true || o.is_sponsored === true || o.isAd === true || o.is_ad === true || o.promoted === true || o.isPromoted === true
+  || typeof o.__typename === "string" && AD_TYPE.test(o.__typename) || typeof o.adType === "string" && /sponsor|paid|promo/i.test(o.adType);
+// Last check on every result from every source.
+const AD_HOSTS = /(^|\.)(googleadservices\.com|doubleclick\.net|googlesyndication\.com|adservice\.google\.[a-z.]+|bat\.bing\.com|ad\.doubleclick\.net|adclick\.g\.doubleclick\.net|r\.search\.yahoo\.com|clickserve\.dartsearch\.net|ads\.[a-z0-9-]+\.[a-z.]+|taboola\.com|outbrain\.com)$/;
+function isAdResult(r) {
+  if (!r || r.ad || r.sponsored) return true;
+  for (const u of [r.url, r.link]) {
+    if (!u) continue;
+    try { const x = new URL(u); if (AD_HOSTS.test(x.hostname) || AD_LINK.test(u) || /bing\.com$/.test(x.hostname) && /^\/aclk/.test(x.pathname) || /duckduckgo\.com$/.test(x.hostname) && /^\/y\.js/.test(x.pathname)) return true; } catch {}
+  }
+  return /^(ad|sponsored|promoted)\s*[·•:|-]/i.test(String(r.title || "").trim());
+}
 const SNIPPET_SELECTOR = ".OrganicText, .TextContainer, .result__snippet, .b_caption p, .b_lineclamp2, .b_lineclamp3, .b_lineclamp4, .compText, p.s, .snippet-description, .generic-snippet, .VwiC3b, [data-sncf], .result__description, .web-result-description";
 
 // Reads results out of any engine's page: links whose text is a heading (h2/h3) are results on
 // every engine. The snippet is taken from the result's container.
 function parseResultsPage(html, base, engineName) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+  const doc = adFreeDoc(html);
   const out = [], seen = new Set();
   const anchors = new Set();
   for (const h of doc.querySelectorAll("h2, h3")) {
@@ -173,7 +210,7 @@ const durSecs = t => { const p = String(t || "").split(":").map(Number); return 
 
 async function helperDoc(url) {
   const res = await helperFetch(url);
-  return { doc: new DOMParser().parseFromString(res.html, "text/html"), base: res.url || url, html: res.html };
+  return { doc: adFreeDoc(res.html), base: res.url || url, html: res.html };
 }
 
 // SearXNG's images/videos pages: each result names the engines that found it.
@@ -272,7 +309,7 @@ function parsePriced(doc, base, via, skipHost) {
 // any object with a name, a price and a link counts as a product. Falls back to price-and-picture blocks.
 const CURRENCY = { UK: "£" };
 function storeProducts(html, base, via, site) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+  const doc = adFreeDoc(html);
   const out = [], seen = new Set();
   const str = v => typeof v === "string" ? v.trim() : "";
   const pick = (...v) => v.find(x => x != null && x !== "");

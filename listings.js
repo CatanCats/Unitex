@@ -40,6 +40,7 @@ const botCheck = html => /kpsdk|kasada|ips\.js|captcha|access denied|are you a r
 function walk(node, fn, seen = new Set()) {
   if (!node || typeof node !== "object" || seen.has(node)) return;
   seen.add(node);
+  if (!Array.isArray(node) && typeof isAdData === "function" && isAdData(node)) return; // paid placements
   fn(node);
   for (const v of Object.values(node)) {
     if (typeof v === "string" && v.length > 50 && /^[{[]/.test(v)) { try { walk(JSON.parse(v), fn, seen); } catch {} }
@@ -50,7 +51,7 @@ function walk(node, fn, seen = new Set()) {
 const featureText = (beds, baths, cars) => [beds && `${beds} bed`, baths && `${baths} bath`, cars && `${cars} car`].filter(Boolean).join(" · ");
 
 function parseDomain(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+  const doc = adFreeDoc(html);
   const out = [], seen = new Set();
   const data = doc.querySelector("script#__NEXT_DATA__")?.textContent;
   if (data) walk(JSON.parse(data), o => {
@@ -74,7 +75,7 @@ function parseDomain(html) {
 }
 
 function parseRealestate(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+  const doc = adFreeDoc(html);
   const out = [], seen = new Set();
   for (const s of doc.querySelectorAll("script")) {
     const t = s.textContent;

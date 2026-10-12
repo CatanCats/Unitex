@@ -26,12 +26,12 @@ const AI_SOURCES = {
   google: { name: "Google AI Overview", async run(q) {
     if (!helperVersion()) throw new Error("needs Unitex Helper");
     const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "google").url(q));
-    const doc = new DOMParser().parseFromString(res.html, "text/html");
+    const doc = adFreeDoc(res.html);
     let text = blockAfterHeading(doc, /^AI Overview/i);
     if (!text) {
       // Google's AI Mode page (udm=50) answers every question, not just some.
       const mode = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&udm=50&hl=en`).catch(() => null);
-      if (mode) text = blockAfterHeading(new DOMParser().parseFromString(mode.html, "text/html"), /^(AI Mode|AI Overview|AI response)/i);
+      if (mode) text = blockAfterHeading(adFreeDoc(mode.html), /^(AI Mode|AI Overview|AI response)/i);
     }
     if (!text) throw new Error(/enable javascript|turn on javascript/i.test(res.html) ? "Google needs JavaScript, so its AI Overview can't be read" : "Google didn't show an AI Overview for this search");
     return { text };
@@ -39,7 +39,7 @@ const AI_SOURCES = {
   bing: { name: "Bing Copilot", async run(q) {
     if (!helperVersion()) throw new Error("needs Unitex Helper");
     const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "bing").url(q));
-    const doc = new DOMParser().parseFromString(res.html, "text/html");
+    const doc = adFreeDoc(res.html);
     const box = doc.querySelector("#b_genserp_container, .b_genserp, [data-tag='copilot-answer'], .b_ans .rwrl, .b_ans .b_paractl, .b_ans .b_focusTextLarge, .b_ans .b_focusTextMedium");
     const text = textBlock(box) || blockAfterHeading(doc, /^(Copilot|Copilot Answer|AI-generated)/i);
     if (!text) throw new Error("no answer in Bing's page this time");

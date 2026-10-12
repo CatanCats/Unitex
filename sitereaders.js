@@ -59,7 +59,7 @@ const READ_AS = {
 };
 
 function cardsFromPage(html, base, kind, site) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+  const doc = adFreeDoc(html);
   const out = [], seen = new Set();
   const take = o => { if (out.length >= 40 || Array.isArray(o)) return; const c = READ_AS[kind](o, base, site); if (c && !seen.has(c.url)) { seen.add(c.url); out.push(c); } };
   for (const sc of doc.querySelectorAll("script[type='application/ld+json'], script[type='application/json'], script#__NEXT_DATA__")) {

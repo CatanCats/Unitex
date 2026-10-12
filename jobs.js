@@ -95,7 +95,7 @@ const JOB_SITES = {
     const res = await helperFetch(url);
     let jobs = jobsFromData(res.html, res.url, "SEEK", "SEEK", o => o.id && /^\d+$/.test(String(o.id)) && `https://${h}/job/${o.id}`);
     if (!jobs.length) {
-      const doc = new DOMParser().parseFromString(res.html, "text/html");
+      const doc = adFreeDoc(res.html);
       jobs = [...doc.querySelectorAll("article[data-card-type='JobCard'], article[data-automation='normalJob']")].map(a => {
         const link = a.querySelector("a[data-automation='jobTitle']");
         return link && jobCard({ title: link.textContent.trim(), url: unwrapLink(link.getAttribute("href"), res.url)?.replace(/\?.*$/, ""), company: textOfSel(a, "[data-automation='jobCompany']"),
@@ -109,7 +109,7 @@ const JOB_SITES = {
     const { what, where, remote } = jobParts(q);
     const loc = where || REGIONS.find(r => r.id === regionId)?.name || "";
     const res = await helperFetch(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(what)}&location=${encodeURIComponent(loc === "Worldwide" ? "" : loc)}${remote ? "&f_WT=2" : ""}&start=${P * 25}`);
-    const doc = new DOMParser().parseFromString(res.html, "text/html");
+    const doc = adFreeDoc(res.html);
     return [...doc.querySelectorAll(".base-card, .job-search-card")].map(c => {
       const a = c.querySelector("a.base-card__full-link, a[href*='/jobs/view/']");
       return a && jobCard({ title: textOfSel(c, ".base-search-card__title, h3"), url: a.getAttribute("href").split("?")[0], company: textOfSel(c, ".base-search-card__subtitle, h4"),
@@ -129,7 +129,7 @@ const JOB_SITES = {
     const { what, where } = jobParts(q);
     const h = JORA_HOSTS[regionId] || JORA_HOSTS.AU;
     const res = await helperFetch(`https://${h}/j?q=${encodeURIComponent(what)}&l=${encodeURIComponent(where)}${P ? `&p=${P + 1}` : ""}`);
-    const doc = new DOMParser().parseFromString(res.html, "text/html");
+    const doc = adFreeDoc(res.html);
     return [...doc.querySelectorAll(".job-card, article.result, [data-testid='job-card']")].map(c => {
       const a = c.querySelector(".job-title a, h2 a, a.job-link");
       return a && jobCard({ title: a.textContent.trim(), url: unwrapLink(a.getAttribute("href"), res.url)?.split("?")[0], company: textOfSel(c, ".job-company, .company"),

@@ -800,7 +800,8 @@ function runCached(n, s, q, page) {
   const key = [n, q, page, topicId, regionId, [...offSites].join(",")].join("|");
   const hit = settleCache.get(key);
   if (hit && Date.now() - hit.t < 120000) return hit.p;
-  const p = Promise.resolve().then(() => s.run(q, { page })).then(r => ({ n, r: r || [] }), err => ({ n, err }));
+  // No ads, whatever the source: anything an ad server links to or that's marked sponsored is dropped.
+  const p = Promise.resolve().then(() => s.run(q, { page })).then(r => ({ n, r: (r || []).filter(x => !isAdResult(x)) }), err => ({ n, err }));
   settleCache.set(key, { t: Date.now(), p });
   p.then(x => { if (x.err) settleCache.delete(key); });
   return p;
