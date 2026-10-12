@@ -8,7 +8,11 @@
 
 const STOP_WORDS = new Set("a an the of in on at to for from by with and or is are was were be been it its this that these those what which who whom how why when where do does did can could should would will i me my you your we our they their as into about vs versus best top near work works get make use much many".split(" "));
 const queryTerms = q => [...new Set(String(q || "").toLowerCase().replace(/site:\S+|\(|\)|\bOR\b/gi, " ").split(/[^\p{L}\p{N}+#]+/u).filter(w => w.length > 1 && !STOP_WORDS.has(w)))];
-const termRe = w => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/(ies|es|s)$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|es|ies|'s)?($|[^\\p{L}\\p{N}])`, "iu");
+const esc = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const termRe = w => /ies$/.test(w) && w.length > 4
+  ? new RegExp(`(^|[^\\p{L}\\p{N}])${esc(w.slice(0, -3))}(y|ie|ies|y's)($|[^\\p{L}\\p{N}])`, "iu")
+  : new RegExp(`(^|[^\\p{L}\\p{N}])${esc(w.replace(/(es|s)$/, ""))}(s|es|ies|'s)?($|[^\\p{L}\\p{N}])`, "iu");
+const safeDecode = s => { try { return decodeURIComponent(s); } catch { return s; } };
 // Words close enough to count, like the engines' typo tolerance: "panals" ≈ "panels".
 function nearWord(a, b) {
   if (Math.abs(a.length - b.length) > 2) return false;
@@ -39,7 +43,7 @@ function termShare(text, terms) {
 // ---------- trust: how much each source counts ----------
 
 const SOURCE_TRUST = [
-  [/^google/i, 1], [/^bing/i, 0.95], [/^duckduckgo/i, 0.9], [/^brave/i, 0.9], [/through searxng/i, 0.8], [/^wikipedia/i, 0.85],
+  [/through searxng/i, 0.8], [/^google/i, 1], [/^bing/i, 0.95], [/^duckduckgo/i, 0.9], [/^brave/i, 0.9], [/through searxng/i, 0.8], [/^wikipedia/i, 0.85],
   [/^(realestate|domain|seek|linkedin|indeed|jora|amazon|ebay)/i, 1], [/^yandex/i, 0.75], [/^qwant/i, 0.7], [/^mojeek/i, 0.65],
   [/^searxng/i, 0.7], [/^reddit/i, 0.55], [/^hacker news/i, 0.45], [/^stract/i, 0.4], [/^mwmbl/i, 0.3], [/^marginalia/i, 0.3], [/^alexandria/i, 0.25], [/^wiby/i, 0.15],
 ];
@@ -52,7 +56,7 @@ function rankResults(results, q) {
   for (const r of results) {
     const vias = [].concat(r.via);
     const best = Math.max(...vias.map(trustOf));
-    const title = termShare(r.title, terms), all = termShare(`${r.title} ${r.snippet || ""} ${decodeURIComponent(r.url || "").replace(/[-_/.]/g, " ")}`, terms);
+    const title = termShare(r.title, terms), all = termShare(`${r.title} ${r.snippet || ""} ${safeDecode(r.url || "").replace(/[-_/.]/g, " ")}`, terms);
     // Small indexes give odd matches: they must contain every word. Big engines may match by meaning, but not by nothing.
     // (Questions have extra words, so with 3+ words two thirds is enough.)
     const strict = terms.length <= 2 ? 1 : 0.66;
@@ -62,9 +66,13 @@ function rankResults(results, q) {
   }
   scored.sort((a, b) => b.score - a.score);
   // Host crowding: no more than two results from one website in a row near the top.
+  // Topic searches (Learn, Open source, Travel…): results from the topic's own sites come first.
+  const topic = typeof topicDomains === "function" ? topicDomains() : [];
+  if (topic.length) for (const r of scored) if (topic.some(d => (host(r.url) + "/").includes(d.split("/")[0]))) r.score *= 1.6;
+  scored.sort((a, b) => b.score - a.score);
   const per = {}, top = [], later = [];
-  for (const r of scored) { const h = host(r.url).replace(/^(m|en|www)\./, ""); ((per[h] = (per[h] || 0) + 1) <= 2 ? top : later).push(r); }
-  return [...top, ...later];
+  for (const r of scored) { const h = host(r.url).replace(/^(m|en|www)\./, ""); ((per[h] = (per[h] || 0) + 1) <= 2 || top.length >= 10 ? top : later).push(r); }
+  return [...top.slice(0, 10), ...later, ...top.slice(10)].filter((r, i, a) => a.indexOf(r) === i);
 }
 
 // Media, products and jobs: drop the ones whose title has nothing to do with the search.
@@ -77,7 +85,7 @@ const aboutSearch = (title, q, need = 0.5) => { const terms = queryTerms(q); ret
 function highlighted(text, q) {
   const terms = queryTerms(q).map(w => w.replace(/(ies|es|s)$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).filter(Boolean);
   if (!terms.length || !text) return [text || ""];
-  const re = new RegExp(`(${terms.join("|")})[\\p{L}]{0,3}`, "giu");
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(${terms.join("|")})[\\p{L}]{0,3}`, "giu");
   const out = [];
   let last = 0;
   for (const m of String(text).matchAll(re)) { out.push(text.slice(last, m.index), el("b", { textContent: m[0] })); last = m.index + m[0].length; }
@@ -164,15 +172,20 @@ function attachSuggestions(input, onPick) {
 // ---------- which mode a search needs ----------
 // "3 bedroom house for rent in Brunswick" → Houses; "web developer jobs" → Jobs; "buy headphones" → Shopping.
 const CAR_MAKES = "toyota|mazda|ford|holden|honda|hyundai|kia|tesla|bmw|audi|mercedes|nissan|subaru|volkswagen|vw|mitsubishi|lexus|volvo|jeep|suzuki|isuzu|byd|mg|peugeot|skoda|porsche|ram|chevrolet|chevy|dodge|ferrari|jaguar|land rover|mini|renault";
+const CAR_WORD = /\b(cars?|utes?|suvs?|sedan|hatch(back)?|wagon|vans?|4x4|4wd|km|kms|odometer|automatic|manual|for sale|used|dealer|rego)\b/;
+// Words that look like a mode but aren't: "steve jobs", "dvd rentals", "bitcoin price", "hotel california lyrics".
+const NOT_A_MODE = /\b(steve jobs|cron jobs?|print jobs?|batch jobs?|career mode|blow jobs?|parking ticket|speeding ticket|ticket fine|gig economy|lyrics|simulator|second[- ]hand smoke|stocks?|shares?|share price|bitcoin|crypto|ethereum|gold price|oil price|exchange rate|brexit|trade deal|peace deal)\b/;
 function detectIntent(q) {
   const s = ` ${String(q || "").toLowerCase()} `;
-  if (/\b(for (rent|sale|lease)|to rent|to buy|rentals?|real ?estate|share ?house|flatmates?|\d\s*(bed|bedroom|br)\b)/.test(s) && /\b(house|home|apartment|unit|townhouse|villa|flat|room|property|properties|studio|land|bed|bedroom|br|rent|rental)s?\b/.test(s) && !/\b(car|ute|suv|bike|game|movie)s?\b/.test(s)) return ["shopping", "houses", "Houses"];
+  if (NOT_A_MODE.test(s)) return null;
+  if (/\b(for (rent|sale|lease)|to rent|to buy|rentals?|real ?estate|share ?house|flatmates?|\d\s*(bed|bedroom|br)\b)/.test(s) && /\b(house|home|apartment|unit|townhouse|villa|flat|room|property|properties|studio|land|bed|bedroom|br)s?\b/.test(s) && !/\b(car|ute|suv|bike|game|movie)s?\b/.test(s)) return ["shopping", "houses", "Houses"];
   if (/\b(jobs?|careers?|hiring|vacanc(y|ies)|internships?|graduate programs?|part[- ]time work|full[- ]time work)\b/.test(s)) return ["jobs", "", "Jobs"];
-  if (new RegExp(`\\b(${CAR_MAKES})\\b`).test(s) && /\b(for sale|used|new|price|buy|cheap|km|automatic|manual|\d{4})\b/.test(s) || /\b(used|second[- ]?hand) (car|ute|suv|van)s?\b|\bcars? for sale\b/.test(s)) return ["shopping", "cars", "Cars"];
+  const make = s.match(new RegExp(`\\b(${CAR_MAKES})\\b`))?.[1];
+  if (make && (/^(mg|ram|mini|ford)$/.test(make) ? CAR_WORD.test(s) : CAR_WORD.test(s) || /\b(new|price|buy|cheap)\b/.test(s) && !/\b(stock|share|mg|gb|tb|ram|ssd|pc|laptop|phone)\b/.test(s)) || /\b(used|second[- ]?hand) (car|ute|suv|van)s?\b|\bcars? for sale\b/.test(s)) return ["shopping", "cars", "Cars"];
   if (/\b(second[- ]?hand|pre[- ]?owned|preloved|gumtree|marketplace)\b/.test(s)) return ["shopping", "secondhand", "Second-hand"];
   if (/\b(tickets?|concerts?|gigs?|festivals?|what'?s on|events? (in|near|this|tonight|today))\b/.test(s)) return ["all", "events", "Events"];
   if (/\b(recipes?|how to (cook|make|bake))\b/.test(s)) return ["all", "recipes", "Recipes"];
   if (/\b(flights?|hotels?|accommodation|airbnb|holiday packages?)\b/.test(s)) return ["travel", "", "Travel"];
-  if (/\b(buy|price of|prices?|cheapest|cheap|deals?|discount|on sale|best price|under \$\d+|\$\d+)\b/.test(s)) return ["shopping", "products", "Shopping"];
+  if (/\b(buy|price of|prices?|cheapest|cheap|deals?|discount|on sale|best price|under \$\d+)\b|(^|\s)\$\d+/.test(s)) return ["shopping", "products", "Shopping"];
   return null;
 }

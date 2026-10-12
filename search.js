@@ -72,6 +72,9 @@ function jsonp(url, ms = 8000) {
 
 // Sites and sources the person switched off.
 let offSources = new Set(store.get("unitex.off", []));
+// A source switched off on one tab stays on for the others ("images:wikipedia" doesn't touch web results).
+const srcOff = n => offSources.has(n) || offSources.has(cur().view + ":" + n);
+function toggleSrc(n, off) { offSources.delete(n); const k = cur().view + ":" + n; off ? offSources.add(k) : offSources.delete(k); store.set("unitex.off", [...offSources]); }
 let offSites = new Set(store.get("unitex.offsites", []));
 const topicDomains = () => topicSites(topicById(topicId)).map(s => s.domain).filter(d => !offSites.has(d)).slice(0, 14);
 const siteOff = r => offSites.size && [...offSites].some(d => { const h = host(r.url); return h === d || h.endsWith("." + d) || (h + new URL(r.url).pathname).startsWith(d); });
@@ -93,11 +96,12 @@ const withSites = (q, domains) => domains.length ? `${q} (${domains.map(d => "si
 const SOURCES = {
   wikipedia: { paged: true, name: "Wikipedia", group: "main", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&sroffset=${P * 5}&srinfo=suggestion&format=json&origin=*`);
-    if (!P && q === query) spellHint = d.query?.searchinfo?.suggestion || "";
-    return d.query.search.map(r => ({
+    const out = d.query.search.map(r => ({
       title: r.title, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
       snippet: strip(r.snippet) + "…", via: "Wikipedia", domain: "wikipedia.org",
     }));
+    if (!P) out.spell = d.query?.searchinfo?.suggestion || "";
+    return out;
   }},
   // SearXNG metasearch: public servers that allow other websites to read their results (format=json).
   // Each result lists the engines that found it, so they get the credit.
@@ -105,10 +109,10 @@ const SOURCES = {
     const reasons = [];
     for (const server of SEARX_HOSTS) {
       try {
-        const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=general&pageno=${P + 1}&language=all`, 6000);
+        const d = await getJson(`https://${server}/search?q=${encodeURIComponent(withSites(q, topicDomains()))}&format=json&categories=general&pageno=${P + 1}&language=all`, 6000);
         const out = (d.results || []).flatMap(r => (r.engines?.length ? r.engines : ["SearXNG"]).map(e => ({
           title: strip(r.title) || host(r.url), url: r.url, snippet: short(strip(r.content)), via: e === "SearXNG" ? e : `${engineName(e)} (through SearXNG)`, domain: host(r.url) })));
-        if (out.length) return out;
+        if (out.length || Array.isArray(d.results)) return out; // a server that answered: no results is an answer
       } catch (e) { reasons.push(e.message); }
     }
     throw new Error(reasons.every(r => r === reasons[0]) && reasons[0] ? `public servers: ${reasons[0]}` : "no public server answered");
@@ -141,7 +145,7 @@ const SOURCES = {
   }},
   duckduckgo: { name: "DuckDuckGo", group: "main", async run(q) {
     const d = await jsonp(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1&t=unitex`);
-    showDuckAnswer(d);
+    if (q === query) showDuckAnswer(d);
     // Real websites only: the official site, the page the summary came from, and any websites in the
     // infobox. ("Related topics" link back to DuckDuckGo's own pages, so they're left out.)
     const out = (d.Results || []).map(r => ({ title: `${d.Heading || strip(r.Text) || host(r.FirstURL)} – official website`, url: r.FirstURL, snippet: short(strip(d.AbstractText)) || "Official website", via: "DuckDuckGo", domain: host(r.FirstURL) }));
@@ -249,11 +253,11 @@ function newsMatches(item, q) {
   return ws.length <= 2 ? hits === ws.length : hits >= Math.ceil(ws.length * 0.6);
 }
 // News search feeds (Google News, Bing News, Yahoo News) and every news website's own feed, read like the home page.
-const newsItem_ = s => ({ title: s.title, url: s.url, thumb: s.image, snippet: s.summary, via: s.via[0], outlet: s.source, region: s.region, ts: s.published, meta: s.published ? ago(s.published) : "" });
+const newsItem_ = s => ({ title: s.title, url: s.url, domain: s.domain, thumb: s.image, snippet: s.summary, via: s.via[0], outlet: s.source, region: s.region, ts: s.published, meta: s.published ? ago(s.published) : "" });
 const NEWS_SOURCES = {
-  googlenews: { name: "Google News", async run(q) { return parseFeed(await readFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&${gnParams()}`), "Google News").map(newsItem_); } },
-  bingnews: { name: "Bing News", async run(q) { return parseFeed(await readFeed(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`), "Bing News").map(newsItem_); } },
-  yahoonews: { name: "Yahoo News", async run(q) { return parseFeed(await readFeed(`https://news.search.yahoo.com/rss?p=${encodeURIComponent(q)}`), "Yahoo News").map(newsItem_); } },
+  googlenews: { name: "Google News feed", async run(q) { return parseFeed(await readFeed(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&${gnParams()}`), "Google News").map(newsItem_); } },
+  bingnews: { name: "Bing News feed", async run(q) { return parseFeed(await readFeed(`https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`), "Bing News").map(newsItem_); } },
+  yahoonews: { name: "Yahoo News feed", async run(q) { return parseFeed(await readFeed(`https://news.search.yahoo.com/rss?p=${encodeURIComponent(q)}`), "Yahoo News").map(newsItem_); } },
   websites: { name: "News websites (150+ feeds)", async run(q) {
     if (!feedConfig) await outletFeeds(NEWS_SECTIONS[0]);
     const feeds = Object.values(feedConfig || {}).flatMap(c => c.feeds).filter(f => !f.aggregator);
@@ -265,7 +269,7 @@ const NEWS_SOURCES = {
     const words = q.split(/\s+/).filter(w => w.length >= 3).join(" ");
     if (!words) return [];
     const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(words + " sourcelang:english")}&mode=artlist&maxrecords=25&format=json&sort=hybridrel&timespan=1w`);
-    return (d.articles || []).filter(a => newsMatches({ title: a.title }, q)).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
+    return (d.articles || []).filter(a => newsMatches({ title: a.title }, q)).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: "GDELT", outlet: a.domain, domain: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
   }},
   hackernews: { paged: true, name: "Hacker News", async run(q, { page: P = 0 } = {}) {
     // Stories people voted up, linking to the article (not "Ask HN" posts).
@@ -497,21 +501,34 @@ function fuse(lists) {
   // Metasearch ranking: a page that several engines rank highly comes first (reciprocal rank fusion).
   const byKey = new Map();
   for (const list of lists) {
-    list.forEach((r, pos) => {
+    const place = new Map(); // SearXNG lists one row per engine for the same page
+    list.forEach(r => {
       if (!r || !safeUrl(r.url)) return;
       const k = urlKey(r.url);
+      if (!place.has(k)) place.set(k, place.size);
+      const pos = place.get(k);
       const seen = byKey.get(k);
       // A big engine's top result counts more than a small index's.
       const score = trustOf(r.via) / (pos + 3);
+      r = { ...r, title: tidyTitle(r.title, r.url) };
       if (seen) {
+        if (seen.via.includes(r.via)) return;
         seen.score += score;
-        if (!seen.via.includes(r.via)) seen.via.push(r.via);
+        seen.via.push(r.via);
         seen.image ||= r.image;
         if ((r.snippet || "").length > (seen.snippet || "").length) seen.snippet = r.snippet;
       } else byKey.set(k, { ...r, via: [r.via], score });
     });
   }
   return [...byKey.values()].sort((a, b) => b.score - a.score);
+}
+
+// "Python (programming language) - Wikipedia" → "Python (programming language)": the site's name is shown above.
+function tidyTitle(t, url) {
+  const m = String(t || "").match(/^(.{2,}?)\s+[-|–—·:]\s+([^-|–—·]{2,40})$/);
+  if (!m) return t;
+  const tail = m[2].toLowerCase().replace(/[^a-z0-9]/g, ""), h = host(url).toLowerCase().replace(/[^a-z0-9]/g, ""), name = siteName(url).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return tail && (h.includes(tail) || tail.includes(name) || name.includes(tail)) ? m[1] : t;
 }
 
 // Take turns between sources, dropping repeats.
@@ -545,15 +562,22 @@ function siteName(url) {
 // A video site, a video page, or something with a length or a player.
 const VIDEO_HOSTS = /(^|\.)(youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|twitch\.tv|tiktok\.com|rumble\.com|odysee\.com|bitchute\.com|bilibili\.com|nicovideo\.jp|ted\.com|streamable\.com|archive\.org|commons\.wikimedia\.org|images\.nasa\.gov|vk\.com|ok\.ru|9gag\.com|imdb\.com|metacafe\.com|veoh\.com|brightcove\.net|jwplayer\.com|wistia\.com|loom\.com|kick\.com|peertube\.[a-z.]+|tube\.[a-z.]+|video\.[a-z.]+)$/i;
 function isVideo(v) {
-  if (v.secs || v.embed || v.file) return true;
   try {
     const u = new URL(v.url);
-    return VIDEO_HOSTS.test(u.hostname) || /\/(watch|video|videos|v|w|embed|clip|clips|reel|shorts)(\/|$|\?)|\.(mp4|webm|m3u8)$/i.test(u.pathname) || /facebook\.com$/.test(u.hostname) && /\/videos?\//.test(u.pathname);
+    if (/(^|\.)youtube\.com$/.test(u.hostname)) return /^\/(watch|shorts\/|live\/|embed\/)/.test(u.pathname);
+    if (/(^|\.)imdb\.com$/.test(u.hostname)) return /\/video\//.test(u.pathname);
+    if (/(^|\.)archive\.org$/.test(u.hostname)) return /^\/(details|embed)\//.test(u.pathname) && !!(v.secs || v.embed || v.file || v.via === "Internet Archive");
+    if (/wikipedia\.org$/.test(u.hostname)) return false;
+    if (/commons\.wikimedia\.org$/.test(u.hostname)) return !!(v.file || v.secs) || /\.(webm|ogv|mp4|mpg)$/i.test(u.pathname);
+    if (v.secs || v.embed || v.file) return true;
+    return VIDEO_HOSTS.test(u.hostname) || /\/(watch|video|videos|v|embed|clip|clips|reel|shorts)(\/|$|\?)|\.(mp4|webm|m3u8)$/i.test(u.pathname) || /facebook\.com$/.test(u.hostname) && /\/videos?\//.test(u.pathname);
   } catch { return false; }
 }
 
 // The image row shown among the results (after the third one), like the engines' "Images" pack.
 let imagePack = null;
+// Google News links go through news.google.com: the story's own website is the one that counts.
+const pageOf = (r, url) => /news\.google\.com/.test(url) && r.domain && !/google/.test(r.domain) ? "https://" + r.domain + "/" : url;
 function resultItem(r) {
   const url = safeUrl(r.url);
   if (!url) return null;
@@ -562,11 +586,11 @@ function resultItem(r) {
   return el("li", { className: "result" + (r.image || r.thumb ? " has-thumb" : "") },
     el("div", { className: "r-body" },
       el("div", { className: "r-src" }, el("span", { className: "r-fav" }, domainIcon(r.domain || host(url))),
-        el("span", { className: "r-who" }, el("strong", { textContent: siteName(url) }),
-          el("span", { className: "r-site", textContent: `${new URL(url).origin.replace(/^https?:\/\//, "https://")}${path.length > 1 && breadcrumb(url) ? " › " + breadcrumb(url) : ""}` }))),
+        el("span", { className: "r-who" }, el("strong", { textContent: r.outlet && /news\.google\.com/.test(url) ? r.outlet : siteName(url) }),
+          el("span", { className: "r-site", textContent: /news\.google\.com/.test(url) ? (r.domain && !/google/.test(r.domain) ? r.domain : "") : `${new URL(url).origin}${path.length > 1 && breadcrumb(url) ? " › " + breadcrumb(url) : ""}` }))),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
       r.snippet && el("p", { className: "r-snippet" }, ...highlighted(r.snippet, query)),
-      el("p", { className: "r-meta" }, viaLabel(via, url) && el("span", { className: "via", textContent: "found by " + viaLabel(via, url) }), r.meta && el("span", { textContent: r.meta }))),
+      el("p", { className: "r-meta" }, viaLabel(via, pageOf(r, url), r.outlet) && el("span", { className: "via", textContent: "found by " + viaLabel(via, pageOf(r, url), r.outlet) }), r.meta && el("span", { textContent: r.meta }))),
     (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
 
@@ -620,24 +644,24 @@ function sourceRows() {
   const sites = topic.id !== "all" && cur().kind === "web" ? topicSites(topic) : [];
   const readerFor = st => SITE_READERS[st.domain] && sources[SITE_READERS[st.domain]] ? SITE_READERS[st.domain] : Object.keys(sources).find(n => {
     const k = n.replace(/^(store|helper|jobsite|jobs|listing|site)_/, "");
-    return nameKey(sources[n].name) === nameKey(st.name) || st.domain.split(/[./]/).includes(k) || (k === "googleshop" && st.domain === "google.com/shopping") || (n === "listing_" + Object.keys(LISTING_SITES).find(x => LISTING_SITES[x].name === st.domain));
+    return nameKey(sources[n].name) === nameKey(st.name) || (/^(store|jobsite|site|listing)_/.test(n) && st.domain.split(/[./]/).includes(k)) || (k === "googleshop" && st.domain === "google.com/shopping") || (n === "listing_" + Object.keys(LISTING_SITES).find(x => LISTING_SITES[x].name === st.domain));
   });
   const listed = new Set();
   const found = d => settled.flatMap(x => x.r || []).filter(r => { const h = host(r.url); return h === d || h.endsWith("." + d); }).length;
   for (const st of sites) {
     const key = readerFor(st);
     if (key) listed.add(key);
-    const isOff = offSites.has(st.domain) || (key && offSources.has(key));
+    const isOff = offSites.has(st.domain) || (key && srcOff(key));
     const s0 = key ? state(key, sources[key], isOff) : isOff ? { st: "off", note: "left out" } : on ? { st: settled.length ? "ok" : "wait", note: settled.length ? `${found(st.domain)} found through the engines` : query ? "searching…" : "" } : { st: "locked", note: "needs Unitex Helper" };
     rows.push({ group: SITES_LABEL[topic.id] || "Websites", label: st.name, domain: st.domain, ...s0, off: isOff,
-      toggle: () => { const off = !isOff; for (const [set, k, sk] of [[offSites, st.domain, "unitex.offsites"], ...(key ? [[offSources, key, "unitex.off"]] : [])]) { off ? set.add(k) : set.delete(k); store.set(sk, [...set]); } go(); } });
+      toggle: () => { const off = !isOff; for (const [set, k, sk] of [[offSites, st.domain, "unitex.offsites"], ]) { off ? set.add(k) : set.delete(k); store.set(sk, [...set]); } if (key) toggleSrc(key, off); go(); } });
   }
   for (const [n, src] of Object.entries(sources)) {
     if (listed.has(n)) continue;
     if (src.enabled && !src.enabled() && !/^(helper|store|jobsite|site)_/.test(n)) continue; // doesn't apply to this search
-    const isOff = offSources.has(n);
+    const isOff = srcOff(n);
     rows.push({ group: ENGINE_KEYS.test(n) ? "Search engines" : WEBSITE_KEYS.test(n) ? (SITES_LABEL[topic.id] || "Websites") : "Sources", label: src.name.replace(/ \((through|via) .*\)$/, ""), key: n, ...state(n, src, isOff), off: isOff,
-      toggle: () => { isOff ? offSources.delete(n) : offSources.add(n); store.set("unitex.off", [...offSources]); go(); } });
+      toggle: () => { toggleSrc(n, !isOff); go(); } });
   }
   // The businesses (property sites, stores, job sites…) first, then the engines.
   const order = [SITES_LABEL[topic.id] || "Websites", "Websites", "Search engines", "Sources"];
@@ -727,7 +751,7 @@ addEventListener("scroll", closeMore, { passive: true });
 function tabButton(t) {
   const b = el("button", { type: "button", role: "tab", textContent: t.name });
   b.setAttribute("aria-selected", t.id === tab);
-  b.onclick = () => { if (tab !== t.id) { tab = t.id; sub = ""; } userPicked = t.id !== "all"; go(); };
+  b.onclick = () => { if (tab !== t.id) { tab = t.id; sub = ""; } userPicked = t.id !== "all"; if (t.id === "all") wholeWebFor = query; go(); };
   return b;
 }
 
@@ -761,6 +785,7 @@ function renderTabs() {
 // ---------- answer card ----------
 
 function showDuckAnswer(d) {
+  if (cur().id !== "all" || MODES[topicId]) return false; // the answer card belongs to the web results
   const text = d.Answer || d.AbstractText;
   if (!text) return false;
   renderAnswer({
@@ -771,14 +796,14 @@ function showDuckAnswer(d) {
 }
 
 const normTitle = s => s.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9 ]/g, "").trim();
-async function wikiAnswer(q) {
+async function wikiAnswer(q, id = runId) {
   const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=1&format=json&origin=*`);
   const title = d.query.search[0]?.title;
   // Only when the top article is really about the query, not just mentions it.
   const t = normTitle(title || ""), nq = normTitle(q);
   if (!t || !(t.includes(nq) || (nq.includes(t) && t.length >= nq.length * 0.6))) return;
   const s = await getJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`);
-  if (s.type === "disambiguation" || !s.extract || !$("answer").hidden) return;
+  if (id !== runId || q !== query || s.type === "disambiguation" || !s.extract || !$("answer").hidden) return;
   renderAnswer({ title: s.title, text: s.extract, image: s.thumbnail?.source, url: s.content_urls?.desktop?.page, source: "Wikipedia" });
 }
 
@@ -805,7 +830,8 @@ function runCached(n, s, q, page) {
   const hit = settleCache.get(key);
   if (hit && Date.now() - hit.t < 120000) return hit.p;
   // No ads, whatever the source: anything an ad server links to or that's marked sponsored is dropped.
-  const p = Promise.resolve().then(() => s.run(q, { page })).then(r => ({ n, r: (r || []).filter(x => !isAdResult(x)) }), err => ({ n, err }));
+  // Every source gets 15 seconds, so "Show more" and the final results never wait on one slow server.
+  const p = withTimeout(Promise.resolve().then(() => s.run(q, { page })), 15000).then(r => { const out = (r || []).filter(x => !isAdResult(x)); out.spell = r?.spell; return { n, r: out }; }, err => ({ n, err }));
   settleCache.set(key, { t: Date.now(), p });
   p.then(x => { if (x.err) settleCache.delete(key); });
   return p;
@@ -813,7 +839,7 @@ function runCached(n, s, q, page) {
 const settle = (sources, q, page = 0, onEach) => {
   const done = [];
   return Promise.all(Object.entries(sources)
-    .filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n) && (!page || s.paged))
+    .filter(([n, s]) => (!s.enabled || s.enabled()) && !srcOff(n) && (!page || s.paged))
     .map(([n, s]) => runCached(n, s, q, page).then(x => { done.push(x); onEach?.(done.slice()); return x; })));
 };
 // Runs fn at most every 150 ms while answers keep coming in.
@@ -858,7 +884,7 @@ function renderSpelling(results = []) {
     const have = new Set(query.toLowerCase().split(/\s+/)), want = new Set(hint.toLowerCase().split(/\s+/));
     const changed = [...have].filter(w => !want.has(w) && w.length > 2);
     const text = results.slice(0, 10).map(r => `${r.title} ${r.snippet || ""}`).join(" ").toLowerCase();
-    if (!changed.length || changed.some(w => (text.match(new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g")) || []).length >= 2)) hint = "";
+    if (!changed.length || changed.some(w => (text.match(new RegExp(`(?<![\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "gu")) || []).length >= 2)) hint = "";
   }
   fill(box, hint && el("span", {}, "Did you mean ", el("a", { href: "#", textContent: hint, onclick: e => { e.preventDefault(); query = hint; go(); } }), "?"));
   box.hidden = !hint;
@@ -932,7 +958,7 @@ function drawResults(rest, c) {
 
 // Searches from the All tab open in the mode they need (Houses, Jobs, Shopping…), like the engines'
 // verticals; "Search the whole web instead" turns it off for that search.
-let userPicked = new URLSearchParams(location.search).has("tab"), wholeWebFor = "", autoMode = null;
+let userPicked = new URLSearchParams(location.search).has("tab"), wholeWebFor = "", autoMode = null, autoFor = "";
 const DEPARTMENTS = [["all", "", "All"], ["shopping", "products", "Shopping"], ["shopping", "houses", "Houses"], ["shopping", "cars", "Cars"], ["shopping", "secondhand", "Second-hand"],
   ["jobs", "", "Jobs"], ["travel", "", "Travel"], ["all", "events", "Events"], ["all", "recipes", "Recipes"], ["all", "movies", "Movies & TV"], ["images", "", "Images"], ["videos", "", "Videos"], ["news", "", "News"], ["maps", "", "Maps"], ["books", "", "Books"]];
 function renderDepartment() {
@@ -950,10 +976,10 @@ async function go() {
   if (savedRegion === null) savedRegion = regionId;
   regionId = regionFromQuery(query) || store.get("unitex.region", savedRegion) || savedRegion;
   // A search on the All tab that clearly needs a mode opens in it.
-  autoMode = null;
+  if (autoFor !== query) autoMode = null;
   if (query && !userPicked && tab === "all" && (!sub || sub === "all") && wholeWebFor !== query) {
     const it = detectIntent(query);
-    if (it) { [tab, sub] = it; autoMode = it[2]; }
+    if (it) { [tab, sub] = it; autoMode = it[2]; autoFor = query; }
   }
   const c = cur();
   topicId = c.topic;
@@ -980,6 +1006,7 @@ async function go() {
   document.body.classList.toggle("web-tab", c.kind === "web");
   $("results").replaceChildren();
   imagePack = null;
+  shown = STEP.web;
   $("tab-more")?.replaceChildren();
   more = null;
 
@@ -1008,7 +1035,7 @@ async function go() {
     $("status").textContent = `Searching ${(c.subName && c.sub !== "all" ? c.subName : c.name).toLowerCase()}…`;
     if (c.kind === "list") $("results").replaceChildren(...skeletons(4));
     const cardSrc = c.topic !== "all" ? cardSourcesFor(c.topic) : {};
-    const keyOf = c.kind === "images" ? i => i.thumb : r => urlKey(r.url);
+    const keyOf = c.kind === "images" ? i => urlKey(i.full || i.url || i.thumb) : r => urlKey(r.url);
     // News: only stories that are really about the search.
     // Videos: only things that are videos (a video site, a length, or a player), not web pages that
     // an engine's video section let through, like a speed test.
@@ -1057,11 +1084,11 @@ async function go() {
   $("status").textContent = c.shop ? "Searching every store…" : "Searching…";
 
   const cardSrc = cardSourcesFor(topicId);
-  wikiAnswer(query).catch(() => {});
+  wikiAnswer(query, id).catch(() => {});
   spellHint = "";
   // Draw results as each source answers, instead of waiting for the slowest one.
   let mainSoFar = [], cardsSoFar = [], aiStarted = false;
-  const total = Object.entries({ ...MAIN_SOURCES, ...cardSrc }).filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n)).length;
+  const total = Object.entries({ ...MAIN_SOURCES, ...cardSrc }).filter(([n, s]) => (!s.enabled || s.enabled()) && !srcOff(n)).length;
   const paint = throttled(() => {
     if (id !== runId) return;
     const { main } = mergeMain(mainSoFar);
@@ -1114,7 +1141,6 @@ async function go() {
   };
   drawResults(rest, c);
   drawCards();
-  if (!c.shop && !MODES[topicId] && !main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
   if (!c.shop && !MODES[topicId] && !aiStarted) renderAiOverview(query, main);
   const tiles = roundRobin(images.map(s => s.r || []).map(l => l.filter(i => aboutSearch(i.title, query, 0.01))), i => i.thumb).slice(0, 6).map(imageTile).filter(Boolean);
@@ -1124,8 +1150,10 @@ async function go() {
       el("div", { className: "image-strip" }, ...tiles));
     drawResults(rest, c);
   }
+  if (!c.shop && !MODES[topicId] && !main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
   $("status").textContent = MODES[topicId] ? "" : `${main.length} results`;
+  spellHint = settled.find(x => x.n === "wikipedia")?.r?.spell || "";
   renderSpelling(main);
   if (!c.shop && !MODES[topicId] && main.length) renderRelated(query, id);
 }
@@ -1137,6 +1165,6 @@ $("search").addEventListener("submit", e => {
   go();
 });
 $("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));
-attachSuggestions($("q"), text => { query = text; go(); });
+attachSuggestions($("q"), text => { $("q").value = text; $("search").requestSubmit(); });
 
 go();
