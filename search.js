@@ -730,6 +730,8 @@ async function showMore(kind) {
 
 let shown = 10;
 function drawResults(rest, c) {
+  // On card searches (Shopping, Jobs, Houses…) only the cards are shown, not ordinary results.
+  if (c.shop || MODES[topicId]) { $("results").replaceChildren(); return; }
   const list = rest.filter(r => !siteOff(r));
   const items = list.slice(0, shown).map(resultItem).filter(Boolean);
   $("results").replaceChildren(...items);
@@ -843,7 +845,7 @@ async function go() {
   };
   drawResults(rest, c);
   drawCards();
-  if (!main.length && !lastCards.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
+  if (!c.shop && !MODES[topicId] && !main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
   if (!c.shop && !MODES[topicId]) renderAiOverview(query, main);
   const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
