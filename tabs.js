@@ -38,7 +38,7 @@ function viewer() {
   if (!d) {
     d = el("dialog", { id: "viewer", className: "viewer" });
     d.addEventListener("click", e => { if (e.target === d) d.close(); });
-    d.addEventListener("close", () => d.replaceChildren());
+    d.addEventListener("close", () => { d.replaceChildren(); d.onkeydown = null; });
     document.body.append(d);
   }
   return d;
@@ -48,6 +48,7 @@ function viewer() {
 
 function playVideo(v) {
   const d = viewer();
+  d.onkeydown = null;  // the image viewer's arrow keys
   const player = v.embed
     ? el("iframe", { src: v.embed, allow: "autoplay; fullscreen; picture-in-picture", allowFullscreen: true, referrerPolicy: "no-referrer", title: v.title })
     : el("video", { src: v.file, controls: true, autoplay: true });
@@ -55,7 +56,7 @@ function playVideo(v) {
     el("div", { className: "viewer-head" }, el("h2", { textContent: v.title }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
     el("div", { className: "player" }, player),
     el("div", { className: "viewer-foot" }, el("span", { className: "via" }, el("b", { textContent: siteName(v.url) }), !isSelf(v.via, v.url) ? ` · found by ${v.via}` : ""), v.by && el("span", { className: "hint", textContent: v.by }), v.secs && el("span", { className: "hint", textContent: mins(v.secs) }),
-      el("a", { href: v.url, rel: "noopener", className: "btn-ghost", textContent: `Open on ${v.via}` }), tabSave(v, "videos")));
+      el("a", { href: v.url, rel: "noopener", className: "btn-ghost", textContent: `Open on ${siteName(v.url)}` }), tabSave(v, "videos")));
   if (!d.open) d.showModal();
 }
 
@@ -207,6 +208,38 @@ function newsItem(n) {
   return r;
 }
 
+// One name per outlet: "www.bbc.co.uk", "bbc.co.uk" and "BBC News" are all BBC.
+const isDomain = s => /^[\w-]+(\.[\w-]+)+$/.test(s);
+function outletKey(n) {
+  const o = String(n.outlet || "").trim();
+  if (!o) return "";
+  const k = isDomain(o) ? siteRoot("https://" + o.replace(/^www\./, "")) : o.toLowerCase().replace(/\.(com|org|net|co\.uk|com\.au)$/, "").replace(/[^a-z0-9]/g, "");
+  return k.replace(/^the(?=.{3})/, "").replace(/(news|online)$/, "") || k;
+}
+function outletOptions(items) {
+  const names = new Map();
+  for (const n of items) {
+    const k = outletKey(n);
+    if (!k) continue;
+    const o = String(n.outlet).trim(), m = names.get(k) || new Map();
+    // A real name ("BBC News") beats a web address.
+    const label = isDomain(o) ? siteName("https://" + o.replace(/^www\./, "")) : o;
+    m.set(label, (m.get(label) || 0) + (isDomain(o) ? 1 : 100));
+    names.set(k, m);
+  }
+  return [...names].map(([k, m]) => [k, [...m].sort((a, b) => b[1] - a[1])[0][0]]).sort((a, b) => a[1].localeCompare(b[1]));
+}
+// Newest first, without burying stories that show no date: dated stories are sorted among the places
+// dated stories hold; undated ones keep their place in the merged order.
+function byNewest(list) {
+  const at = [], dated = [];
+  list.forEach((n, i) => { if (n.ts) { at.push(i); dated.push(n); } });
+  dated.sort((a, b) => b.ts - a.ts);
+  const out = [...list];
+  at.forEach((i, j) => { out[i] = dated[j]; });
+  return out;
+}
+
 // ---------- draw the current tab ----------
 
 function drawTab() {
@@ -254,11 +287,11 @@ function drawTab() {
     if (tabFilters.sort === "new") list.sort((a, b) => (b.year || 0) - (a.year || 0));
     bar.push(tabCheck("free", "Free to read"), tabSelect("sort", "Sort: best match", [["cites", "Most cited"], ["new", "Newest first"]]));
   } else if (v === "news") {
-    if (tabFilters.outlet) list = list.filter(n => n.outlet === tabFilters.outlet);
+    if (tabFilters.outlet) list = list.filter(n => outletKey(n) === tabFilters.outlet);
     if (tabFilters.region) list = list.filter(n => n.region === tabFilters.region);
     if (tabFilters.time) { const since = Date.now() / 1000 - +tabFilters.time; list = list.filter(n => n.ts && n.ts >= since); }
-    if (tabFilters.sort !== "match") list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    bar.push(tabSelect("time", "Any time", [["3600", "Past hour"], ["86400", "Past 24 hours"], ["604800", "Past week"], ["2592000", "Past month"]]), tabSelect("sort", "Sort: newest", [["match", "Best match"]]), tabSelect("outlet", "All outlets", opts(tabItems.map(n => n.outlet))), tabSelect("region", "All countries", opts(tabItems.map(n => n.region))));
+    if (tabFilters.sort !== "match") list = byNewest(list);
+    bar.push(tabSelect("time", "Any time", [["3600", "Past hour"], ["86400", "Past 24 hours"], ["604800", "Past week"], ["2592000", "Past month"]]), tabSelect("sort", "Sort: newest", [["match", "Best match"]]), tabSelect("outlet", "All outlets", outletOptions(tabItems)), tabSelect("region", "All countries", opts(tabItems.map(n => n.region))));
   }
 
   tabFiltered = list;
@@ -287,7 +320,11 @@ function drawTab() {
 
 // Called by search.js with the merged items for a media tab.
 function showTab(items) {
-  if (tabFiltersFor !== tab + "/" + sub) { tabFilters = {}; tabFiltersFor = tab + "/" + sub; }
+  // A new tab starts with no filters; a new search keeps the general ones (length, sort…) but not
+  // the ones that name something in the old results (an outlet, a website, a country).
+  if (tabFiltersFor.split("\n")[0] !== tab + "/" + sub) tabFilters = {};
+  else if (tabFiltersFor !== tab + "/" + sub + "\n" + query) for (const k of ["outlet", "region", "site", "src"]) delete tabFilters[k];
+  tabFiltersFor = tab + "/" + sub + "\n" + query;
   tabItems = items;
   drawTab();
 }
