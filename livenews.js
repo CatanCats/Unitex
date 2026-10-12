@@ -26,6 +26,8 @@ const NEWS_SECTIONS = [
 const xmlText = (node, ...names) => { for (const n of names) { const e = node.getElementsByTagName(n)[0]; if (e?.textContent.trim()) return e.textContent.trim(); } return ""; };
 const stripTags = s => new DOMParser().parseFromString(s || "", "text/html").body.textContent.replace(/\s+/g, " ").trim();
 const cut = (s, n) => s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") + "…" : s;
+// Logos, tracking pixels and avatars are not story pictures.
+const BAD_IMG = /logo|favicon|placeholder|default[-_.]|pixel|feedburner|emoji|gravatar|spacer|avatar|1x1|blank\.(gif|png)/i;
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
 
 function parseFeed(xml, via, fallbackSource) {
@@ -35,6 +37,13 @@ function parseFeed(xml, via, fallbackSource) {
   return nodes.slice(0, 25).map(n => {
     let title = stripTags(xmlText(n, "title"));
     let link = xmlText(n, "link") || n.getElementsByTagName("link")[0]?.getAttribute("href") || "";
+    // Mastodon posts have no title: the post's words are the title, and the link is the article it shares.
+    if (!title) {
+      const html = xmlText(n, "description", "content");
+      title = cut(stripTags(html).replace(/#\w+/g, "").replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim(), 140);
+      const out = [...html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).find(u => hostOf(u) !== hostOf(link) && !/\/tags?\/|\/@/.test(u));
+      if (out) link = out;
+    }
     // Bing wraps links: bing.com/news/apiclick.aspx?url=<the article>
     try { const u = new URL(link); if (u.hostname.endsWith("bing.com") && u.searchParams.get("url")) link = u.searchParams.get("url"); } catch {}
     const srcEl = n.getElementsByTagName("source")[0];
@@ -44,11 +53,12 @@ function parseFeed(xml, via, fallbackSource) {
     const img = n.getElementsByTagName("media:content")[0]?.getAttribute("url") || n.getElementsByTagName("media:thumbnail")[0]?.getAttribute("url")
       || [...n.getElementsByTagName("enclosure")].find(e => /^image\//.test(e.getAttribute("type") || ""))?.getAttribute("url")
       || n.getElementsByTagName("News:Image")[0]?.textContent.trim() || descHtml.match(/<img[^>]+src="([^"]+)"/)?.[1];
-    const when = Date.parse(xmlText(n, "pubDate", "published", "updated", "dc:date"));
+    const goodImg = img && !BAD_IMG.test(img) ? img.replace(/^(https:\/\/[^/]*bing\.(?:com|net)\/th\?id=[^&]+).*$/, "$1&w=640&h=360") : null;
+    const when = Math.min(Date.parse(xmlText(n, "pubDate", "published", "updated", "dc:date")), Date.now()); // a wrong time zone can't put a story in the future
     let domain = hostOf(link);
     if (domain.endsWith("news.google.com")) domain = hostOf(srcEl?.getAttribute("url") || "") || domain;
     const summary = via === "Google News" ? "" : cut(stripTags(descHtml), 220);
-    return title && /^https?:/.test(link) && { title, url: link, source: outlet || domain, domain, via: [via], published: when ? Math.floor(when / 1000) : null, image: img && /^https?:|^\/\//.test(img) ? img.replace(/^\/\//, "https://") : null, summary: summary.length > 25 ? summary : "" };
+    return title && /^https?:/.test(link) && { title, url: link, source: outlet || domain, domain, via: [via], published: when ? Math.floor(when / 1000) : null, image: goodImg && /^https?:|^\/\//.test(goodImg) ? goodImg.replace(/^\/\//, "https://") : null, summary: summary.length > 25 ? summary : "" };
   }).filter(Boolean);
 }
 
@@ -89,6 +99,9 @@ async function outletFeeds(section) {
   return pick(section.feeds);
 }
 
+let gdeltNext = 0;
+const gdeltTurn = () => { const wait = Math.max(0, gdeltNext - Date.now()); gdeltNext = Math.max(Date.now(), gdeltNext) + 5200; return new Promise(r => setTimeout(r, wait)); };
+
 // Every source for a section: { name, run() → stories }.
 async function newsSourcesFor(section) {
   const out = [];
@@ -98,23 +111,34 @@ async function newsSourcesFor(section) {
     out.push({ name: "Google News", run: () => viaHelper(g, "Google News") });
     out.push({ name: "Bing News", run: () => viaHelper(`https://www.bing.com/news/search?q=${encodeURIComponent(section.bing)}&format=rss`, "Bing News") });
     if (section.yahoo) out.push({ name: "Yahoo News", run: () => viaHelper(section.yahoo, "Yahoo News") });
-    for (const f of await outletFeeds(section)) out.push({ name: f.source, outlet: true, run: () => viaHelper(f.url, f.source, f.source).then(list => list.map(i => ({ ...i, source: f.source, region: f.region, own: [f.source] }))) });
+    for (const f of await outletFeeds(section)) {
+      if (f.region === "Community") {
+        // Lemmy, Tildes, Mastodon, Slashdot…: the story is the article they link to, found by the community.
+        const home = hostOf(f.url).split(".").slice(-2).join(".");
+        out.push({ name: f.source, outlet: true, run: () => viaHelper(f.url, f.source).then(list => list
+          .filter(i => !hostOf(i.url).endsWith(home) && !/(^|\.)(reddit\.com|x\.com|twitter\.com|ycombinator\.com)$/.test(hostOf(i.url)))
+          .map(i => ({ ...i, source: hostOf(i.url), domain: hostOf(i.url), via: [f.source], summary: "" }))) });
+        continue;
+      }
+      out.push({ name: f.source, outlet: true, run: () => viaHelper(f.url, f.source, f.source).then(list => list.map(i => ({ ...i, source: f.source, region: f.region, own: [f.source] }))) });
+    }
   }
   // These let other websites read them, so they work with or without the helper.
   out.push({ name: "GDELT", run: async () => {
+    await gdeltTurn();
     const r = await fetchT(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(section.gdelt + " sourcelang:english")}&mode=artlist&maxrecords=40&format=json&sort=datedesc&timespan=6h`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    return (d.articles || []).map(a => ({ title: a.title, url: a.url, source: a.domain, domain: hostOf(a.url), via: ["GDELT"], region: a.sourcecountry, image: a.socialimage || null, summary: "",
+    return (d.articles || []).map(a => ({ title: a.title, url: a.url, source: a.domain, domain: hostOf(a.url), via: ["GDELT"], region: a.sourcecountry, image: a.socialimage && !BAD_IMG.test(a.socialimage) ? a.socialimage : null, summary: "",
       published: a.seendate ? Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000 : null }));
   }});
   out.push({ name: "Reddit", run: async () => {
     const r = await fetchT(`https://www.reddit.com/r/${section.reddit}/hot.json?limit=30&raw_json=1`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    return d.data.children.map(c => c.data).filter(p => !p.is_self && !p.stickied && /^https?:/.test(p.url) && !/reddit\.com|redd\.it|imgur|youtube/.test(p.url))
+    return d.data.children.map(c => c.data).filter(p => !p.is_self && !p.stickied && !p.over_18 && !/(^|\.)(x\.com|twitter\.com)\//.test(p.url.replace(/^https?:\/\//, "")) && /^https?:/.test(p.url) && !/reddit\.com|redd\.it|imgur|youtube/.test(p.url))
       .map(p => ({ title: p.title, url: p.url, source: hostOf(p.url), domain: hostOf(p.url), via: [`Reddit (${p.subreddit_name_prefixed})`], published: p.created_utc, summary: "",
-        image: p.preview?.images?.[0]?.source?.url || (/^https?:/.test(p.thumbnail) ? p.thumbnail : null) }));
+        image: p.preview?.images?.[0]?.source?.url || null }));
   }});
   if (section.hn) out.push({ name: "Hacker News", run: async () => {
     const r = await fetchT("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=30");
@@ -126,12 +150,14 @@ async function newsSourcesFor(section) {
 
 // ---------- merging ----------
 
-const storyKey = t => t.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim().slice(0, 70);
+// Same story, any language: letters and numbers only, without " | Outlet" or " - Live updates" endings.
+const storyKey = t => t.replace(/\s+[|–—-]\s+[^|–—-]{2,40}$/, "").toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").replace(/\s+/g, " ").trim().slice(0, 70);
 function mergeStories(lists) {
   const byKey = new Map();
   for (const s of lists.flat()) {
     if (!s?.title) continue;
     const k = storyKey(s.title);
+    if (k.length < 8) { byKey.set(Symbol(), { ...s, via: [...s.via], own: [...(s.own || [])] }); continue; }
     const have = byKey.get(k);
     if (!have) { byKey.set(k, { ...s, via: [...s.via], own: [...(s.own || [])] }); continue; }
     for (const v of s.via) if (!have.via.includes(v)) have.via.push(v);
@@ -143,8 +169,10 @@ function mergeStories(lists) {
     have.published = Math.max(have.published || 0, s.published || 0) || null;
   }
   // Newest first, but no website gets more than 4 of the top stories in a row.
-  const all = [...byKey.values()].filter(s => !s.published || Date.now() / 1000 - s.published < 72 * 3600)
-    .sort((a, b) => (b.via.length > 1) - (a.via.length > 1) || (b.published || 0) - (a.published || 0));
+  // Fresh first; a story many sources carry rises, but a day-old one doesn't beat this hour's news.
+  const now = Date.now() / 1000;
+  const score = s => Math.exp(-(now - (s.published || now - 6 * 3600)) / (12 * 3600)) * (1 + 0.3 * (s.via.length - 1));
+  const all = [...byKey.values()].filter(s => !s.published || now - s.published < 48 * 3600).sort((a, b) => score(b) - score(a));
   const per = {}, first = [], later = [];
   for (const s of all) ((per[s.source] = (per[s.source] || 0) + 1) <= 4 ? first : later).push(s);
   return [...first, ...later];
@@ -166,6 +194,8 @@ async function loadSection(section, onPartial) {
     onPartial?.(mergeStories(lists), report, pending);
   })));
   const result = { at: Date.now(), stories: mergeStories(lists), report };
+  const had = liveCache.get(section.id);
+  if (!result.stories.length && had?.stories.length) return had; // offline or every source failed: keep what was there
   liveCache.set(section.id, result);
   return result;
 }

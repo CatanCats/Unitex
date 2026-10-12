@@ -242,7 +242,7 @@ const VIDEO_SOURCES = {
 // A news story counts only if it's about the search: every word for short searches, most words for long ones.
 const NEWS_STOP = new Set("the a an of in on for to and or with at by from is are was were be what how why who when where news latest today new".split(" "));
 function newsMatches(item, q) {
-  const ws = q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2 && !NEWS_STOP.has(w));
+  const ws = q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 2 && !NEWS_STOP.has(w)); // "AI", "EV", "F1" count
   if (!ws.length) return true;
   const text = `${item.title || ""} ${item.snippet || ""}`.toLowerCase();
   const hits = ws.filter(w => new RegExp(`(^|[^\\p{L}])${w.replace(/(es|s)$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|es)?($|[^\\p{L}])`, "u").test(text)).length;
@@ -261,12 +261,16 @@ const NEWS_SOURCES = {
     return lists.flat().filter(i => newsMatches({ title: i.title, snippet: i.summary }, q)).map(newsItem_);
   }},
   gdelt: { name: "GDELT (world news index)", async run(q) {
-    const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(q)}&mode=artlist&maxrecords=25&format=json&sort=datedesc`);
-    return (d.articles || []).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
+    // English stories from the past week; GDELT needs words of 3+ letters.
+    const words = q.split(/\s+/).filter(w => w.length >= 3).join(" ");
+    if (!words) return [];
+    const d = await getJson(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(words + " sourcelang:english")}&mode=artlist&maxrecords=25&format=json&sort=hybridrel&timespan=1w`);
+    return (d.articles || []).filter(a => newsMatches({ title: a.title }, q)).map(a => ({ title: a.title, url: a.url, thumb: a.socialimage, via: a.domain, outlet: a.domain, region: a.sourcecountry, ts: a.seendate && Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000, meta: [a.sourcecountry, a.seendate && ago(Date.parse(a.seendate.replace(/(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z/, "$1-$2-$3T$4:$5:$6Z")) / 1000)].filter(Boolean).join(" · ") }));
   }},
   hackernews: { paged: true, name: "Hacker News", async run(q, { page: P = 0 } = {}) {
-    const d = await getJson(`https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=10&page=${P}`);
-    return d.hits.filter(h => h.title).map(h => ({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, via: "Hacker News", outlet: h.url ? host(h.url) : "Hacker News", region: "Community", ts: h.created_at_i, meta: `${h.points} points · ${ago(h.created_at_i)}` }));
+    // Stories people voted up, linking to the article (not "Ask HN" posts).
+    const d = await getJson(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&tags=story&numericFilters=points%3E20,created_at_i%3E${Math.floor(Date.now() / 1000) - 30 * 86400}&hitsPerPage=10&page=${P}`);
+    return d.hits.filter(h => h.title && h.url && !/^(ask|tell|show) hn/i.test(h.title)).map(h => ({ title: h.title, url: h.url, via: "Hacker News", outlet: h.url ? host(h.url) : "Hacker News", region: "Community", ts: h.created_at_i, meta: `${h.points} points · ${ago(h.created_at_i)}` }));
   }},
 };
 

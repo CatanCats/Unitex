@@ -47,8 +47,8 @@ function guessRegion() {
 
 // A place in the search decides the country for that search: "jobs in Melbourne" → Australia.
 const PLACE_REGIONS = {
-  AU: /\b(australia|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|canberra|gold coast|sunshine coast|newcastle|geelong|wollongong|cairns|townsville|ballarat|bendigo|toowoomba|launceston|parramatta|nsw|vic|qld|tas|act|new south wales|victoria|queensland|tasmania|western australia|south australia|northern territory)\b/i,
-  NZ: /\b(new zealand|nz|auckland|wellington|christchurch|hamilton|tauranga|dunedin|queenstown)\b/i,
+  AU: /\b(australia|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|canberra|gold coast|sunshine coast|geelong|wollongong|cairns|townsville|ballarat|bendigo|toowoomba|launceston|parramatta|nsw|qld|new south wales|queensland|tasmania|western australia|south australia|northern territory|(?:in|near) (?:newcastle|victoria|vic|tas|act))\b/i,
+  NZ: /\b(new zealand|nz|auckland|wellington|christchurch|tauranga|dunedin|queenstown|(?:in|near) hamilton)\b/i,
   UK: /\b(uk|united kingdom|england|scotland|wales|london|manchester|birmingham|leeds|glasgow|edinburgh|liverpool|bristol|sheffield|cardiff|belfast)\b/i,
   CA: /\b(canada|toronto|vancouver|montreal|calgary|ottawa|edmonton|winnipeg|ontario|quebec|british columbia|alberta)\b/i,
   US: /\b(usa|united states|new york|los angeles|chicago|houston|san francisco|seattle|boston|austin|miami|denver|atlanta|dallas|phoenix|california|texas|florida)\b/i,
@@ -227,11 +227,14 @@ function openSavedDrawer() {
 // Chrome only lets a page download its built-in AI right after a click or key press, so Unitex starts that
 // download on the first one (searching from the home page counts too). waitNano resolves when it's ready.
 var nanoReady;
-function aiWarmUp() {
-  if (!navigator.userActivation?.isActive) return;
+// Only when Gemini Nano is the chosen AI: nothing downloads for people who didn't pick it.
+async function aiWarmUp() {
+  if (!navigator.userActivation?.isActive || nanoReady || typeof aiEnabled === "function" && !aiEnabled() || settings.overview !== "nano") return;
   for (const api of [globalThis.LanguageModel, globalThis.Summarizer].filter(Boolean)) {
     const opts = api === globalThis.Summarizer ? { outputLanguage: "en" } : { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
-    api.availability(opts).then(a => { if (a === "downloadable" || a === "downloading") nanoReady ||= api.create(opts).then(x => x.destroy?.(), () => {}); }).catch(() => {});
+    const a = await api.availability(opts).catch(() => "unavailable");
+    if (a === "unavailable") continue;
+    if (a === "downloadable" || a === "downloading") nanoReady ||= api.create(opts).then(x => x.destroy?.(), () => {});
     break;
   }
 }
@@ -315,7 +318,8 @@ function openSettings() {
       el("label", { className: "set-field" }, el("span", { textContent: "Theme" }), theme),
       el("label", { className: "set-field" }, el("span", { textContent: "Cards (Shopping, Houses, Jobs…)" }), cardSize),
       el("button", { type: "button", className: "chip", textContent: "Switch all sources back on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All sources are on ✓"; } }),
-      el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed.` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ", el("a", { href: "install.html", textContent: "Unitex Helper" }))),
+      el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed. ` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ",
+        el("a", { href: "install.html", textContent: document.documentElement.dataset.unitexHelper ? "Update or reinstall" : "Install Unitex Helper" }))),
     el("div", { className: "set-actions" },
       el("button", { type: "button", className: "btn-ghost", textContent: "Cancel", onclick: () => d.close() }),
       el("button", { type: "button", className: "btn-primary", textContent: "Save", onclick() {

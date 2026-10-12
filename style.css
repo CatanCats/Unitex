@@ -1000,3 +1000,7 @@ body.mode-on .tools-row { max-width: none; }
 .xcards.list .xcard.job .xcard-img { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .xcards.list .xcard.job .site-badge { display: inline-flex; position: static; font-size: 0.66rem; padding: 2px 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .len-custom{display:inline-flex;align-items:center;gap:4px;font-size:13px}.len-custom .len-num{width:64px}
+
+.settings .set-check{flex-direction:row;align-items:center;gap:8px;color:inherit}
+.settings input[type=checkbox]{padding:0;width:auto}
+.set-field select{max-width:100%;min-width:0}

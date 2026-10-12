@@ -10,14 +10,17 @@
 const textBlock = el => el?.textContent.replace(/\s+/g, " ").trim() || "";
 
 // Finds the block that follows a heading such as "AI Overview" and returns its text.
+// Only a real heading counts (not a tab or menu label), and the block must read like an answer.
 function blockAfterHeading(doc, re) {
-  const head = [...doc.querySelectorAll("h1,h2,h3,div,span")].find(e => e.children.length === 0 && re.test(e.textContent.trim()) && e.textContent.trim().length < 40);
-  if (!head) return "";
-  let box = head;
-  for (let i = 0; i < 6 && box.parentElement; i++) {
-    box = box.parentElement;
-    const t = textBlock(box);
-    if (t.length > 200) return t.replace(re, "").trim();
+  const heads = [...doc.querySelectorAll("h1, h2, h3, [role=heading]")].filter(e => re.test(e.textContent.trim()) && e.textContent.trim().length < 40);
+  for (const head of heads) {
+    let box = head;
+    for (let i = 0; i < 6 && box.parentElement; i++) {
+      box = box.parentElement;
+      const t = textBlock(box).replace(re, "").replace(/AI responses may include mistakes\.?.*$/i, "").trim();
+      if (t.length > 3000 || (t.match(/https?:\/\/|www\./g) || []).length > 4) break; // grew into the results or the menus
+      if (t.length > 200) return t;
+    }
   }
   return "";
 }
@@ -120,7 +123,13 @@ async function pickModel() {
 }
 
 // aiWarmUp (in core.js) starts Chrome's one-time AI download on the first click or key press.
-const waitNano = () => new Promise(resolve => { const t = setInterval(() => { if (nanoReady) { clearInterval(t); nanoReady.then(resolve); } }, 300); });
+const waitNano = () => new Promise((resolve, reject) => {
+  const started = Date.now();
+  const t = setInterval(() => {
+    if (nanoReady) { clearInterval(t); nanoReady.then(resolve); }
+    else if (Date.now() - started > 20000) { clearInterval(t); reject(new Error("Chrome's built-in AI isn't ready yet")); }
+  }, 300);
+});
 
 // Generates with the first model that works, falling back to the next.
 async function aiGenerateAny(tries, messages, onText, onProgress, onModel) {
@@ -321,7 +330,7 @@ async function providerChain(first) {
   const tries = all.filter(m => m === first || avail[m]?.state === "ready");
   const keyed = [settings.keys.anthropic && "key-claude", settings.keys.openai && "key-openai", settings.keys.gemini && "key-gemini"].filter(Boolean);
   const engines = helperVersion() ? ["google", "bing", "brave"] : [];
-  return [...new Set([first, ...engines, ...keyed, ...tries])];
+  return [...new Set([first, ...engines, ...keyed, ...tries])].filter(id => helperVersion() || !AI_SOURCES[id]);
 }
 
 function signInButton(id, then) {
@@ -351,6 +360,7 @@ async function renderAiOverview(q, results, chosen = settings.overview || "googl
   const pick = providerSelect(chosen, v => { settings.overview = v; saveSettings(); renderAiOverview(q, results, v); });
   // Folded to a few lines with "Show more", like the engines' AI overviews.
   const expand = el("button", { type: "button", className: "ai-expand", textContent: "Show more ▾", onclick() { box.classList.toggle("open"); this.textContent = box.classList.contains("open") ? "Show less ▴" : "Show more ▾"; } });
+  expand.hidden = true; // only once there is a long answer
   box.classList.remove("open");
   fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("label", { className: "ai-model" }, "by ", pick)), bar.box, body, expand, note);
   box.hidden = false;
@@ -361,7 +371,7 @@ async function renderAiOverview(q, results, chosen = settings.overview || "googl
   for (const pid of chain) {
     fill(body, el("p", { className: "hint ai-gen", textContent: `Generating with ${providerName(pid)}…` }));
     try {
-      await runProvider(pid, q, [systemPrompt(q, ctx), { role: "user", content: q }], t => { if (id === runId) fill(body, aiRich(t, ctx)); }, (v, t) => bar.set(v, t));
+      await runProvider(pid, q, [systemPrompt(q, ctx), { role: "user", content: q }], t => { if (id === runId) { fill(body, aiRich(t, ctx)); expand.hidden = t.length < 350; } }, (v, t) => bar.set(v, t));
       if (id !== runId) return;
       bar.set(0, "");
       pick.value = pid;
@@ -403,14 +413,16 @@ async function renderAiTab(q, results) {
   const id = runId;
   const ctx = aiContext(results, 10);
   if (aiThread.q !== q) aiThread = { q, turns: [] };
-  let current = store.get("unitex.ai.chat", "") || (chatCapable({ id: settings.overview }) ? settings.overview : "puter-chatgpt");
+  const keyed = [settings.keys.anthropic && "key-claude", settings.keys.openai && "key-openai", settings.keys.gemini && "key-gemini"].find(Boolean);
+  const ready = Object.keys(store.get("unitex.ai.downloaded", {}))[0];
+  let current = store.get("unitex.ai.chat", "") || (chatCapable({ id: settings.overview }) ? settings.overview : keyed || ready || "puter-chatgpt");
   const thread = el("div", { className: "ai-thread" });
   const bar = progressBar();
   const input = el("input", { type: "text", placeholder: "Ask a follow-up…", ariaLabel: "Ask a follow-up" });
   const sel = providerSelect(current, v => { current = v; store.set("unitex.ai.chat", v); }, chatCapable);
   const form = el("form", { className: "ai-ask" }, input, el("button", { type: "submit", className: "btn-primary", textContent: "Ask" }));
   let busy = false;
-  const others = ["puter-chatgpt", "puter-claude", "puter-gemini", "nano", "llama1"];
+  const others = ["puter-chatgpt", "puter-claude", "puter-gemini", ...Object.keys(store.get("unitex.ai.downloaded", {}))];
 
   const turnEl = t => t.role === "user"
     ? el("div", { className: "ai-msg user" }, el("p", { textContent: t.content }))

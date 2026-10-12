@@ -23,8 +23,9 @@ function renderEngine() {
   const e = byId(engineId);
   $("engine-icon").replaceChildren(icon(e));
   $("engine-name").textContent = e.name;
+  if (homeTab === "ai" && !aiEnabled()) homeTab = "all";
   const name = HOME_TABS.find(([id]) => id === homeTab)[1];
-  $("q").placeholder = homeTab !== "all" ? (homeTab === "shopping" ? "Search every store with Unitex…" : `Search ${name.toLowerCase()} with Unitex…`) : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
+  $("q").placeholder = homeTab !== "all" ? (homeTab === "shopping" ? "Search every store with Unitex…" : homeTab === "ai" ? "Ask AI…" : `Search ${name.toLowerCase()} with Unitex…`) : e.ai ? `Ask ${e.name}…` : e.local ? "Search the web with Unitex…" : `Search ${e.name}…`;
 
 }
 
@@ -160,7 +161,7 @@ function renderNews() {
     list.replaceChildren(...(current.pending ? Array.from({ length: 6 }, () => el("li", { className: "skeleton" })) : [el("li", { className: "empty" }, "The news sources didn't answer this time. Unitex tries again in a few minutes. ", !helperVersion() || helperOutdated() ? el("a", { href: "install.html", textContent: "Get the latest Unitex Helper" }) : "")]));
   } else {
     // Lead with the first story that has a picture.
-    const lead = items.findIndex(i => i.image);
+    const lead = items.slice(0, 6).findIndex(i => i.image); // only a top story leads, not an old one further down
     const order = lead > 0 ? [items[lead], ...items.filter((_, n) => n !== lead)] : items;
     list.replaceChildren(...order.slice(0, shown).map((i, n) => card(i, n === 0)));
     if (order.length > shown) list.append(el("li", { className: "more-row" }, el("button", { type: "button", className: "show-more", textContent: "Show more news", onclick() { shown += PAGE; renderNews(); } })));
@@ -223,7 +224,7 @@ if (helperOutdated()) { $("helper-update").append(helperUpdateBanner()); $("help
 // ?q=... lets Unitex be the browser's default search engine.
 const initial = new URLSearchParams(location.search).get("q");
 if (initial && initial !== "%s") {
-  location.replace(searchUrl(initial));
+  location.replace(buildUrl(initial, {}));
 } else {
   renderEngine();
   renderTopics();
