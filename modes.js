@@ -6,33 +6,54 @@
 // ---------- reading facts out of titles and snippets ----------
 
 const PRICE_RE = /(?:AU|A|US|NZ|CA|C)?[$£€]\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?(?:\s?(?:pw|p\.w\.|per week|\/\s?wk|\/\s?week|per month|pcm|\/mo))?/i;
+// "$1.5-1.6m" → 1500000 and "$800-850k" → 800000: a unit after a range applies to both ends.
 const money = s => {
-  const m = String(s || "").match(/[$£€]\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|million)?/i);
+  const m = String(s || "").match(/[$£€]\s?(\d[\d,]*(?:\.\d+)?)\s?(k|m|million)?(?![a-z])(?:\s?[-–]\s?[$£€]?\s?\d[\d,]*(?:\.\d+)?\s?(k|m|million)?(?![a-z]))?/i);
   if (!m) return null;
   const n = parseFloat(m[1].replace(/,/g, ""));
-  return n * ({ k: 1e3, m: 1e6, million: 1e6 }[(m[2] || "").toLowerCase()] || 1);
+  return n * ({ k: 1e3, m: 1e6, million: 1e6 }[(m[2] || m[3] || "").toLowerCase()] || 1);
+};
+// The price in a title or snippet: "Was $199 Now $149" → $149; "save $20", "over $50" and shipping costs are not the price.
+const pickPrice = t => {
+  const s = String(t || ""); let first;
+  for (const m of s.matchAll(new RegExp(PRICE_RE.source, "gi"))) {
+    const before = s.slice(Math.max(0, m.index - 14), m.index), after = s.slice(m.index + m[0].length, m.index + m[0].length + 14);
+    if (/\bnow\s*:?\s*(?:only\s*)?$/i.test(before)) return m[0].trim();
+    if (/\b(was|save|saving|over|above|shipping|postage|delivery|rrp|off)\s*:?\s*(?:from\s*)?$/i.test(before) || /^\s*(off|shipping|postage|delivery|cash ?back)\b/i.test(after)) continue;
+    first = first || m[0].trim();
+  }
+  return first;
 };
 const num = (re, s) => { const m = String(s || "").match(re); return m ? +m[1] : undefined; };
 const textOf = r => `${r.title} ${r.snippet || ""}`;
 // "3 bed house for rent - realestate.com.au" → "3 bed house for rent"
-// Drops a trailing " | Store name" or " - Site" part (only when spaced, so "Hi-Fi" stays whole).
-const cleanTitle = t => {
-  const parts = String(t || "").split(/\s+[|–—-]\s+/);
-  return (parts.length > 1 && parts[parts.length - 1].length <= 30 ? parts.slice(0, -1).join(" - ") : String(t || "")).trim() || t;
+// Drops a trailing " | Store name" or " - Site" part, only when it is the site's name ("Hoodie - Black" keeps its colour).
+const STORE_WORDS = /\b(ebay|amazon|gumtree|facebook|marketplace|kmart|target|big w|jb hi-?fi|harvey norman|officeworks|bunnings|the good guys|catch|walmart|best buy|argos|currys|john lewis|realestate|domain|carsales|drive|autotrader|seek|indeed|linkedin|jora|imdb|tvmaze|eventbrite|ticketmaster)\b|\.(com|net|org|co|au|uk|nz)\b|\bshop\b|\bstore\b|\bonline\b/i;
+const cleanTitle = (t, ...names) => {
+  const parts = String(t || "").split(/\s+[|–—-]\s+/), last = lc(parts[parts.length - 1]).trim();
+  const own = names.filter(Boolean).map(n => lc(n).replace(/^www\./, "")).some(n => last && (last.includes(n) || n.includes(last) || last.includes(n.split(".")[0])));
+  return (parts.length > 1 && last.length <= 30 && (own || STORE_WORDS.test(last)) ? parts.slice(0, -1).join(" - ") : String(t || "")).trim() || t;
 };
 
 const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event" };
 
 // Turns an ordinary result from one of the topic's sites into a card.
 // What one listing's address looks like on each kind of site (eBay /itm/123, Gumtree /s-ad/…, Amazon /dp/…).
+// Search and category pages ("/rent/in-brunswick,+vic+3056/list-1", "/cars-for-sale/search/…", "/recipes/dinner") are not one listing.
+const NOT_ONE = /\/list-\d|\/in-|search|\/(category|categories|collections?|tags?|browse|results)\b/;
 const LISTING_PATH = {
-  product: /\/(itm|dp|gp\/product|p|ip|product|products|prod|item|items|listing|listings|s-ad|a|buy|sku|offer|marketplace\/item)\/|\/[a-z0-9-]*\d{5,}|\.html$|-p\d+/,
-  car: /\/(cars?-for-sale|car|cars\/details|details|vehicle|vehicles|listing|listings|s-ad|a|motors\/[a-z-]+\/listing)\/|\d{6,}/,
-  house: /\/(property|properties|listing|listings|homedetails|rent|sale|buy|s-ad|a|for-sale|to-rent)[\/-]|\d{6,}/,
+  product: /\/(itm|dp|gp\/product|p|ip|product|products|prod|item|items|listing|listings|s-ad|a|buy|sku|offer|marketplace\/item)\/|\/[a-z0-9-]*\d{5,}|\/[^/]*\d{3,}[^/]*\.html$|-p\d+/,
+  // A house or car listing carries its listing number (realestate.com.au …-143456789, Zillow /homedetails/).
+  car: { test: p => /\d{6,}|\/vehicledetail\//.test(p) && !NOT_ONE.test(p) },
+  house: { test: p => /\d{6,}|\/homedetails\//.test(p) && !NOT_ONE.test(p) },
   job: /\/(job|jobs\/view|viewjob|rc\/clk|job-detail|jobs?\/[a-z0-9-]+-\d+|vacanc(y|ies)|s-ad|a)\b|\d{6,}/,
-  event: /\/(e|event|events|whats-on|tickets?)\/|\d{6,}/,
-  recipe: /recipe/,
+  // An event or recipe has its own name after the folder (/e/jazz-night-tickets-123, /recipe/123/lemon-chicken).
+  event: { test: p => (/\/(e|event|events|whats-on|tickets?)\/[^/]+/.test(p) || /\d{6,}/.test(p)) && !NOT_ONE.test(p) && !/\/d\/|\/(today|tonight|this-weekend|this-week|this-month|music|comedy|arts?|sports?|family|free|food-and-drink)\/?$/.test(p) },
+  recipe: { test: p => { const last = p.replace(/\/$/, "").split("/").pop(); return /\/recipes?\/[^/]+/.test(p) && !NOT_ONE.test(p) && (/-/.test(last) || /\d/.test(p)) && !/recipes$|-ideas$/.test(last); } },
+  show: /\/(title\/tt\d+|m\/[^/]+\/?$|tv\/[^/]+|film\/[^/]+|movie\/\d|shows\/\d+)/,
 };
+// "30 Best Chicken Recipes", "Dinner recipes", "Events in Melbourne": lists, not one recipe or event.
+const LIST_TITLE = /^\d+\s+(best|easy|quick|simple|healthy|delicious|top|great|cheap|fun|free)\b|^(the\s+)?(best|top)\s|recipes\s*$|recipe ideas|\bevents?\s+(in|near|this|today|tonight)\b|^(things to do|what's on|whats on)\b|\bevents\s*$/i;
 function cardFor(r, topic) {
   if (r.card) return r;
   const kind = CARD_KINDS[topic.id];
@@ -40,7 +61,7 @@ function cardFor(r, topic) {
   const site = topicSites(topic).find(s => r.domain === s.domain || r.domain?.endsWith("." + s.domain) || urlKey(r.url).startsWith(s.domain));
   if (!site) return null;
   const t = textOf(r);
-  const price = t.match(PRICE_RE)?.[0];
+  const price = pickPrice(t);
   // A search engine's link only becomes a card when it is one listing (an item, a job ad, a property),
   // not the site's news, blog, help or search pages.
   let path = "";
@@ -48,14 +69,15 @@ function cardFor(r, topic) {
   if (/\/(news|blog|blogs|article|articles|story|stories|guide|guides|advice|help|about|info|press|careers|magazine|insights?|community|forum|faq)(\/|$)/.test(path) || path.length < 3) return null;
   if (!(LISTING_PATH[kind] || /./).test(path)) return null;
   if (["product", "car"].includes(kind) && !(price && priceNum(price) > 0) && !/\bfree\b/i.test(r.title)) return null; // no price, no card
-  const base = { title: cleanTitle(r.title), price, site: site.name };
+  const base = { title: cleanTitle(r.title, site.name, site.domain, r.domain), price, site: site.name };
+  if (["event", "recipe"].includes(kind) && LIST_TITLE.test(base.title)) return null;
   const card = {
-    house: () => ({ kind, address: base.title, price, beds: num(/(\d+)\s*(?:bed|br\b|bedroom)/i, t), baths: num(/(\d+)\s*(?:bath)/i, t), cars: num(/(\d+)\s*(?:car|parking|garage)/i, t),
+    house: () => ({ kind, address: base.title, price, beds: num(/\b(\d+)\s*(?:bed(?:room)?s?|br|bdr?)\b/i, t), baths: num(/\b(\d+)\s*(?:bath(?:room)?s?|ba)\b/i, t), cars: num(/\b(\d+)\s*(?:car(?:\s?(?:space|spot|park))?s?|parking(?:\s?spaces?)?|garages?)\b/i, t),
       deal: /\b(rent|lease|per week|pw|\/wk)\b/i.test(t) ? "rent" : /\b(sale|auction|buy)\b/i.test(t) ? "buy" : undefined }),
     product: () => ({ kind, name: base.title, price, rating: num(/(\d(?:\.\d)?)\s*(?:out of 5|\/\s*5|stars?)/i, t) }),
     car: () => ({ kind, name: base.title, price, year: num(/\b((?:19|20)\d{2})\b/, t), km: t.match(/(\d[\d,]*)\s?km\b/i)?.[1], gearbox: t.match(/\b(automatic|manual|auto)\b/i)?.[1] }),
     job: () => ({ kind, role: base.title.split(/\s[-|–]\s/)[0], company: (t.match(/\bat\s+([A-Z][\w&.' -]{2,40}?)(?:\s+in\s|[.,]|$)/) || [])[1],
-      location: (t.match(/\b(?:in|located in)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?(?:\s(?:NSW|VIC|QLD|SA|WA|TAS|ACT|NT))?)/) || [])[1],
+      location: jobPlace(t),
       salary: t.match(/\$\s?\d[\d,]*(?:k)?(?:\s?[-–]\s?\$?\s?\d[\d,]*k?)?\s?(?:per hour|p\.?h\.?|an hour|per annum|p\.?a\.?|a year|\+ super)?/i)?.[0],
       worktype: t.match(/\b(full[- ]time|part[- ]time|casual|contract|temporary|internship)\b/i)?.[1] }),
     recipe: () => ({ kind, name: base.title }),
@@ -63,6 +85,19 @@ function cardFor(r, topic) {
     show: () => ({ kind, name: base.title }),
   }[kind]();
   return { ...r, card: { ...card, site: site.name } };
+}
+// Where a job is, from a search engine's snippet: only after "Location:", or a place followed by its
+// state or postcode, or the place that was searched ("experience in React" is not a place).
+const AU_STATE = "NSW|VIC|QLD|SA|WA|TAS|ACT|NT";
+function jobPlace(t) {
+  const labelled = t.match(/\bLocation\s*:\s*([A-Z][\w' -]{1,40}?)(?=\s*(?:[.|·•;]|$|\s{2}|\s-\s|,\s*(?:Full|Part|Casual|Contract|Salary|\$)))/)?.[1];
+  if (labelled) return labelled.trim();
+  const stated = t.match(new RegExp(`(?:^|[,|·•(:–-]\\s*|\\b(?:in|at|near)\\s+)([A-Z][a-z]+(?:\\s[A-Z][a-z]+)?),?\\s+(${AU_STATE})\\b(?:\\s+(\\d{4})\\b)?`))
+    || t.match(new RegExp(`\\b([A-Z][a-z]+),?\\s+(${AU_STATE})\\b(?:\\s+(\\d{4})\\b)?`));
+  if (stated && !/^(in|at|the|and|located|based|our|for)$/i.test(stated[1])) return stated.slice(1).filter(Boolean).join(" ");
+  const where = (typeof formState === "function" && formState("jobs").where) || "";
+  if (where && has(lc(t), firstWord(where))) return where;
+  return undefined;
 }
 
 // ---------- direct card sources (they let other websites read them) ----------
@@ -81,7 +116,7 @@ const CARD_SOURCES = {
     const words = q.replace(/\b(where to watch|watch|streaming|tv show|series|season \d+)\b/gi, " ").trim() || q;
     const d = await getJson(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(words)}`);
     return d.slice(0, 12).map(({ show: s }) => ({ title: s.name, url: s.officialSite || s.url, image: s.image?.medium, domain: host(s.officialSite || s.url), via: "TVmaze",
-      card: { kind: "show", name: s.name, years: [s.premiered?.slice(0, 4), s.ended?.slice(0, 4) || (s.status === "Running" ? "now" : "")].filter(Boolean).join("–"), rating: s.rating?.average,
+      card: { kind: "show", type: "tv", name: s.name, years: [s.premiered?.slice(0, 4), s.ended?.slice(0, 4) || (s.status === "Running" ? "now" : "")].filter(Boolean).join("–"), rating: s.rating?.average,
         genres: s.genres, network: s.network?.name || s.webChannel?.name, summary: strip(s.summary || ""), site: "tvmaze.com", info: s.url } }));
   }},
 };
@@ -109,19 +144,53 @@ const reviewCount = c => { const t = String(c.card.reviews || "").replace(/,/g, 
 
 // ---------- strict matching of the chosen fields ----------
 const lc = s => String(s || "").toLowerCase();
-const has = (text, word) => new RegExp(`(^|[^a-z])${lc(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[- ]+/g, "[- ]?")}`, "i").test(text);
+// Whole words only ("pool" is not in Liverpool); a plural still counts ("house" matches "houses").
+const has = (text, word) => new RegExp(`(^|[^a-z])${lc(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[- ]+/g, "[- ]?")}(?:e?s)?(?![a-z])`, "i").test(text);
 const firstWord = s => lc(s).split(/[,\s]+/).find(w => w.length > 2) || "";
-const salaryTop = s => { const n = [...String(s || "").matchAll(/\$?\s?(\d[\d,.]*)\s?(k)?/gi)].map(m => parseFloat(m[1].replace(/,/g, "")) * (m[2] ? 1000 : 1)).filter(x => x > 100); if (!n.length) return 0; const t = Math.max(...n); return t < 500 ? t * 38 * 52 : t; }; // hourly → yearly
+// The most a job pays in a year: "$45–$50 per hour" → 98,800; "$600 per day" → 156,000; "$90k–$110k" → 110,000.
+const salaryTop = s => {
+  const text = String(s || "");
+  const all = [...text.matchAll(/(\$)?\s?(\d[\d,]*(?:\.\d+)?)\s?(k)?(?![\d%a-jl-z])/gi)].map(m => ({ n: parseFloat(m[2].replace(/,/g, "")) * (m[3] ? 1000 : 1), dollar: !!m[1] || !!m[3] }));
+  const n = (all.some(x => x.dollar) ? all.filter(x => x.dollar) : all.filter(x => x.n >= 10)).map(x => x.n).filter(x => x > 0);
+  if (!n.length) return 0;
+  const t = Math.max(...n);
+  if (/\b(per|an|a|each|\/)\s?(hour|hr)\b|\bp\.?h\b|\/\s?h\b|hourly/i.test(text)) return t * 38 * 52;
+  if (/\b(per|a|each|\/)\s?day\b|\bp\.?d\b|daily|day rate/i.test(text)) return t * 5 * 52;
+  if (/\b(per|a|each|\/)\s?(week|wk)\b|\bp\.?w\b|weekly/i.test(text)) return t * 52;
+  if (/\b(per|a|each|\/)\s?(month|mth|mo)\b|\bp\.?m\b|monthly/i.test(text)) return t * 12;
+  return t < 200 ? t * 38 * 52 : t < 3000 ? t * 5 * 52 : t; // no period given: small amounts are hourly or day rates
+};
+// "80k", "$80,000", "80000" → 80000
+const salaryWanted = v => { const m = String(v || "").replace(/,/g, "").match(/(\d+(?:\.\d+)?)\s*(k)?/i); return m ? +m[1] * (m[2] ? 1000 : 1) : 0; };
 const minutesOf = s => { const h = +(String(s || "").match(/(\d+)\s*h/i)?.[1] || 0), mn = +(String(s || "").match(/(\d+)\s*min/i)?.[1] || 0); return h * 60 + mn || undefined; };
-const EXTRA_WORDS = { "Pets allowed": /pet/, "Furnished": /furnish/, "Pool": /pool/, "Garden": /garden|yard/, "Air conditioning": /air ?con|cooling|split system/,
-  "Remote": /remote|anywhere|work from home|wfh/, "Work from home": /remote|work from home|wfh|hybrid/, "Visa sponsorship": /visa|sponsor/, "No experience needed": /no experience|entry level|junior|graduate|trainee|apprentice/,
-  "Free": /\bfree\b|\$0(\.00)?\b/, "Pickup only": /pick ?up|collect/, "Delivery": /deliver|shipping|postage/, "Family friendly": /family|kids|children/, "All ages": /all ages|all-ages/, "Certificate": /certificat/ };
+const EXTRA_WORDS = { "Pets allowed": /\bpets?\b/i, "Furnished": /\bfurnish/i, "Pool": /\bpools?\b/i, "Garden": /\bgarden\b|\b(back)?yard\b/i, "Air conditioning": /\bair ?con|\bcooling\b|\bsplit system/i,
+  "Remote": /\bremote\b|\banywhere\b|\bwork from home\b|\bwfh\b/i, "Work from home": /\bremote\b|\bwork from home\b|\bwfh\b|\bhybrid\b/i, "Visa sponsorship": /\bvisas?\b|\bsponsor/i, "No experience needed": /\bno experience\b|\bentry level\b|\bjunior\b|\bgraduate\b|\btrainee\b|\bapprentice/i,
+  "Free": /\bfree\b|\$0(\.00)?\b/i, "Pickup only": /\bpick ?up\b|\bcollect(ion)?\b/i, "Delivery": /\bdeliver|\bshipping\b|\bpostage\b/i, "Family friendly": /\bfamil(y|ies)\b|\bkids?\b|\bchildren\b/i, "All ages": /\ball[- ]ages\b/i, "Certificate": /\bcertificat/i };
 const LEVELS = { "Entry level": /\b(junior|graduate|grad|entry|trainee|apprentice|intern(ship)?|assistant)\b/, "Senior": /\b(senior|sr\.?|lead|principal|head of|manager|director|staff)\b/ };
+// An event's date as a time: "12 Oct" is this year's (or next year's once it has passed), "2026-10-12" is that local day.
+const DAY_MS = 86400000;
+const todayStart = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime(); };
+function eventTime(when) {
+  const s = String(when || "").trim();
+  if (!s) return { t: NaN };
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) return { t: new Date(+ymd[1], +ymd[2] - 1, +ymd[3]).getTime(), dateOnly: true };
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) || /\b(19|20)\d{2}\b/.test(s)) return { t: Date.parse(s), dateOnly: false };
+  // No year: try this year, and next year if that day has already gone.
+  const bare = s.replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s*/i, "");
+  const y = new Date().getFullYear();
+  const withYear = yr => { const tm = bare.match(/^(.*?\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{1,2}(?:st|nd|rd|th)?)?)(.*)$/i); return Date.parse(tm ? `${tm[1].replace(/(\d)(st|nd|rd|th)\b/, "$1")} ${yr}${tm[2]}` : `${bare} ${yr}`); };
+  let t = withYear(y);
+  if (!isNaN(t) && t < todayStart()) t = withYear(y + 1);
+  return { t, dateOnly: !/\d:\d|\d\s?(am|pm)\b/i.test(bare) };
+}
 function eventInRange(when, range) {
-  const t = Date.parse(when); if (isNaN(t)) return false;
-  const now = new Date(), d = new Date(t), day = 86400000, start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  return { Today: t >= start && t < start + day, Tonight: t >= start && t < start + day && d.getHours() >= 17, "This weekend": (() => { const sat = start + ((6 - now.getDay() + 7) % 7) * day; return t >= sat - (now.getDay() === 0 ? day : 0) && t < sat + 2 * day; })(),
-    "This week": t >= start && t < start + 7 * day, "This month": t >= start && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() }[range] ?? true;
+  const { t } = eventTime(when); if (isNaN(t)) return false;
+  const now = new Date(), d = new Date(t), start = todayStart();
+  // This weekend: Saturday and Sunday (on a Sunday, the weekend began yesterday).
+  const sat = now.getDay() === 0 ? start - DAY_MS : start + (6 - now.getDay()) * DAY_MS;
+  return { Today: t >= start && t < start + DAY_MS, Tonight: t >= start && t < start + DAY_MS && d.getHours() >= 17, "This weekend": t >= sat && t < sat + 2 * DAY_MS,
+    "This week": t >= start && t < start + 7 * DAY_MS, "This month": t >= start && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() }[range] ?? true;
 }
 // The filter fields for the current search. Choices saved in the filters belong to the search they
 // made; a newly typed search fills the fields from its own words ("casual jobs in gold coast").
@@ -130,17 +199,23 @@ function formState(id = topicId) {
   return saved._q && saved._q === query ? saved : guessForm(id, query);
 }
 const many = x => [].concat(x || []).filter(Boolean);
+// Words the site was searched with (in its own URL): a card from that search matches them even when it doesn't say so.
+const searchedFor = (k, word) => !!k.searchedIn && ` ${k.searchedIn} `.includes(` ${lc(word).replace(/[^a-z0-9]+/g, " ").trim()} `);
+const carMakeIn = t => typeof CAR_MAKES === "string" && new RegExp(`\\b(${CAR_MAKES})\\b`, "i").test(t); // "2020 Mazda 3" names its make
+const isNewCondition = s => /\bnew\b/i.test(s || "") && !/used|pre-?owned|demo|second/i.test(s || "");
 function formMatches(c) {
   const v = formState();
-  const k = c.card, t = lc([cardTitle(c), c.title, c.snippet, k.company, k.location, k.worktype, k.type, k.condition, k.cuisine, k.category, (k.genres || []).join(" "), k.network, (c.tags || []).join(" "), k.venue, k.place, k.price].join(" "));
+  const k = c.card, t = lc([cardTitle(c), c.title, c.snippet, k.company, k.location, k.worktype, k.type, k.condition, k.cuisine, k.category, (k.genres || []).join(" "), k.network, k.stars, (c.tags || []).join(" "), k.venue, k.place, k.price,
+    k.make, k.model, k.gearbox, k.year, k.km, k.body, k.fuel].join(" "));
   const extras = (v.extras || []).every(x => EXTRA_WORDS[x] ? EXTRA_WORDS[x].test(t) : has(t, x));
   if (!extras) return false;
   switch (topicId) {
     case "jobs":
-      if (many(v.worktype).length && !many(v.worktype).some(w => has(lc(`${k.worktype} ${t}`), w))) return false;
+      // Job sites that were searched with the work type (SEEK, LinkedIn, Indeed) only returned that work type.
+      if (many(v.worktype).length && !(k.typeSearched && !k.worktype) && !many(v.worktype).some(w => has(lc(`${k.worktype} ${t}`), w))) return false;
       if (v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
       if (v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
-      if (v.salary && !(salaryTop(k.salary) >= +String(v.salary).replace(/\D/g, ""))) return false;
+      if (v.salary && !(salaryTop(k.salary) >= salaryWanted(v.salary))) return false;
       if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && /remote|anywhere/i.test(k.location || ""))) return false;
       return true;
     case "houses":
@@ -149,9 +224,10 @@ function formMatches(c) {
       if (v.where && !has(lc(`${k.address} ${k.area} ${t}`), firstWord(v.where))) return false;
       return true;
     case "cars":
-      for (const f of ["make", "model", "body", "fuel", "gearbox"]) if (v[f] && !has(t, v[f])) return false;
-      if (v.deal === "new" && !/\bnew\b/.test(t)) return false;
-      if (v.deal === "used" && /\bbrand new\b|\bnew car\b/.test(t)) return false;
+      // A field the card says nothing about only passes when the site was searched with it (make and model are in carsales' address).
+      for (const f of ["make", "model", "body", "fuel", "gearbox"]) if (v[f] && !has(t, v[f]) && (k[f] || !searchedFor(k, v[f]) || (f === "make" && carMakeIn(t)))) return false;
+      if (v.deal === "new" && k.condition && !isNewCondition(k.condition)) return false;
+      if (v.deal === "used" && k.condition && isNewCondition(k.condition)) return false;
       return true;
     case "shopping": case "marketplace":
       if (v.brand && !has(t, v.brand)) return false;
@@ -163,10 +239,12 @@ function formMatches(c) {
       return true;
     case "movies":
       if (v.genre && !(k.genres || []).some(g => has(lc(g), v.genre))) return false;
-      if (v.kind === "movie" && /\b(series|tv|season)\b/.test(t)) return false;
-      if (v.kind === "tv show" && !/\b(series|tv|season|show)\b/.test(t) && !k.network) return false;
+      // IMDb and TVmaze say whether it's a movie or TV; other cards are judged by their words.
+      if (v.kind === "movie" && (k.type ? k.type !== "movie" : /\b(series|tv|season)\b/.test(t))) return false;
+      if (v.kind === "tv show" && (k.type ? k.type !== "tv" : !/\b(series|tv|season|show)\b/.test(t) && !k.network)) return false;
       return true;
     case "events":
+      if (k.when && eventTime(k.when).t < todayStart()) return false; // already over
       if (v.when && !eventInRange(k.when, v.when)) return false;
       if (v.where && !has(lc(`${k.place} ${k.venue} ${t}`), firstWord(v.where))) return false;
       return true;
@@ -174,10 +252,18 @@ function formMatches(c) {
   return true;
 }
 
+const BAR_KEYS = new Set(["salaryOnly"]); // also a checkbox in the filter bar, so the form leaving it off doesn't untick it
 function applyFilters(cards) {
   const form = TOPIC_FORMS[topicId];
-  const fromForm = form?.filters ? Object.fromEntries(Object.entries(form.filters(formState())).filter(([, x]) => x !== undefined && x !== "")) : {};
-  const F = { ...fromForm, ...filters };
+  // The form's fields decide the keys they own (a field set back to "Any" stops filtering); the
+  // filter bar's own controls (sort, website, "Shows salary"…) come from `filters`.
+  const F = { ...filters };
+  if (form?.filters) for (const [key, x] of Object.entries(form.filters(formState()))) {
+    if (x !== undefined && x !== "") F[key] = x;
+    else if (!BAR_KEYS.has(key)) delete F[key];
+  }
+  F.beds = F.bedsSel ? parseInt(F.bedsSel) : undefined;
+  F.ratingMin = F.ratingSel ? parseInt(F.ratingSel) : undefined;
   let out = cards.filter(c => {
     const p = priceOf(c), k = c.card;
     if (F.min && (p == null || p < F.min)) return false;
@@ -191,7 +277,7 @@ function applyFilters(cards) {
     if (F.ratingMin && !(k.rating >= F.ratingMin)) return false;
     if (F.baths && !(k.baths >= F.baths)) return false;
     if (F.carsMin && !(k.cars >= F.carsMin)) return false;
-    if (F.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") <= F.kmMax)) return false;
+    if (F.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") * (k.kmUnit === "mi" ? 1.609 : 1) <= F.kmMax)) return false;
     if (F.priced && p == null) return false;
     if (F.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
     if (F.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
@@ -240,7 +326,7 @@ function filterBar(topic, cards, side = false) {
   })();
   return el("div", { className: "filter-bar" + (side ? " side" : "") },
     !formHas.has("deal") && deal,
-    ["house", "product", "car"].includes(kind) && !formHas.has("min") && el("span", { className: "f-group" }, input("min", "Min $"), "–", input("max", "Max $")),
+    ["house", "product", "car"].includes(kind) && !formHas.has("min") && !formHas.has("max") && el("span", { className: "f-group" }, input("min", "Min $"), "–", input("max", "Max $")),
     kind === "house" && !formHas.has("bedsSel") && select("bedsSel", "Any beds", ["1+", "2+", "3+", "4+", "5+"]),
     kind === "car" && !formHas.has("yearMin") && input("yearMin", "From year"),
     kind === "job" && (() => { const c = el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.salaryOnly, onchange() { filters.salaryOnly = this.checked; drawCards(); } }), " Shows salary"); return c; })(),
@@ -249,7 +335,7 @@ function filterBar(topic, cards, side = false) {
     kind === "product" && !formHas.has("ratingSel") && select("ratingSel", "Any rating", ["4★ & up", "3★ & up"]),
     kind === "product" && !formHas.has("condition") && select("condition", "New or used", ["new", "used"]),
     ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
-    !side && sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
+    sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
     !side && sortSel);
 }
 
@@ -276,10 +362,10 @@ function cardFacts(c) {
   return ({
     house: [k.beds && `${k.beds} bed`, k.baths && `${k.baths} bath`, k.cars && `${k.cars} car`, k.type].filter(Boolean),
     product: [k.rating && `★ ${k.rating}`, k.condition].filter(Boolean),
-    car: [k.year, k.km && `${k.km} km`, k.gearbox].filter(Boolean),
+    car: [k.year, k.km && `${k.km} ${k.kmUnit || "km"}`, k.gearbox].filter(Boolean),
     job: [k.company, k.location, k.salary, k.worktype].filter(Boolean),
     recipe: [k.category, k.cuisine, k.ingredients && `${k.ingredients.length} ingredients`].filter(Boolean),
-    show: [k.years, k.rating && `★ ${k.rating}`, k.network].filter(Boolean),
+    show: [k.years, k.rating && `★ ${k.rating}`, k.network, k.stars].filter(Boolean),
   }[k.kind] || []).map(String);
 }
 
@@ -293,11 +379,11 @@ function renderCard(c, topic) {
   const facts = {
     house: [fact("🛏", k.beds, "Bedrooms"), fact("🛁", k.baths, "Bathrooms"), fact("🚗", k.cars, "Car spaces"), k.type && el("span", { className: "fact" }, k.type)],
     product: [k.rating && fact("★", k.reviews ? `${k.rating} (${k.reviews})` : k.rating, "Rating"), k.condition && el("span", { className: "fact", textContent: k.condition })],
-    car: [fact("📅", k.year, "Year"), fact("🛣", k.km && `${k.km} km`, "Kilometres"), fact("⚙️", k.gearbox, "Transmission")],
+    car: [fact("📅", k.year, "Year"), fact("🛣", k.km && `${k.km} ${k.kmUnit || "km"}`, k.kmUnit === "mi" ? "Miles" : "Kilometres"), fact("⚙️", k.gearbox, "Transmission")],
     job: [fact("🏢", k.company, "Company"), fact("📍", k.location, "Location"), fact("🕒", k.worktype, "Work type"), k.posted && !isNaN(Date.parse(k.posted)) && fact("📅", ago(Date.parse(k.posted) / 1000), "Posted")],
     recipe: [fact("🍽", k.category, "Category"), fact("🌍", k.cuisine, "Cuisine"), fact("⏱", k.time, "Time"), fact("★", k.rating, "Rating"), k.ingredients && fact("🧂", `${k.ingredients.length} ingredients`, "Ingredients")],
-    show: [fact("📅", k.years, "Years"), fact("★", k.rating, "Rating"), fact("📺", k.network, "Network")],
-    event: [fact("📅", k.when && (isNaN(Date.parse(k.when)) ? k.when : new Date(k.when).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })), "When"), fact("📍", [k.venue, k.place].filter(Boolean).join(", "), "Where")],
+    show: [fact("📅", k.years, "Years"), fact("★", k.rating, "Rating"), fact("📺", k.network, "Network"), fact("🎭", k.stars, "Stars")],
+    event: [fact("📅", k.when && (({ t, dateOnly }) => isNaN(t) ? k.when : new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", ...(dateOnly ? {} : { hour: "numeric", minute: "2-digit" }) }))(eventTime(k.when)), "When"), fact("📍", [k.venue, k.place].filter(Boolean).join(", "), "Where")],
   }[k.kind] || [];
   const headline = {
     house: k.price || "Price on request",
@@ -358,11 +444,12 @@ function renderShortlist() { $("shortlist").hidden = true; if (!$("cards").hidde
 const CARD_STEP = 24; // small cards show more at once
 let cardLimit = CARD_STEP;
 
+const EVENT_WHEN = /\s*\b(today|tonight|tomorrow|this weekend|this week|this month|next week|next weekend)\b.*$/i;
 // Fills the filters from a typed search: "3 bedroom house for rent in Brunswick VIC" → Rent, 3+, Brunswick VIC.
 function guessForm(topicIdNow, q) {
   if (!q) return {};
   const where = q.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1];
-  const beds = q.match(/(\d)\s*(?:bed|br\b|bedroom)/i)?.[1];
+  const beds = q.match(/\b(\d)\s*(?:bed(?:room)?s?|br|bdr?)\b/i)?.[1];
   const type = q.match(/\b(house|apartment|townhouse|unit|villa|land|acreage)s?\b/i)?.[1];
   const max = q.match(/under\s*\$?([\d,]+k?)/i)?.[1]?.replace(/,/g, "").replace(/k$/i, "000");
   const pick = (list, re = x => new RegExp(`\\b${x.replace(/ /g, "[- ]?")}\\b`, "i")) => list.filter(x => re(x).test(q));
@@ -383,6 +470,11 @@ function guessForm(topicIdNow, q) {
       body: cap(q.match(/\b(sedan|hatchback|suv|ute|wagon|van|coupe|convertible)\b/i)?.[1])?.replace(/^Suv$/, "SUV"), fuel: cap(q.match(/\b(petrol|diesel|hybrid|electric)\b/i)?.[1]),
       gearbox: cap(q.match(/\b(automatic|manual)\b/i)?.[1]), yearMin: q.match(/\b((?:19|20)\d{2})\+/)?.[1] };
   }
+  if (topicIdNow === "events") {
+    const when = q.match(/\b(today|tonight|this weekend|this week|this month)\b/i)?.[1];
+    return { what: q.replace(/\b(in|near)\s+.*$|\b(today|tonight|this weekend|this week|this month|events?|free|family friendly|all ages)\b/gi, " ").replace(/\s+/g, " ").trim(), where: where?.replace(EVENT_WHEN, "").trim(),
+      when: cap(when), extras: pick(["Free", "Family friendly", "All ages"]) };
+  }
   return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim(), max, where };
 }
 
@@ -398,8 +490,8 @@ function formFilters(topicIdNow) {
     if (!q) { drawCards(); return; }
     // Fields that only narrow the results (work type, must-haves…) apply at once; the search runs again too.
     query = q; drawCards();
-    const f = form.filters ? Object.fromEntries(Object.entries(form.filters(v)).filter(([, x]) => x !== undefined)) : {};
-    filters = { ...filters, ...f }; lastTopic = topicId;
+    // Every key the form owns is replaced, so a field set back to "Any" stops filtering.
+    filters = { ...filters, ...(form.filters ? form.filters(v) : {}) }; lastTopic = topicId;
     go();
   };
   const control = (k, f) => {
@@ -412,7 +504,8 @@ function formFilters(topicIdNow) {
     if (f.type === "select") { const s = el("select", { className: "f-input" }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: t, selected: (v[k] || "") === val }))); s.onchange = () => { v[k] = s.value; apply(); }; return s; }
     const inp = el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "" });
     inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); v[k] = inp.value.trim(); apply(); } };
-    inp.onchange = () => { v[k] = inp.value.trim(); apply(); };
+    // Enter already applied it (and redrew the form, which blurs this field and fires change again).
+    inp.onchange = () => { if (inp.value.trim() === (v[k] || "")) return; v[k] = inp.value.trim(); apply(); };
     return inp;
   };
   return el("div", { className: "mf-form" }, ...Object.entries(form.fields).map(([k, f]) => el("label", { className: "mf-field" }, f.label && el("span", { textContent: f.label }), control(k, f))),
@@ -424,7 +517,7 @@ function cardsHeadline(topic, n) {
   const v = { ...formState(topic.id) };
   const mode = MODES[topic.id];
   const where = v.where && ` in ${v.where}`;
-  const one = mode.noun.replace(/e?s$/, "");
+  const one = mode.noun.replace(/s$/, "");
   const noun = n === 1 ? one : mode.noun;
   if (topic.id === "houses") return `${n} ${n === 1 ? "home" : "homes"} ${v.deal === "rent" ? "for rent" : v.deal === "share" ? "to share" : "for sale"}${where || ""}`;
   if (topic.id === "jobs") return `${n} ${[many(v.worktype).join(" or ").toLowerCase(), v.what].filter(Boolean).join(" ")}${n === 1 ? " job" : " jobs"}${where || ""}`.replace(/^(\d+)\s+/, "$1 ");
@@ -492,17 +585,35 @@ function showCards(results, extra = []) {
   if (!MODES[topic.id]) { $("cards").hidden = true; return results; }
   const cards = [], rest = [];
   for (const r of results) { const c = cardFor(r, topic); (c ? cards : rest).push(c || r); }
-  lastCards = [...extra, ...cards.filter(c => cardRelevant(c, 0.5))].filter((c, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(c.url)) === i);
+  lastCards = oneEach([...extra.filter(c => extraRelevant(c)), ...cards.filter(c => cardRelevant(c, 0.5))]);
   cardLimit = CARD_STEP;
   drawCards();
   return rest;
 }
 
+// "second hand road bike near Brunswick under $300" → "road bike": the product itself.
+const productWords = q => String(q || "").replace(/\b(second[- ]hand|pre-?owned|used|cheap(est)?|best|buy|for sale|free|pick ?up only|pickup|delivery)\b|\b(under|below|less than|max)\s*\$?\s?[\d,.]+k?\b|\$\s?[\d,.]+k?\+?|\b(near|in|around)\s+.*$/gi, " ").replace(/\s+/g, " ").trim() || q;
 // Products, cars and jobs must be about the search (houses come from a place search, so they always are).
 function cardRelevant(c, need) {
   if (!["product", "car", "job"].includes(c.card?.kind)) return true;
-  const what = c.card.kind === "job" ? jobParts(query).what : c.card.kind === "car" ? query.replace(/\b(used|new|for sale|in .*|under .*|\d{4}\+)\b/gi, " ") : query;
+  const what = c.card.kind === "job" ? jobParts(query).what : c.card.kind === "car" ? query.replace(/\b(used|new|for sale|in .*|under .*|\d{4}\+)\b/gi, " ")
+    : productWords(query);
   return aboutSearch(`${cardTitle(c)} ${c.card.company || ""}`, what, need);
+}
+// Cards from a site's own search: products and jobs must still be about the search (stores pad their results).
+const extraRelevant = c => !["product", "job"].includes(c.card?.kind) || cardRelevant(c, 0.34);
+// One card per listing; one per show (TVmaze and IMDb both have it), keeping what either one knows.
+function oneEach(list) {
+  const out = [], at = new Map();
+  for (const c of list) {
+    const year = String(c.card?.years || "").match(/\d{4}/)?.[0] || "";
+    const keys = [urlKey(c.url), c.card?.kind === "show" && `show:${lc(c.card.name || c.title).trim()}:${year}`].filter(Boolean);
+    const i = keys.map(k => at.get(k)).find(x => x !== undefined);
+    if (i === undefined) { keys.forEach(k => at.set(k, out.length)); out.push(c); continue; }
+    if (c.card?.kind === "show") { const a = out[i]; out[i] = { ...a, image: a.image || c.image, card: { ...Object.fromEntries(Object.entries(c.card).filter(([, x]) => x != null && x !== "")), ...Object.fromEntries(Object.entries(a.card).filter(([, x]) => x != null && x !== "" && !(Array.isArray(x) && !x.length))) } }; }
+    keys.forEach(k => at.set(k, i));
+  }
+  return out;
 }
 // Adds the next page of results: new cards join the list, the rest is returned.
 function appendCards(results, extra = []) {
@@ -514,8 +625,9 @@ function appendCards(results, extra = []) {
     const c = cardFor(r, topic);
     if (!c) { rest.push(r); continue; }
     // Cards from a site's own search are trusted; ones made from engine results must be about the search.
-    if (!have.has(urlKey(c.url)) && (r.card || cardRelevant(c, 0.5))) { have.add(urlKey(c.url)); lastCards.push(c); }
+    if (!have.has(urlKey(c.url)) && (r.card ? extraRelevant(c) : cardRelevant(c, 0.5))) { have.add(urlKey(c.url)); lastCards.push(c); }
   }
+  lastCards = oneEach(lastCards);
   return rest;
 }
 
@@ -622,7 +734,7 @@ const TOPIC_FORMS = {
       where: { label: "Where", placeholder: "City or suburb" },
       when: anyOf("When", ["Today", "Tonight", "This weekend", "This week", "This month"]),
       extras: { type: "checks", label: "Options", options: opt(["Free", "Family friendly", "All ages"]) } },
-    build: v => words((v.extras || []).map(e => e.toLowerCase()), v.what || "events", v.where && `in ${v.where}`, v.when?.toLowerCase()) },
+    build: v => words((v.extras || []).map(e => e.toLowerCase()), v.what || "events", v.when?.toLowerCase(), v.where && `in ${v.where}`) },
 
   learn: { title: "🎓 Learn something", fields: {
       what: { label: "What do you want to learn?", placeholder: "e.g. Python, guitar, Spanish", wide: true },

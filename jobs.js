@@ -12,9 +12,21 @@ function jobParts(q) {
 const WORK_TYPES = [["full time", 242, "F", "fulltime"], ["part time", 243, "P", "parttime"], ["contract", 244, "C", "contract"], ["casual", 245, "T", "casual"], ["internship", null, "I", "internship"]];
 const workTypes = q => WORK_TYPES.filter(([w]) => new RegExp(`\\b${w.replace(" ", "[- ]?")}\\b`, "i").test(q));
 const jobWords = q => jobParts(q).what.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-const jobMatches = (j, q) => { const ws = jobWords(q); if (!ws.length) return true; const t = `${j.title} ${j.card.company || ""} ${(j.tags || []).join(" ")}`.toLowerCase(); return ws.some(w => t.includes(w.replace(/s$/, ""))); };
-const money0 = n => n ? `$${Math.round(n / 1000)}k` : "";
-const salaryText = (min, max, cur = "") => min || max ? `${cur && cur !== "USD" && cur !== "AUD" ? cur + " " : ""}${[money0(min), money0(max)].filter(Boolean).join("–")}` : undefined;
+// Most of the search's words, as whole words: "java developer" doesn't match "JavaScript Developer", "art" doesn't match "Smart".
+const jobMatches = (j, q) => {
+  const ws = jobWords(q); if (!ws.length) return true;
+  const t = `${j.title} ${j.card.company || ""} ${(j.tags || []).join(" ")}`.toLowerCase();
+  const hits = ws.filter(w => new RegExp(`(^|[^a-z0-9])${w.replace(/(es|s)$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(e?s)?(?![a-z0-9])`).test(t)).length;
+  return hits >= Math.ceil(ws.length * 0.6);
+};
+// 90000, 110000 → "$90k–$110k"; 45, 50 → "$45–$50/hr"; US dollars say so outside the US.
+const salaryText = (min, max, cur = "") => {
+  if (!min && !max) return undefined;
+  const hourly = Math.max(+min || 0, +max || 0) < 1000;
+  const sym = cur === "USD" ? (regionId === "US" ? "$" : "US$") : cur && cur !== "AUD" ? `${cur} ` : "$";
+  const one = n => n ? (hourly ? `${sym}${Math.round(+n * 100) / 100}` : `${sym}${Math.round(n / 1000)}k`) : "";
+  return [one(min), one(max)].filter(Boolean).join("–") + (hourly ? "/hr" : "");
+};
 const jobCard = (o, via, site) => o.url && o.title && {
   title: o.title, url: o.url, image: o.logo, snippet: o.snippet, domain: (() => { try { return new URL(o.url).hostname.replace(/^www\./, ""); } catch { return ""; } })(), via, tags: o.tags,
   card: { kind: "job", role: o.title, company: o.company, location: o.location, salary: o.salary, worktype: o.worktype, posted: o.posted, site } };
@@ -41,7 +53,7 @@ const JOB_BOARDS = {
     const tag = jobWords(q)[0] || "";
     const d = await jsonFrom(`https://remoteok.com/api${tag ? `?tag=${encodeURIComponent(tag)}` : ""}`);
     return (Array.isArray(d) ? d : []).filter(j => j.position).map(j => jobCard({ title: j.position, url: j.url || `https://remoteok.com/remote-jobs/${j.id}`, company: j.company, logo: j.company_logo || j.logo,
-      location: j.location || "Remote", salary: salaryText(j.salary_min, j.salary_max), worktype: "Remote", posted: j.date, tags: j.tags }, "RemoteOK", "RemoteOK")).filter(j => j && jobMatches(j, q)).slice(0, 30);
+      location: j.location || "Remote", salary: salaryText(j.salary_min, j.salary_max, "USD"), worktype: "Remote", posted: j.date, tags: j.tags }, "RemoteOK", "RemoteOK")).filter(j => j && jobMatches(j, q)).slice(0, 30);
   }},
   himalayas: { name: "Himalayas (remote jobs)", async run(q) {
     const d = await jsonFrom(`https://himalayas.app/jobs/api/search?q=${encodeURIComponent(jobParts(q).what)}&limit=30`);
@@ -144,6 +156,8 @@ const JOB_SITES = {
   }},
 };
 
+// Which job sites put the work type in their own search address (see their run()).
+const TYPE_SEARCHED = { seek: q => workTypes(q).some(w => w[1]), linkedin: q => workTypes(q).length > 0, indeed: q => workTypes(q).length === 1 };
 // The job readers for this country: helper ones only with Unitex Helper.
 function jobSourcesFor() {
   // Local job sites first (SEEK, LinkedIn, Indeed, Jora), then the remote-job boards.
@@ -151,7 +165,8 @@ function jobSourcesFor() {
   for (const [id, s] of Object.entries(JOB_SITES)) {
     if (s.regions && regionId !== "*" && !s.regions.includes(regionId)) continue;
     // These sites searched the place themselves (Broadbeach is on the Gold Coast), so their places are trusted.
-    out["jobsite_" + id] = { ...s, paged: true, enabled: () => !!helperVersion(), run: async (q, o) => (await s.run(q, o)).map(j => ({ ...j, card: { ...j.card, placeSearched: !!jobParts(q).where } })) };
+    // SEEK, LinkedIn and Indeed were asked for the work type too (worktype=, f_JT=, jt=), so theirs only has that work type.
+    out["jobsite_" + id] = { ...s, paged: true, enabled: () => !!helperVersion(), run: async (q, o) => (await s.run(q, o)).map(j => ({ ...j, card: { ...j.card, placeSearched: !!jobParts(q).where, typeSearched: !!TYPE_SEARCHED[id]?.(q) } })) };
   }
   for (const [id, s] of Object.entries(JOB_BOARDS)) out["jobs_" + id] = s;
   return out;

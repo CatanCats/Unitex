@@ -5,7 +5,13 @@
 
 const slugify = s => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const pickStr = (...v) => v.find(x => typeof x === "string" && x.trim())?.trim();
-const pickNum = (...v) => { for (const x of v) { const n = typeof x === "number" ? x : parseFloat(x); if (!isNaN(n)) return n; } return undefined; };
+const pickNum = (...v) => { for (const x of v) { const n = typeof x === "number" ? x : parseFloat(String(x ?? "").replace(/,/g, "")); if (!isNaN(n)) return n; } return undefined; }; // "45,000" → 45000
+// The money sign for a listing: its own currency, or the country's (£ in the UK).
+const CURRENCY_SIGN = { AUD: "$", NZD: "$", CAD: "$", GBP: "£", EUR: "€" };
+const moneySign = o => { const c = pickStr(o?.offers?.priceCurrency, o?.priceCurrency, o?.price?.currency, o?.currency)?.toUpperCase(); return c === "USD" ? (regionId === "US" ? "$" : "US$") : CURRENCY_SIGN[c] || (c ? c + " " : regionId === "UK" ? "£" : "$"); };
+const typesOf = o => [].concat(o?.["@type"] || []).map(String);
+// Data about the site, its pages and people, not a listing.
+const NOT_LISTING = /^(Organization|WebSite|WebPage|SearchResultsPage|CollectionPage|Person|ImageObject|BreadcrumbList|ItemList|SiteNavigationElement|VideoObject)$/;
 const bizName = url => { try { const h = new URL(url).hostname.replace(/^www\./, "").split("."); const root = h.length >= 3 && h[h.length - 2].length <= 3 ? h[h.length - 3] : h[h.length - 2]; return root.charAt(0).toUpperCase() + root.slice(1); } catch { return ""; } };
 const imgFrom = (o, base) => {
   const i = o.image ?? o.images?.[0] ?? o.media?.[0] ?? o.photo ?? o.photos?.[0] ?? o.mainImage ?? o.thumbnail ?? o.imageUrl ?? o.primaryImage ?? o.heroImage;
@@ -21,22 +27,37 @@ const READ_AS = {
     const a = o.address;
     const address = pickStr(o.displayAddress, o.fullAddress, a?.display?.fullAddress, a?.displayAddress, typeof a === "string" ? a : undefined,
       a?.streetAddress && [a.streetAddress, a.addressLocality, a.addressRegion, a.postalCode].filter(Boolean).join(", "), o.streetAddress && [o.streetAddress, o.suburb, o.state, o.postcode].filter(Boolean).join(", "));
-    const price = pickStr(o.price?.display, o.priceText, o.displayPrice, o.price?.displayPrice, o.priceDetails?.displayPrice, typeof o.price === "string" ? o.price : undefined, o.offers?.price && `$${o.offers.price}`);
+    // Agents, agencies and offices have addresses too; they are not homes.
+    if (typesOf(o).some(t => /Agent|Organization|LocalBusiness|Corporation|Brand|Store|Office/i.test(t))) return null;
+    const price = pickStr(o.price?.display, o.priceText, o.displayPrice, o.price?.displayPrice, o.priceDetails?.displayPrice, typeof o.price === "string" ? o.price : undefined,
+      pickNum(o.offers?.price) && `${moneySign(o)}${pickNum(o.offers.price).toLocaleString()}`, typeof o.price === "number" && `${moneySign(o)}${o.price.toLocaleString()}`);
     const url = linkFrom(o, base);
     if (!address || !url || address.length > 140 || !/\d|street|road|ave|st\b/i.test(address)) return null;
     const f = o.features?.general || o.generalFeatures || o;
+    const beds = pickNum(f.bedrooms?.value, f.bedrooms, o.beds, o.numberOfBedrooms, o.numberOfRooms);
+    let path = ""; try { path = new URL(url).pathname.toLowerCase(); } catch {}
+    if (!price && beds == null && !(typeof LISTING_PATH === "object" && LISTING_PATH.house.test(path))) return null;
     return { title: address, url, image: imgFrom(o, base), domain: hostOf(url), via: site,
-      card: { kind: "house", address, price, beds: pickNum(f.bedrooms?.value, f.bedrooms, o.beds, o.numberOfBedrooms, o.numberOfRooms), baths: pickNum(f.bathrooms?.value, f.bathrooms, o.baths, o.numberOfBathroomsTotal), cars: pickNum(f.parkingSpaces?.value, f.parkingSpaces, o.carspaces, o.parking),
+      card: { kind: "house", address, price, beds, baths: pickNum(f.bathrooms?.value, f.bathrooms, o.baths, o.numberOfBathroomsTotal), cars: pickNum(f.parkingSpaces?.value, f.parkingSpaces, o.carspaces, o.parking),
         type: pickStr(o.propertyType?.display, typeof o.propertyType === "string" ? o.propertyType : undefined), deal: typeof query === "string" ? listingKind(query) : undefined, site } };
   },
   car: (o, base, site) => {
     const name = pickStr(o.title, o.name, [o.year, o.make?.name || o.make, o.model?.name || o.model, o.variant || o.badge].filter(x => typeof x === "string" || typeof x === "number").join(" "));
-    const price = pickStr(o.price?.display, o.priceText, o.displayPrice, typeof o.price === "string" ? o.price : undefined, typeof o.price === "number" ? `$${o.price.toLocaleString()}` : undefined, o.offers?.price && `$${(+o.offers.price).toLocaleString()}`, o.price?.amount && `$${(+o.price.amount).toLocaleString()}`);
+    const sign = moneySign(o);
+    const price = pickStr(o.price?.display, o.priceText, o.displayPrice, typeof o.price === "string" ? o.price : undefined, typeof o.price === "number" ? `${sign}${o.price.toLocaleString()}` : undefined, pickNum(o.offers?.price) && `${sign}${pickNum(o.offers.price).toLocaleString()}`, pickNum(o.price?.amount) && `${sign}${pickNum(o.price.amount).toLocaleString()}`);
     const url = linkFrom(o, base);
     const year = pickNum(o.year, o.modelYear, o.vehicleModelDate, name?.match(/\b(19|20)\d{2}\b/)?.[0]);
     if (!name || !url || !price || !year || name.length > 160) return null;
+    // Mileage in miles (US, UK: unitCode SMI) stays in miles.
+    const odo = o.mileageFromOdometer || o.mileage;
+    const km = pickNum(o.odometer, o.kilometres, odo?.value, typeof odo === "object" ? undefined : odo);
+    const unit = /SMI|mi/i.test(String(odo?.unitCode || odo?.unitText || "")) || (typeof odo === "string" && /\bmi(les)?\b/i.test(odo)) || (km != null && !odo?.unitCode && ["US", "UK"].includes(regionId) && !o.odometer && !o.kilometres) ? "mi" : "km";
+    const nameOf = x => pickStr(typeof x === "string" ? x : x?.name);
+    const cond = pickStr(nameOf(o.itemCondition), o.condition, o.stockType, o.listingType);
     return { title: name, url, image: imgFrom(o, base), domain: hostOf(url), via: site,
-      card: { kind: "car", name, price, year, km: pickStr(String(pickNum(o.odometer, o.kilometres, o.mileage?.value, o.mileageFromOdometer?.value, o.mileage) ?? "")) || undefined, gearbox: pickStr(o.transmission, o.vehicleTransmission), site } };
+      card: { kind: "car", name, price, year, km: km != null ? Math.round(km).toLocaleString() : undefined, kmUnit: km != null ? unit : undefined, gearbox: pickStr(nameOf(o.transmission), nameOf(o.vehicleTransmission)),
+        make: nameOf(o.make) || nameOf(o.brand) || nameOf(o.manufacturer), model: nameOf(o.model), body: pickStr(nameOf(o.bodyType), nameOf(o.body)), fuel: pickStr(nameOf(o.fuelType), nameOf(o.vehicleEngine?.fuelType), nameOf(o.fuel)),
+        condition: cond && (/new/i.test(cond) && !/used|pre-?owned|demo/i.test(cond) ? "New" : /used|pre-?owned|second/i.test(cond) ? "Used" : /demo/i.test(cond) ? "Demo" : undefined), site } };
   },
   event: (o, base, site) => {
     if (!(o["@type"] === "Event" || /Event$/.test(o["@type"] || "") || o.startDate || o.start_date)) return null;
@@ -46,10 +67,12 @@ const READ_AS = {
     if (!name || !url || !when) return null;
     const loc = o.location || o.venue || o._embedded?.venues?.[0];
     return { title: name, url, image: imgFrom(o, base), domain: hostOf(url), via: site,
-      card: { kind: "event", name, when, venue: pickStr(loc?.name), place: pickStr(loc?.address?.addressLocality, loc?.city?.name, loc?.address?.city), price: pickStr(o.offers?.lowPrice && `From $${o.offers.lowPrice}`, o.offers?.price && (+o.offers.price === 0 ? "Free" : `$${o.offers.price}`), o.is_free && "Free"), site } };
+      card: { kind: "event", name, when, venue: pickStr(loc?.name), place: pickStr(loc?.address?.addressLocality, loc?.city?.name, loc?.address?.city), price: pickStr(o.offers?.lowPrice && (+o.offers.lowPrice === 0 ? "Free" : `From ${moneySign(o)}${o.offers.lowPrice}`), o.offers?.price && (+o.offers.price === 0 ? "Free" : `${moneySign(o)}${o.offers.price}`), [].concat(o.offers || [])[0]?.price && `${moneySign({ offers: [].concat(o.offers)[0] })}${[].concat(o.offers)[0].price}`, o.is_free && "Free"), site } };
   },
   recipe: (o, base, site) => {
-    if (!(o["@type"] === "Recipe" || [].concat(o["@type"] || []).includes("Recipe") || /recipe/i.test(pickStr(o.url, o.link) || ""))) return null;
+    // A Recipe, or untyped data whose own address is a recipe page (the path, not the site: recipetineats.com is every page).
+    let path = ""; try { path = new URL(pickStr(o.url, o.link) || "", base).pathname; } catch {}
+    if (!(typesOf(o).includes("Recipe") || (!o["@type"] && (typeof LISTING_PATH === "object" ? LISTING_PATH.recipe.test(path.toLowerCase()) : /\/recipes?\/[^/]+/i.test(path))))) return null;
     const name = pickStr(o.name, o.title, o.headline);
     const url = linkFrom(o, base);
     if (!name || !url || name.length > 140) return null;
@@ -61,7 +84,7 @@ const READ_AS = {
 function cardsFromPage(html, base, kind, site) {
   const doc = adFreeDoc(html);
   const out = [], seen = new Set();
-  const take = o => { if (out.length >= 40 || Array.isArray(o)) return; const c = READ_AS[kind](o, base, site); if (c && !seen.has(c.url)) { seen.add(c.url); out.push(c); } };
+  const take = o => { if (out.length >= 40 || Array.isArray(o) || typesOf(o).some(t => NOT_LISTING.test(t))) return; const c = READ_AS[kind](o, base, site); if (c && !seen.has(c.url)) { seen.add(c.url); out.push(c); } };
   for (const sc of doc.querySelectorAll("script[type='application/ld+json'], script[type='application/json'], script#__NEXT_DATA__")) {
     try { walk(JSON.parse(sc.textContent), take); } catch {}
   }
@@ -92,9 +115,12 @@ function cardsFromPage(html, base, kind, site) {
 // q: the search words; place: { suburb, state, postcode } for Australian property sites.
 
 const housePlace = async q => { try { return await auPlace(q); } catch { return null; } };
-const qWhat = q => q.replace(/\b(for (sale|rent)|to (rent|buy)|in .*|near .*|under .*|used|new|cheap|best)\b/gi, " ").replace(/\s+/g, " ").trim();
-const qWhere = q => q.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1] || "";
-const makeModel = q => { const w = qWhat(q).replace(/\b(cars?|for sale|\d{4}\+?|hybrid|electric|diesel|petrol|automatic|manual|sedan|hatchback|suv|ute|wagon|van)\b/gi, " ").trim().split(/\s+/).filter(Boolean); return { make: w[0] || "", model: w.slice(1).join(" ") }; };
+// "live music this weekend in Melbourne" → what "live music", where "Melbourne" (the when is left to the filters).
+const WHEN_WORDS = /\b(today|tonight|tomorrow|this weekend|this week|this month|next week|next weekend)\b/gi;
+const qWhat = q => q.replace(/\b(for (sale|rent)|to (rent|buy)|in .*|near .*|under .*|used|new|cheap|best)\b/gi, " ").replace(WHEN_WORDS, " ").replace(/\s+/g, " ").trim();
+const qWhere = q => (q.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1] || "").replace(WHEN_WORDS, " ").replace(/\s+/g, " ").trim();
+// "used 2018+ toyota corolla hybrid" → make "toyota", model "corolla" (years and words without letters are dropped).
+const makeModel = q => { const w = qWhat(q).replace(/\b(?:19|20)\d{2}\+?/g, " ").replace(/\b(cars?|for sale|hybrid|electric|diesel|petrol|automatic|manual|sedan|hatchback|suv|ute|wagon|van|coupe|convertible)\b/gi, " ").trim().split(/\s+/).filter(x => /[a-z]/i.test(x)); return { make: w[0] || "", model: w.slice(1).join(" ") }; };
 
 const SECTION_SITES = {
   houses: {
@@ -148,8 +174,10 @@ const IMDB_READER = { name: "IMDb", async run(q) {
   const w = q.replace(/\b(where to watch|watch|streaming|movie|tv show|series)\b/gi, " ").trim() || q;
   const res = await helperFetch(`https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(w.toLowerCase())}.json`);
   const d = JSON.parse(res.html);
-  return (d.d || []).filter(x => /^tt/.test(x.id)).map(x => ({ title: x.l, url: `https://www.imdb.com/title/${x.id}/`, image: x.i?.imageUrl, domain: "imdb.com", via: "IMDb",
-    card: { kind: "show", name: x.l, years: x.yr || (x.y ? String(x.y) : ""), genres: [x.q].filter(Boolean), network: x.s, site: "IMDb", info: `https://www.imdb.com/title/${x.id}/` } }));
+  // Movies and TV only (not video games or podcasts); x.q is the kind ("feature", "TV series"), x.s the stars.
+  const SHOW_KINDS = { movie: "movie", tvMovie: "movie", tvSeries: "tv", tvMiniSeries: "tv", tvSpecial: "tv" };
+  return (d.d || []).filter(x => /^tt/.test(x.id) && SHOW_KINDS[x.qid]).map(x => ({ title: x.l, url: `https://www.imdb.com/title/${x.id}/`, image: x.i?.imageUrl, domain: "imdb.com", via: "IMDb",
+    card: { kind: "show", type: SHOW_KINDS[x.qid], name: x.l, years: x.yr || (x.y ? String(x.y) : ""), stars: x.s || undefined, site: "IMDb", info: `https://www.imdb.com/title/${x.id}/` } }));
 }};
 
 // The readers for a section in this country (with Unitex Helper).
@@ -164,7 +192,10 @@ function sectionSourcesFor(topic) {
       const u = await url(q);
       if (!u) throw new Error("add a place to search it");
       const res = await helperFetch(u);
-      return cardsFromPage(res.html, res.url || u, kind, name);
+      // The words in the site's own search address: a car from carsales' /cars/toyota/corolla/ is a Toyota Corolla.
+      let searchedIn = ""; try { searchedIn = decodeURIComponent(u); } catch { searchedIn = u; }
+      searchedIn = searchedIn.replace(/^https?:\/\/[^/]+/, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      return cardsFromPage(res.html, res.url || u, kind, name).map(c => ({ ...c, card: { ...c.card, searchedIn } }));
     } };
   }
   return out;
