@@ -215,24 +215,27 @@ const IMAGE_SOURCES = {
 const mins = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "";
 const year = d => d ? String(d).slice(0, 4) : "";
 
+const tsOf = d => { const t = typeof d === "number" ? (d > 1e11 ? d / 1000 : d) : Date.parse(d) / 1000; return t > 0 ? Math.round(t) : undefined; };
+// PeerTube licence ids: 1 CC BY, 2 CC BY-SA, 3 CC BY-ND, 4 CC BY-NC, 5 CC BY-NC-SA, 6 CC BY-NC-ND, 7 public domain.
+const ptLicence = l => l?.id ? ["", "CC BY", "CC BY-SA", "CC BY-ND", "CC BY-NC", "CC BY-NC-SA", "CC BY-NC-ND", "Public domain"][l.id] || l.label : undefined;
 const VIDEO_SOURCES = {
   peertube: { paged: true, name: "PeerTube (Sepia Search)", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://sepiasearch.org/api/v1/search/videos?search=${encodeURIComponent(q)}&count=16&start=${P * 16}`);
-    return (d.data || []).map(v => ({ title: v.name, url: v.url, thumb: v.thumbnailUrl, via: "PeerTube", secs: v.duration, by: v.account?.displayName || v.channel?.displayName,
+    return (d.data || []).map(v => ({ title: v.name, url: v.url, thumb: v.thumbnailUrl, via: "PeerTube", secs: v.duration, license: ptLicence(v.licence), ts: tsOf(v.publishedAt), by: v.account?.displayName || v.channel?.displayName,
       embed: v.embedUrl || (v.uuid && v.url ? new URL(v.url).origin + "/videos/embed/" + v.uuid : null), meta: [v.account?.displayName || v.channel?.displayName, mins(v.duration)].filter(Boolean).join(" · ") }));
   }},
   dailymotion: { paged: true, name: "Dailymotion", async run(q, { page: P = 0 } = {}) {
-    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&page=${P + 1}&fields=id,title,url,thumbnail_360_url,duration,owner.screenname`);
-    return (d.list || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail_360_url, via: "Dailymotion", secs: v.duration, by: v["owner.screenname"], embed: `https://www.dailymotion.com/embed/video/${v.id}`, meta: [v["owner.screenname"], mins(v.duration)].filter(Boolean).join(" · ") }));
+    const d = await getJson(`https://api.dailymotion.com/videos?search=${encodeURIComponent(q)}&limit=16&page=${P + 1}&fields=id,title,url,thumbnail_360_url,duration,owner.screenname,created_time`);
+    return (d.list || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail_360_url, via: "Dailymotion", secs: v.duration, ts: tsOf(v.created_time), by: v["owner.screenname"], embed: `https://www.dailymotion.com/embed/video/${v.id}`, meta: [v["owner.screenname"], mins(v.duration)].filter(Boolean).join(" · ") }));
   }},
   archive: { paged: true, name: "Internet Archive", async run(q, { page: P = 0 } = {}) {
-    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(movies)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&rows=16&page=${P + 1}&output=json`);
-    return (d.response?.docs || []).map(v => ({ title: v.title, url: `https://archive.org/details/${v.identifier}`, thumb: `https://archive.org/services/img/${v.identifier}`, via: "Internet Archive", by: [].concat(v.creator || [])[0], embed: `https://archive.org/embed/${v.identifier}`, meta: [[].concat(v.creator || [])[0], v.year].filter(Boolean).join(" · ") }));
+    const d = await getJson(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${q}) AND mediatype:(movies)`)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=year&fl[]=licenseurl&fl[]=publicdate&rows=16&page=${P + 1}&output=json`);
+    return (d.response?.docs || []).map(v => ({ title: v.title, license: v.licenseurl ? v.licenseurl.replace(/^https?:\/\/creativecommons\.org\/(licenses|publicdomain)\//, "CC ").replace(/\/$/, "") : undefined, url: `https://archive.org/details/${v.identifier}`, thumb: `https://archive.org/services/img/${v.identifier}`, via: "Internet Archive", ts: tsOf(v.publicdate), by: [].concat(v.creator || [])[0], embed: `https://archive.org/embed/${v.identifier}`, meta: [[].concat(v.creator || [])[0], v.year].filter(Boolean).join(" · ") }));
   }},
   commons: { paged: true, name: "Wikimedia Commons", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=12&gsroffset=${P * 12}&gsrsearch=${encodeURIComponent(q + " filetype:video")}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json&origin=*`);
     return Object.values(d.query?.pages || {}).sort((a, b) => a.index - b.index).filter(p => p.imageinfo?.[0]?.thumburl)
-      .map(p => ({ title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), url: p.imageinfo[0].descriptionurl, thumb: p.imageinfo[0].thumburl, via: "Wikimedia Commons", file: p.imageinfo[0].url }));
+      .map(p => ({ title: p.title.replace(/^File:/, "").replace(/\.\w+$/, ""), url: p.imageinfo[0].descriptionurl, thumb: p.imageinfo[0].thumburl, via: "Wikimedia Commons", license: "Free licence (CC)", file: p.imageinfo[0].url }));
   }},
 };
 
@@ -360,11 +363,11 @@ Object.assign(VIDEO_SOURCES, {
   youtube: { paged: true, name: "YouTube (via Invidious / Piped)", async run(q, { page: P = 0 } = {}) {
     try {
       return await firstThatAnswers(INVIDIOUS, async h => (await getJson(`https://${h}/api/v1/search?q=${encodeURIComponent(q)}&type=video&page=${P + 1}`, 6000)).filter(v => v.videoId).slice(0, 16).map(v => ({
-        title: v.title, url: `https://www.youtube.com/watch?v=${v.videoId}`, thumb: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`, secs: v.lengthSeconds, by: v.author, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${v.videoId}` })));
+        title: v.title, url: `https://www.youtube.com/watch?v=${v.videoId}`, thumb: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`, secs: v.lengthSeconds, ts: tsOf(v.published), by: v.author, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${v.videoId}` })));
     } catch (e) {
       if (P) throw e;
       return await firstThatAnswers(PIPED, async h => ((await getJson(`https://${h}/search?q=${encodeURIComponent(q)}&filter=videos`, 6000)).items || []).filter(v => v.url?.includes("watch?v=")).slice(0, 16).map(v => {
-        const id = v.url.split("v=")[1]; return { title: v.title, url: `https://www.youtube.com/watch?v=${id}`, thumb: v.thumbnail, secs: v.duration, by: v.uploaderName, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${id}` }; }));
+        const id = v.url.split("v=")[1]; return { title: v.title, url: `https://www.youtube.com/watch?v=${id}`, thumb: v.thumbnail, secs: v.duration, ts: tsOf(v.uploaded), by: v.uploaderName, via: "YouTube", embed: `https://www.youtube-nocookie.com/embed/${id}` }; }));
     }
   }},
   odysee: { paged: true, name: "Odysee", async run(q, { page: P = 0 } = {}) {
@@ -373,7 +376,7 @@ Object.assign(VIDEO_SOURCES, {
   }},
   nasa: { paged: true, name: "NASA Video Library", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=video&page_size=12&page=${P + 1}`);
-    return (d.collection?.items || []).map(i => ({ title: i.data?.[0]?.title, url: `https://images.nasa.gov/details/${i.data?.[0]?.nasa_id}`, thumb: i.links?.[0]?.href, by: i.data?.[0]?.center, via: "NASA", file: `https://images-assets.nasa.gov/video/${i.data?.[0]?.nasa_id}/${i.data?.[0]?.nasa_id}~mobile.mp4` }));
+    return (d.collection?.items || []).map(i => ({ license: "Public domain (NASA)", title: i.data?.[0]?.title, url: `https://images.nasa.gov/details/${i.data?.[0]?.nasa_id}`, thumb: i.links?.[0]?.href, by: i.data?.[0]?.center, via: "NASA", file: `https://images-assets.nasa.gov/video/${i.data?.[0]?.nasa_id}/${i.data?.[0]?.nasa_id}~mobile.mp4` }));
   }},
 });
 
@@ -402,11 +405,11 @@ Object.assign(IMAGE_SOURCES, {
 });
 Object.assign(VIDEO_SOURCES, {
   searxng: { paged: true, name: "SearXNG Videos (YouTube, Vimeo, Bing…)", async run(q, { page: P = 0 } = {}) {
-    return (await searxJson(q, "videos", P)).slice(0, 24).map(r => ({ title: strip(r.title), url: r.url, thumb: r.thumbnail || r.img_src, by: r.author, secs: durSecs(r.length), via: searxEngine(r, "Videos"), embed: ytEmbed(r.url) || r.iframe_src || undefined }));
+    return (await searxJson(q, "videos", P)).slice(0, 24).map(r => ({ title: strip(r.title), url: r.url, thumb: r.thumbnail || r.img_src, by: r.author, secs: durSecs(r.length), ts: r.publishedDate ? tsOf(r.publishedDate) : undefined, via: searxEngine(r, "Videos"), embed: ytEmbed(r.url) || r.iframe_src || undefined }));
   }},
   qwant: { paged: true, name: "Qwant Videos", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://api.qwant.com/v3/search/videos?q=${encodeURIComponent(q)}&count=20&offset=${P * 20}&locale=en_GB&device=desktop&safesearch=1`);
-    return (d.data?.result?.items || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail, secs: qwantSecs(v.duration), by: v.channel || v.source, via: "Qwant Videos", embed: ytEmbed(v.url) }));
+    return (d.data?.result?.items || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail, secs: qwantSecs(v.duration), ts: v.date ? tsOf(+v.date) : undefined, by: v.channel || v.source, via: "Qwant Videos", embed: ytEmbed(v.url) }));
   }},
 });
 Object.assign(BOOK_SOURCES, {
@@ -535,6 +538,16 @@ function siteName(url) {
   const root = siteRoot(url) || h;
   return root.charAt(0).toUpperCase() + root.slice(1);
 }
+// A video site, a video page, or something with a length or a player.
+const VIDEO_HOSTS = /(^|\.)(youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|twitch\.tv|tiktok\.com|rumble\.com|odysee\.com|bitchute\.com|bilibili\.com|nicovideo\.jp|ted\.com|streamable\.com|archive\.org|commons\.wikimedia\.org|images\.nasa\.gov|vk\.com|ok\.ru|9gag\.com|imdb\.com|metacafe\.com|veoh\.com|brightcove\.net|jwplayer\.com|wistia\.com|loom\.com|kick\.com|peertube\.[a-z.]+|tube\.[a-z.]+|video\.[a-z.]+)$/i;
+function isVideo(v) {
+  if (v.secs || v.embed || v.file) return true;
+  try {
+    const u = new URL(v.url);
+    return VIDEO_HOSTS.test(u.hostname) || /\/(watch|video|videos|v|w|embed|clip|clips|reel|shorts)(\/|$|\?)|\.(mp4|webm|m3u8)$/i.test(u.pathname) || /facebook\.com$/.test(u.hostname) && /\/videos?\//.test(u.pathname);
+  } catch { return false; }
+}
+
 // The image row shown among the results (after the third one), like the engines' "Images" pack.
 let imagePack = null;
 function resultItem(r) {
@@ -992,12 +1005,15 @@ async function go() {
     const cardSrc = c.topic !== "all" ? cardSourcesFor(c.topic) : {};
     const keyOf = c.kind === "images" ? i => i.thumb : r => urlKey(r.url);
     // News: only stories that are really about the search.
+    // Videos: only things that are videos (a video site, a length, or a player), not web pages that
+    // an engine's video section let through, like a speed test.
+    const videosOnly = list => c.view === "videos" ? list.map(s => ({ ...s, r: (s.r || []).filter(isVideo) })) : list;
     // Images, videos and books from the open collections must have a search word in the title
     // (big engines' own image and video sections are trusted to match by meaning).
     const relevantOnly = list => c.view === "news" ? list.map(s => ({ ...s, r: (s.r || []).filter(i => newsMatches(i, q)) }))
       : ["images", "videos", "books", "papers"].includes(c.view) ? list.map(s => /^helper_|^searxng$/.test(s.n) ? s : { ...s, r: (s.r || []).filter(i => aboutSearch(i.title, query, 0.01)) }) : list;
     // Engines' own sections first (they're the biggest indexes), then the open sources.
-    const order = list => relevantOnly([...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))]).map(s => s.r || []);
+    const order = list => videosOnly(relevantOnly([...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))])).map(s => s.r || []);
     const step = STEP[c.view] || 20;
     tabLimit = step;
     // Show items as each source answers.

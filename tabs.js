@@ -74,7 +74,7 @@ function videoCard(v) {
   return card;
 }
 
-const VIDEO_LEN = { short: [0, 240], medium: [240, 1200], long: [1200, Infinity] };
+const VIDEO_LEN = { shorts: [0, 60], short: [0, 240], medium: [240, 1200], long: [1200, Infinity], hour: [3600, Infinity] };
 
 // ---------- images: full-screen viewer ----------
 
@@ -209,10 +209,27 @@ function drawTab() {
   if (t.free) list = list.filter(b => bookFree(b) || b.borrow);
   const bar = [];
   if (v === "videos") {
-    if (tabFilters.len) list = list.filter(v => v.secs && v.secs >= VIDEO_LEN[tabFilters.len][0] && v.secs < VIDEO_LEN[tabFilters.len][1]);
-    if (tabFilters.src) list = list.filter(v => v.via === tabFilters.src);
+    // Like Ecosia's and the other engines' video filters: date, length (or your own range), licence, sort.
+    if (tabFilters.time) { const since = Date.now() / 1000 - +tabFilters.time; list = list.filter(v => v.ts && v.ts >= since); }
+    const range = tabFilters.len === "custom" ? [(+tabFilters.lenMin || 0) * 60, tabFilters.lenMax ? +tabFilters.lenMax * 60 : Infinity] : VIDEO_LEN[tabFilters.len];
+    if (range) list = list.filter(v => v.secs && v.secs >= range[0] && v.secs < range[1]);
+    if (tabFilters.lic) list = list.filter(i => tabFilters.lic === "cc" ? licenceKind(i) !== "unknown" || /free licence/i.test(i.license || "")
+      : tabFilters.lic === "commercial" ? ["cc0", "pd", "by", "bysa"].includes(licenceKind(i)) : licenceOf(i) === tabFilters.lic);
     if (tabFilters.playable) list = list.filter(playable);
-    bar.push(tabSelect("len", "Any length", [["short", "Under 4 min"], ["medium", "4–20 min"], ["long", "Over 20 min"]]), tabSelect("src", "All sources", opts(tabItems.map(v => v.via))), tabCheck("playable", "Plays here"));
+    if (tabFilters.sort === "new") list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (tabFilters.sort === "long") list.sort((a, b) => (b.secs || 0) - (a.secs || 0));
+    if (tabFilters.sort === "short") list.sort((a, b) => (a.secs || Infinity) - (b.secs || Infinity));
+    const num = key => {
+      const i = el("input", { className: "f-input len-num", type: "number", min: "0", placeholder: key === "lenMin" ? "from" : "to", value: tabFilters[key] || "" });
+      i.onchange = () => { tabFilters[key] = i.value; drawTab(); };
+      return i;
+    };
+    bar.push(tabSelect("time", "Any time", [["86400", "Past 24 hours"], ["604800", "Past week"], ["2592000", "Past month"], ["31536000", "Past year"]]),
+      tabSelect("len", "Any length", [["shorts", "Under 1 min"], ["short", "Under 4 min"], ["medium", "4–20 min"], ["long", "Over 20 min"], ["hour", "Over 1 hour"], ["custom", "Custom…"]]),
+      tabFilters.len === "custom" && el("span", { className: "len-custom" }, num("lenMin"), "–", num("lenMax"), " min"),
+      tabSelect("lic", "Any licence", [["cc", "Creative Commons licences"], ["commercial", "Commercial use allowed"], ["pd", "Public domain / CC0"]]),
+      tabSelect("sort", "Sort: best match", [["new", "Newest first"], ["long", "Longest first"], ["short", "Shortest first"]]),
+      tabCheck("playable", "Plays here"));
   } else if (v === "images") {
     // Like the engines' image Tools: licence and website.
     if (tabFilters.lic) list = list.filter(i => licenceOf(i) === tabFilters.lic || (tabFilters.lic === "commercial" && ["cc0", "pd", "by", "bysa"].includes(licenceKind(i))) || (tabFilters.lic === "cc" && licenceKind(i) !== "unknown"));
@@ -222,10 +239,9 @@ function drawTab() {
       tabSelect("site", "All websites", opts(tabItems.map(imgSite)).slice(0, 60)));
   } else if (v === "books") {
     if (tabFilters.free) list = list.filter(b => bookFree(b) || b.borrow);
-    if (tabFilters.src) list = list.filter(b => b.via === tabFilters.src);
     if (tabFilters.sort === "new") list.sort((a, b) => (b.year || 0) - (a.year || 0));
     if (tabFilters.sort === "old") list.sort((a, b) => (a.year || 9999) - (b.year || 9999));
-    bar.push(!t.free && tabCheck("free", "Free to read or borrow"), tabSelect("src", "All sources", opts(tabItems.map(b => b.via))), tabSelect("sort", "Sort: best match", [["new", "Newest first"], ["old", "Oldest first"]]));
+    bar.push(!t.free && tabCheck("free", "Free to read or borrow"), tabSelect("sort", "Sort: best match", [["new", "Newest first"], ["old", "Oldest first"]]));
   } else if (v === "papers") {
     if (tabFilters.free) list = list.filter(p => p.free);
     if (tabFilters.sort === "cites") list.sort((a, b) => (b.cites || 0) - (a.cites || 0));

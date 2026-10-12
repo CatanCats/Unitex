@@ -27,7 +27,7 @@ const READ_AS = {
     const f = o.features?.general || o.generalFeatures || o;
     return { title: address, url, image: imgFrom(o, base), domain: hostOf(url), via: site,
       card: { kind: "house", address, price, beds: pickNum(f.bedrooms?.value, f.bedrooms, o.beds, o.numberOfBedrooms, o.numberOfRooms), baths: pickNum(f.bathrooms?.value, f.bathrooms, o.baths, o.numberOfBathroomsTotal), cars: pickNum(f.parkingSpaces?.value, f.parkingSpaces, o.carspaces, o.parking),
-        type: pickStr(o.propertyType?.display, typeof o.propertyType === "string" ? o.propertyType : undefined), site } };
+        type: pickStr(o.propertyType?.display, typeof o.propertyType === "string" ? o.propertyType : undefined), deal: typeof query === "string" ? listingKind(query) : undefined, site } };
   },
   car: (o, base, site) => {
     const name = pickStr(o.title, o.name, [o.year, o.make?.name || o.make, o.model?.name || o.model, o.variant || o.badge].filter(x => typeof x === "string" || typeof x === "number").join(" "));

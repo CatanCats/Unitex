@@ -91,6 +91,66 @@ let lastCards = [];
 function priceOf(c) { return money(c.card.price); }
 const reviewCount = c => { const t = String(c.card.reviews || "").replace(/,/g, ""); return /k$/i.test(t) ? parseFloat(t) * 1000 : parseFloat(t) || 0; };
 
+// ---------- strict matching of the chosen fields ----------
+const lc = s => String(s || "").toLowerCase();
+const has = (text, word) => new RegExp(`(^|[^a-z])${lc(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[- ]+/g, "[- ]?")}`, "i").test(text);
+const firstWord = s => lc(s).split(/[,\s]+/).find(w => w.length > 2) || "";
+const salaryTop = s => { const n = [...String(s || "").matchAll(/\$?\s?(\d[\d,.]*)\s?(k)?/gi)].map(m => parseFloat(m[1].replace(/,/g, "")) * (m[2] ? 1000 : 1)).filter(x => x > 100); if (!n.length) return 0; const t = Math.max(...n); return t < 500 ? t * 38 * 52 : t; }; // hourly → yearly
+const minutesOf = s => { const h = +(String(s || "").match(/(\d+)\s*h/i)?.[1] || 0), mn = +(String(s || "").match(/(\d+)\s*min/i)?.[1] || 0); return h * 60 + mn || undefined; };
+const EXTRA_WORDS = { "Pets allowed": /pet/, "Furnished": /furnish/, "Pool": /pool/, "Garden": /garden|yard/, "Air conditioning": /air ?con|cooling|split system/,
+  "Remote": /remote|anywhere|work from home|wfh/, "Work from home": /remote|work from home|wfh|hybrid/, "Visa sponsorship": /visa|sponsor/, "No experience needed": /no experience|entry level|junior|graduate|trainee|apprentice/,
+  "Free": /\bfree\b|\$0(\.00)?\b/, "Pickup only": /pick ?up|collect/, "Delivery": /deliver|shipping|postage/, "Family friendly": /family|kids|children/, "All ages": /all ages|all-ages/, "Certificate": /certificat/ };
+const LEVELS = { "Entry level": /\b(junior|graduate|grad|entry|trainee|apprentice|intern(ship)?|assistant)\b/, "Senior": /\b(senior|sr\.?|lead|principal|head of|manager|director|staff)\b/ };
+function eventInRange(when, range) {
+  const t = Date.parse(when); if (isNaN(t)) return false;
+  const now = new Date(), d = new Date(t), day = 86400000, start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return { Today: t >= start && t < start + day, Tonight: t >= start && t < start + day && d.getHours() >= 17, "This weekend": (() => { const sat = start + ((6 - now.getDay() + 7) % 7) * day; return t >= sat - (now.getDay() === 0 ? day : 0) && t < sat + 2 * day; })(),
+    "This week": t >= start && t < start + 7 * day, "This month": t >= start && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() }[range] ?? true;
+}
+function formMatches(c) {
+  const v = store.get("unitex.form." + topicId, {});
+  const k = c.card, t = lc([cardTitle(c), c.title, c.snippet, k.company, k.location, k.worktype, k.type, k.condition, k.cuisine, k.category, (k.genres || []).join(" "), k.network, (c.tags || []).join(" "), k.venue, k.place, k.price].join(" "));
+  const extras = (v.extras || []).every(x => EXTRA_WORDS[x] ? EXTRA_WORDS[x].test(t) : has(t, x));
+  if (!extras) return false;
+  switch (topicId) {
+    case "jobs":
+      if (v.worktype && !has(lc(`${k.worktype} ${t}`), v.worktype)) return false;
+      if (v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
+      if (v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
+      if (v.salary && !(salaryTop(k.salary) >= +String(v.salary).replace(/\D/g, ""))) return false;
+      if (v.where && !has(lc(k.location), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && /remote|anywhere/i.test(k.location || ""))) return false;
+      return true;
+    case "houses":
+      if (v.type && !has(lc(`${k.type} ${t}`), v.type)) return false;
+      if (v.deal === "share" ? !/share|room|flatmate/.test(t) : v.deal && k.deal && k.deal !== v.deal) return false;
+      if (v.where && !has(lc(`${k.address} ${k.area} ${t}`), firstWord(v.where))) return false;
+      return true;
+    case "cars":
+      for (const f of ["make", "model", "body", "fuel", "gearbox"]) if (v[f] && !has(t, v[f])) return false;
+      if (v.deal === "new" && !/\bnew\b/.test(t)) return false;
+      if (v.deal === "used" && /\bbrand new\b|\bnew car\b/.test(t)) return false;
+      return true;
+    case "shopping": case "marketplace":
+      if (v.brand && !has(t, v.brand)) return false;
+      return true;
+    case "recipes":
+      for (const f of ["meal", "cuisine"]) if (v[f] && !has(t, v[f])) return false;
+      if (v.diet && !has(t, v.diet.replace(/ free$/i, "-free").split(" ")[0])) return false;
+      if (v.time && !(minutesOf(k.time) && minutesOf(k.time) <= minutesOf(v.time.replace("hour", "h")) )) return false;
+      return true;
+    case "movies":
+      if (v.genre && !(k.genres || []).some(g => has(lc(g), v.genre))) return false;
+      if (v.kind === "movie" && /\b(series|tv|season)\b/.test(t)) return false;
+      if (v.kind === "tv show" && !/\b(series|tv|season|show)\b/.test(t) && !k.network) return false;
+      return true;
+    case "events":
+      if (v.when && !eventInRange(k.when, v.when)) return false;
+      if (v.where && !has(lc(`${k.place} ${k.venue} ${t}`), firstWord(v.where))) return false;
+      return true;
+  }
+  return true;
+}
+
 function applyFilters(cards) {
   let out = cards.filter(c => {
     const p = priceOf(c), k = c.card;
@@ -105,13 +165,12 @@ function applyFilters(cards) {
     if (filters.ratingMin && !(k.rating >= filters.ratingMin)) return false;
     if (filters.baths && !(k.baths >= filters.baths)) return false;
     if (filters.carsMin && !(k.cars >= filters.carsMin)) return false;
-    if (filters.kmMax && k.km && +String(k.km).replace(/\D/g, "") > filters.kmMax) return false;
-    if (filters.gearbox && k.gearbox && !k.gearbox.toLowerCase().startsWith(filters.gearbox.toLowerCase().slice(0, 4))) return false;
-    if (filters.worktype && k.worktype && k.worktype.toLowerCase().replace(/[- ]/g, "") !== filters.worktype.toLowerCase().replace(/[- ]/g, "")) return false;
+    if (filters.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") <= filters.kmMax)) return false;
     if (filters.priced && p == null) return false;
     if (filters.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
     if (filters.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
-    return true;
+    // Every field chosen in the filters must match: a Casual job search shows only casual jobs.
+    return formMatches(c);
   });
   const by = { "price-asc": (a, b) => (priceOf(a) ?? Infinity) - (priceOf(b) ?? Infinity), "price-desc": (a, b) => (priceOf(b) ?? -1) - (priceOf(a) ?? -1),
     "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[filters.sort];
@@ -294,6 +353,8 @@ function formFilters(topicIdNow) {
   const v = { ...guessForm(topicIdNow, query), ...store.get(key, {}) };
   const apply = () => {
     store.set(key, v);
+    // Fields that only narrow the results (work type, must-haves…) apply at once; the search runs again too.
+    drawCards();
     const q = form.build(v);
     if (!q) return;
     const f = form.filters ? Object.fromEntries(Object.entries(form.filters(v)).filter(([, x]) => x !== undefined)) : {};
@@ -452,7 +513,7 @@ const TOPIC_FORMS = {
       salary: { label: "Minimum salary", placeholder: "$ per year", type: "number" },
       extras: { type: "checks", label: "Options", options: opt(["Remote", "Work from home", "Visa sponsorship", "No experience needed"]) } },
     build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", v.worktype?.toLowerCase(), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`),
-    filters: v => ({ worktype: v.worktype || undefined, salaryOnly: !!v.salary || undefined }) },
+    filters: v => ({ salaryOnly: !!v.salary || undefined }) },
 
   cars: { title: "🚗 Find a car", fields: {
       deal: { type: "seg", label: "Condition", options: opt([["used", "Used"], ["new", "New"], ["any", "Any"]]) },
@@ -466,7 +527,7 @@ const TOPIC_FORMS = {
       kmMax: { label: "Max km", placeholder: "e.g. 80000", type: "number" },
       where: { label: "Where", placeholder: "City or state" } },
     build: v => words(v.deal !== "any" && (v.deal || "used"), v.yearMin && `${v.yearMin}+`, v.make, v.model, v.fuel?.toLowerCase(), v.body?.toLowerCase(), v.gearbox?.toLowerCase(), !v.make && !v.model && !v.body && "car", "for sale", v.max && `under $${v.max}`, v.where && `in ${v.where}`),
-    filters: v => ({ yearMin: priceNum(v.yearMin), max: priceNum(v.max), kmMax: priceNum(v.kmMax), gearbox: v.gearbox || undefined }) },
+    filters: v => ({ yearMin: priceNum(v.yearMin), max: priceNum(v.max), kmMax: priceNum(v.kmMax) }) },
 
   shopping: { title: "🛍️ What are you shopping for?", fields: {
       what: { label: "Product", placeholder: "e.g. noise cancelling headphones", wide: true },
