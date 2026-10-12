@@ -160,3 +160,19 @@ function attachSuggestions(input, onPick) {
   });
   input.closest("form").addEventListener("submit", () => { rememberSearch(input.value); close(); });
 }
+
+// ---------- which mode a search needs ----------
+// "3 bedroom house for rent in Brunswick" → Houses; "web developer jobs" → Jobs; "buy headphones" → Shopping.
+const CAR_MAKES = "toyota|mazda|ford|holden|honda|hyundai|kia|tesla|bmw|audi|mercedes|nissan|subaru|volkswagen|vw|mitsubishi|lexus|volvo|jeep|suzuki|isuzu|byd|mg|peugeot|skoda|porsche|ram|chevrolet|chevy|dodge|ferrari|jaguar|land rover|mini|renault";
+function detectIntent(q) {
+  const s = ` ${String(q || "").toLowerCase()} `;
+  if (/\b(for (rent|sale|lease)|to rent|to buy|rentals?|real ?estate|share ?house|flatmates?|\d\s*(bed|bedroom|br)\b)/.test(s) && /\b(house|home|apartment|unit|townhouse|villa|flat|room|property|properties|studio|land|bed|bedroom|br|rent|rental)s?\b/.test(s) && !/\b(car|ute|suv|bike|game|movie)s?\b/.test(s)) return ["shopping", "houses", "Houses"];
+  if (/\b(jobs?|careers?|hiring|vacanc(y|ies)|internships?|graduate programs?|part[- ]time work|full[- ]time work)\b/.test(s)) return ["jobs", "", "Jobs"];
+  if (new RegExp(`\\b(${CAR_MAKES})\\b`).test(s) && /\b(for sale|used|new|price|buy|cheap|km|automatic|manual|\d{4})\b/.test(s) || /\b(used|second[- ]?hand) (car|ute|suv|van)s?\b|\bcars? for sale\b/.test(s)) return ["shopping", "cars", "Cars"];
+  if (/\b(second[- ]?hand|pre[- ]?owned|preloved|gumtree|marketplace)\b/.test(s)) return ["shopping", "secondhand", "Second-hand"];
+  if (/\b(tickets?|concerts?|gigs?|festivals?|what'?s on|events? (in|near|this|tonight|today))\b/.test(s)) return ["all", "events", "Events"];
+  if (/\b(recipes?|how to (cook|make|bake))\b/.test(s)) return ["all", "recipes", "Recipes"];
+  if (/\b(flights?|hotels?|accommodation|airbnb|holiday packages?)\b/.test(s)) return ["travel", "", "Travel"];
+  if (/\b(buy|price of|prices?|cheapest|cheap|deals?|discount|on sale|best price|under \$\d+|\$\d+)\b/.test(s)) return ["shopping", "products", "Shopping"];
+  return null;
+}

@@ -439,6 +439,7 @@ function cardSourcesFor(topic) {
   const out = {};
   if (CARD_SOURCES[topic]) out[topic] = CARD_SOURCES[topic];
   if (topic === "jobs") Object.assign(out, jobSourcesFor());
+  Object.assign(out, sectionSourcesFor(topic));
   const used = topic === "marketplace";
   for (const id of SHOP_FOR[topic] || []) {
     if (id.startsWith("@")) {
@@ -450,7 +451,7 @@ function cardSourcesFor(topic) {
   }
   return out;
 }
-const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => /^(helper|store)_/.test(n)).map(([, s]) => s.name);
+const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => /^(helper|store|jobsite|site)_/.test(n)).map(([, s]) => s.name);
 
 // The tabs. "kind" picks how results are drawn; "subs" are the filters under a tab. A sub can set a
 // topic (its sites and cards), add a word to the search ("suffix"), or bring its own sources.
@@ -582,7 +583,7 @@ function mediaCard(i, kind) {
 // on Shopping, Jobs and the other card pages.
 let panelState = { settled: [], sources: {}, locked: [] };
 const ENGINE_KEYS = /^(helper_(google|bing|brave|mojeek|yandex|searxng)|searxng|qwant|mwmbl|stract|alexandria|wiby|marginalia|duckduckgo)$/;
-const WEBSITE_KEYS = /^(helper_(amazon|ebay|googleshop|bingshop)|store_|jobsite_|jobs_|listing_)/;
+const WEBSITE_KEYS = /^(helper_(amazon|ebay|googleshop|bingshop)|store_|jobsite_|jobs_|listing_|site_)/;
 
 function sourceRows() {
   const { settled, sources } = panelState;
@@ -591,7 +592,7 @@ function sourceRows() {
   const rows = [];
   const state = (key, src, isOff) => {
     const r = byName[key];
-    const locked = src && src.enabled && !src.enabled() && /^(helper|store|jobsite)_/.test(key);
+    const locked = src && src.enabled && !src.enabled() && /^(helper|store|jobsite|site)_/.test(key);
     if (isOff) return { st: "off", note: "left out" };
     if (locked) return { st: "locked", note: "needs Unitex Helper" };
     if (!r) return { st: "wait", note: query ? "searching…" : "" };
@@ -601,7 +602,7 @@ function sourceRows() {
   const topic = topicById(topicId);
   const sites = topic.id !== "all" && cur().kind === "web" ? topicSites(topic) : [];
   const readerFor = st => SITE_READERS[st.domain] && sources[SITE_READERS[st.domain]] ? SITE_READERS[st.domain] : Object.keys(sources).find(n => {
-    const k = n.replace(/^(store|helper|jobsite|jobs|listing)_/, "");
+    const k = n.replace(/^(store|helper|jobsite|jobs|listing|site)_/, "");
     return nameKey(sources[n].name) === nameKey(st.name) || st.domain.split(/[./]/).includes(k) || (k === "googleshop" && st.domain === "google.com/shopping") || (n === "listing_" + Object.keys(LISTING_SITES).find(x => LISTING_SITES[x].name === st.domain));
   });
   const listed = new Set();
@@ -616,12 +617,13 @@ function sourceRows() {
   }
   for (const [n, src] of Object.entries(sources)) {
     if (listed.has(n)) continue;
-    if (src.enabled && !src.enabled() && !/^(helper|store|jobsite)_/.test(n)) continue; // doesn't apply to this search
+    if (src.enabled && !src.enabled() && !/^(helper|store|jobsite|site)_/.test(n)) continue; // doesn't apply to this search
     const isOff = offSources.has(n);
     rows.push({ group: ENGINE_KEYS.test(n) ? "Search engines" : WEBSITE_KEYS.test(n) ? (SITES_LABEL[topic.id] || "Websites") : "Sources", label: src.name.replace(/ \((through|via) .*\)$/, ""), key: n, ...state(n, src, isOff), off: isOff,
       toggle: () => { isOff ? offSources.delete(n) : offSources.add(n); store.set("unitex.off", [...offSources]); go(); } });
   }
-  const order = ["Search engines", SITES_LABEL[topic.id] || "Websites", "Websites", "Sources"];
+  // The businesses (property sites, stores, job sites…) first, then the engines.
+  const order = [SITES_LABEL[topic.id] || "Websites", "Websites", "Search engines", "Sources"];
   return rows.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
 }
 
@@ -708,14 +710,14 @@ addEventListener("scroll", closeMore, { passive: true });
 function tabButton(t) {
   const b = el("button", { type: "button", role: "tab", textContent: t.name });
   b.setAttribute("aria-selected", t.id === tab);
-  b.onclick = () => { if (tab !== t.id) { tab = t.id; sub = ""; } go(); };
+  b.onclick = () => { if (tab !== t.id) { tab = t.id; sub = ""; } userPicked = t.id !== "all"; go(); };
   return b;
 }
 
 function renderTabs() {
   const main = TABS.filter(t => !t.more), more = TABS.filter(t => t.more);
   const active = more.find(t => t.id === tab);
-  const menu = el("div", { className: "more-menu", hidden: true }, ...more.map(t => { const b = tabButton(t); b.onclick = () => { menu.hidden = true; tab = t.id; sub = ""; go(); }; return b; }));
+  const menu = el("div", { className: "more-menu", hidden: true }, ...more.map(t => { const b = tabButton(t); b.onclick = () => { menu.hidden = true; tab = t.id; sub = ""; userPicked = true; go(); }; return b; }));
   const moreBtn = el("button", { type: "button", className: "more-btn", textContent: "More ▾", ariaHaspopup: "true" });
   moreBtn.onclick = e => {
     e.stopPropagation();
@@ -733,7 +735,7 @@ function renderTabs() {
   fill(box, t.shop && el("span", { className: "row-label", textContent: "Shop for" }), ...t.subs.map(s => {
     const b = el("button", { type: "button", className: "chip sub" + (s.id === c.sub ? " active" : ""), textContent: s.name });
     b.setAttribute("aria-pressed", s.id === c.sub);
-    b.onclick = () => { sub = s.id; go(); };
+    b.onclick = () => { sub = s.id; userPicked = true; go(); };
     return b;
   }));
   box.className = "subtabs" + (t.shop ? " departments" : "");
@@ -902,7 +904,27 @@ function drawResults(rest, c) {
   if (b && list.length) $("results").append(el("li", { className: "more-li" }, b));
 }
 
+// Searches from the All tab open in the mode they need (Houses, Jobs, Shopping…), like the engines'
+// verticals; "Search the whole web instead" turns it off for that search.
+let userPicked = new URLSearchParams(location.search).has("tab"), wholeWebFor = "", autoMode = null;
+const DEPARTMENTS = [["all", "", "All"], ["shopping", "products", "Shopping"], ["shopping", "houses", "Houses"], ["shopping", "cars", "Cars"], ["shopping", "secondhand", "Second-hand"],
+  ["jobs", "", "Jobs"], ["travel", "", "Travel"], ["all", "events", "Events"], ["all", "recipes", "Recipes"], ["all", "movies", "Movies & TV"], ["images", "", "Images"], ["videos", "", "Videos"], ["news", "", "News"], ["maps", "", "Maps"], ["books", "", "Books"]];
+function renderDepartment() {
+  const d = $("dept");
+  if (!d) return;
+  const first = TABS.find(x => x.id === tab)?.subs?.[0]?.id || "";
+  const cur0 = DEPARTMENTS.find(([t, s1]) => t === tab && s1 === (sub && sub !== first ? sub : (s1 ? sub : ""))) || DEPARTMENTS.find(([t]) => t === tab) || DEPARTMENTS[0];
+  fill(d, ...DEPARTMENTS.map(([t, s1, name], i) => el("option", { value: i, textContent: name, selected: DEPARTMENTS[i] === cur0 })));
+  d.onchange = () => { const [t, s1] = DEPARTMENTS[+d.value]; tab = t; sub = s1; userPicked = true; autoMode = null; go(); };
+}
+
 async function go() {
+  // A search on the All tab that clearly needs a mode opens in it.
+  autoMode = null;
+  if (query && !userPicked && tab === "all" && (!sub || sub === "all") && wholeWebFor !== query) {
+    const it = detectIntent(query);
+    if (it) { [tab, sub] = it; autoMode = it[2]; }
+  }
   const c = cur();
   topicId = c.topic;
   // Topics with cards (Jobs, Houses, Products, Recipes…) open straight in their mode.
@@ -915,6 +937,10 @@ async function go() {
   $("q").value = query;
   $("q").placeholder = topicId !== "all" ? topicById(topicId).hint : c.shop ? "Search every store…" : `Search ${c.name === "All" ? "the web" : c.name.toLowerCase()} with Unitex…`;
   renderTabs();
+  renderDepartment();
+  const note = $("intent-note");
+  if (autoMode) fill(note, `Showing ${autoMode} for “${query}” · `, el("a", { href: "#", textContent: "Search the whole web instead", onclick: e => { e.preventDefault(); wholeWebFor = query; tab = "all"; sub = ""; go(); } }));
+  note.hidden = !autoMode;
   renderNotice();
   renderAlternatives($("alts"), query);
   for (const id of ["did-you-mean", "related", "answer", "image-strip", "image-grid", "media-grid", "topic-sites", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
@@ -1073,6 +1099,7 @@ async function go() {
 
 $("search").addEventListener("submit", e => {
   e.preventDefault();
+  if (tab === "all" || autoMode) { userPicked = false; if (autoMode) { tab = "all"; sub = ""; } }
   query = $("q").value.replace(/(?:^|\s)!\w+(?=\s|$)/g, " ").trim();
   go();
 });

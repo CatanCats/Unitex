@@ -281,6 +281,8 @@ function openSettings() {
     el("input", { type: "text", value: draft.models[k] || "", oninput() { draft.models[k] = this.value.trim(); } }));
   const region = el("select", { className: "f-input", ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
   const theme = el("select", { className: "f-input", ariaLabel: "Theme" }, ...[["", "Match my device"], ["light", "Light"], ["dark", "Dark"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (store.get("unitex.theme") || "") === v })));
+  const cardSize = el("select", { className: "f-input", ariaLabel: "Card size" }, ...[["compact", "Small: see more at once"], ["large", "Large: bigger photos"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (draft.cards || "compact") === v })));
+  cardSize.onchange = () => { draft.cards = cardSize.value; };
   const aiBox = el("input", { type: "checkbox", checked: draft.ai !== false, onchange() { draft.ai = this.checked; aiRest.hidden = !this.checked; } });
   const aiRest = el("div", { className: "set-group", hidden: draft.ai === false },
     el("label", { className: "set-field" }, el("span", { textContent: "AI overview by" }), providerSelect(draft.overview, v => { draft.overview = v; })),
@@ -299,6 +301,7 @@ function openSettings() {
       el("h3", { textContent: "Search" }),
       el("label", { className: "set-field" }, el("span", { textContent: "Country (for local stores and sites)" }), region),
       el("label", { className: "set-field" }, el("span", { textContent: "Theme" }), theme),
+      el("label", { className: "set-field" }, el("span", { textContent: "Cards (Shopping, Houses, Jobs…)" }), cardSize),
       el("button", { type: "button", className: "chip", textContent: "Switch all sources back on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All sources are on ✓"; } }),
       el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed.` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ", el("a", { href: "install.html", textContent: "Unitex Helper" }))),
     el("div", { className: "set-actions" },

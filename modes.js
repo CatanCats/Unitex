@@ -21,7 +21,7 @@ const cleanTitle = t => {
   return (parts.length > 1 && parts[parts.length - 1].length <= 30 ? parts.slice(0, -1).join(" - ") : String(t || "")).trim() || t;
 };
 
-const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show" };
+const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event" };
 
 // Turns an ordinary result from one of the topic's sites into a card.
 function cardFor(r, topic) {
@@ -43,6 +43,7 @@ function cardFor(r, topic) {
       salary: t.match(/\$\s?\d[\d,]*(?:k)?(?:\s?[-–]\s?\$?\s?\d[\d,]*k?)?\s?(?:per hour|p\.?h\.?|an hour|per annum|p\.?a\.?|a year|\+ super)?/i)?.[0],
       worktype: t.match(/\b(full[- ]time|part[- ]time|casual|contract|temporary|internship)\b/i)?.[1] }),
     recipe: () => ({ kind, name: base.title }),
+    event: () => ({ kind, name: base.title, when: (t.match(/\b(mon|tue|wed|thu|fri|sat|sun)\w*,?\s+\d{1,2}\s+\w+|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*(\s+\d{4})?/i) || [])[0], price }),
     show: () => ({ kind, name: base.title }),
   }[kind]();
   return { ...r, card: { ...card, site: site.name } };
@@ -80,6 +81,7 @@ const MODES = {
   recipes:     { name: "Cooking mode",       icon: "🍳", noun: "recipes" },
   movies:      { name: "Watch mode",         icon: "🎬", noun: "shows" },
   reviews:     { name: "Reviews",            icon: "★", noun: "rated products" },
+  events:      { name: "Events",             icon: "🎟️", noun: "events" },
 };
 
 let modeOn = false; // set by search.js: on for every topic with cards
@@ -202,20 +204,22 @@ function renderCard(c, topic) {
   if (!url) return null;
   const img = c.image ? el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
     : k.kind === "job" && k.company ? el("span", { className: "job-logo", textContent: k.company.trim().charAt(0).toUpperCase() }) : null;
-  const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: `Buy at ${k.site || "store"}`, car: "View car", job: "View job", recipe: "Full recipe", show: "Show info" }[k.kind] || "Open" });
+  const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: `Buy at ${k.site || "store"}`, car: "View car", job: "View job", recipe: "Full recipe", show: "Show info", event: "Get tickets" }[k.kind] || "Open" });
   const facts = {
     house: [fact("🛏", k.beds, "Bedrooms"), fact("🛁", k.baths, "Bathrooms"), fact("🚗", k.cars, "Car spaces"), k.type && el("span", { className: "fact" }, k.type)],
     product: [k.rating && fact("★", k.reviews ? `${k.rating} (${k.reviews})` : k.rating, "Rating"), k.condition && el("span", { className: "fact", textContent: k.condition })],
     car: [fact("📅", k.year, "Year"), fact("🛣", k.km && `${k.km} km`, "Kilometres"), fact("⚙️", k.gearbox, "Transmission")],
     job: [fact("🏢", k.company, "Company"), fact("📍", k.location, "Location"), fact("🕒", k.worktype, "Work type"), k.posted && !isNaN(Date.parse(k.posted)) && fact("📅", ago(Date.parse(k.posted) / 1000), "Posted")],
-    recipe: [fact("🍽", k.category, "Category"), fact("🌍", k.cuisine, "Cuisine"), k.ingredients && fact("🧂", `${k.ingredients.length} ingredients`, "Ingredients")],
+    recipe: [fact("🍽", k.category, "Category"), fact("🌍", k.cuisine, "Cuisine"), fact("⏱", k.time, "Time"), fact("★", k.rating, "Rating"), k.ingredients && fact("🧂", `${k.ingredients.length} ingredients`, "Ingredients")],
     show: [fact("📅", k.years, "Years"), fact("★", k.rating, "Rating"), fact("📺", k.network, "Network")],
+    event: [fact("📅", k.when && (isNaN(Date.parse(k.when)) ? k.when : new Date(k.when).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })), "When"), fact("📍", [k.venue, k.place].filter(Boolean).join(", "), "Where")],
   }[k.kind] || [];
   const headline = {
     house: k.price || "Price on request",
     product: k.price || "See price at store",
     car: k.price || "Price on request",
     job: k.salary || "Salary not listed",
+    event: k.price || "",
   }[k.kind];
   const extra = k.kind === "recipe" && k.ingredients?.length && el("details", { className: "card-more" },
     el("summary", { textContent: "Ingredients & method" }),
@@ -266,7 +270,7 @@ function renderShortlist() { $("shortlist").hidden = true; if (!$("cards").hidde
 
 // ---------- drawing the card section ----------
 
-const CARD_STEP = 12;
+const CARD_STEP = 24; // small cards show more at once
 let cardLimit = CARD_STEP;
 
 // Fills the filters from a typed search: "3 bedroom house for rent in Brunswick VIC" → Rent, 3+, Brunswick VIC.
@@ -330,7 +334,7 @@ function cardsHeadline(topic, n) {
   return `${n} ${noun}${query ? ` for “${query}”` : ""}`;
 }
 
-const VIEW_DEFAULT = { house: "list", job: "list", car: "list", product: "grid", recipe: "grid", show: "grid" };
+const VIEW_DEFAULT = { house: "list", job: "list", car: "list", product: "grid", recipe: "grid", show: "grid", event: "list" };
 function sortSelect(kind) {
   const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"] }[kind] || [];
   if (!sorts.length) return null;
@@ -374,7 +378,7 @@ function drawCards() {
     ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
     !query ? el("p", { className: "hint mode-empty", textContent: "Set the filters on the left, or type a search above." })
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode.noun} could be read for this search yet.` }) : null,
-    el("div", { className: `xcards ${modeOn ? view : "grid"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
+    el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
     shown.length > 0 && moreBtn);
   fill(box, modeOn ? el("div", { className: "mode-layout" }, side, main) : main);
   box.hidden = !lastCards.length && !modeOn;

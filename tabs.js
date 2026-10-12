@@ -54,7 +54,7 @@ function playVideo(v) {
   fill(d,
     el("div", { className: "viewer-head" }, el("h2", { textContent: v.title }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
     el("div", { className: "player" }, player),
-    el("div", { className: "viewer-foot" }, !isSelf(v.via, v.url) && el("span", { className: "via", textContent: "from " + v.via }), v.by && el("span", { className: "hint", textContent: v.by }), v.secs && el("span", { className: "hint", textContent: mins(v.secs) }),
+    el("div", { className: "viewer-foot" }, el("span", { className: "via" }, el("b", { textContent: siteName(v.url) }), !isSelf(v.via, v.url) ? ` · found by ${v.via}` : ""), v.by && el("span", { className: "hint", textContent: v.by }), v.secs && el("span", { className: "hint", textContent: mins(v.secs) }),
       el("a", { href: v.url, rel: "noopener", className: "btn-ghost", textContent: `Open on ${v.via}` }), tabSave(v, "videos")));
   if (!d.open) d.showModal();
 }
@@ -67,7 +67,9 @@ function videoCard(v) {
       v.secs && el("span", { className: "dur", textContent: mins(v.secs) })),
     el("div", { className: "vbody" },
       el("strong", { textContent: v.title }),
-      el("small", { textContent: [v.by, !isSelf(v.via, v.url) && v.via].filter(Boolean).join(" · ") })),
+      // The website (YouTube, Vimeo, PeerTube…) and channel first; the engine that found it last.
+      el("small", {}, el("b", { textContent: siteName(v.url) }), v.by && ` · ${v.by}`),
+      !isSelf(v.via, v.url) && el("small", { className: "vvia", textContent: "via " + v.via.replace(/ \(through SearXNG\)$/, "") })),
     tabSave(v, "videos"));
   return card;
 }
@@ -125,7 +127,7 @@ function bookCard(b) {
       el("strong", { textContent: b.title }),
       el("small", { textContent: [b.author, b.year].filter(Boolean).join(" · ") }),
       price && el("span", { className: "book-price" + (free ? " free" : ""), textContent: price }),
-      !isSelf(b.via, b.url) && el("span", { className: "via", textContent: b.via })),
+      el("span", { className: "via" }, el("b", { textContent: siteName(b.url) }), !isSelf(b.via, b.url) && siteName(b.url) !== b.via ? ` · via ${b.via}` : "")),
     el("div", { className: "bactions" },
       b.read && el("a", { href: b.read, rel: "noopener", className: "btn-primary", textContent: "Read now" }),
       tabSave(b, "books")));

@@ -956,3 +956,34 @@ body:not(.web-tab) .tools-row { max-width: none; }
 /* The old shop sidebar is now the filters panel. */
 .shop-layout { display: none; }
 .xcards.list .xcard-actions .card-open { flex: none; width: auto; padding-inline: 22px; }
+
+/* ---------- Small cards (default; Settings → Cards → Large for big ones) ---------- */
+.xcards.compact.grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.xcards.compact .xcard-body { padding: 8px 10px 4px; gap: 2px; }
+.xcards.compact .xcard-price { font-size: 1rem; }
+.xcards.compact .xcard-title { font-size: 0.86rem; -webkit-line-clamp: 2; }
+.xcards.compact .facts { gap: 4px; }
+.xcards.compact .fact { font-size: 0.7rem; padding: 1px 6px; }
+.xcards.compact .xcard-via, .xcards.compact .xcard-sub { font-size: 0.68rem; }
+.xcards.compact .xcard-actions { padding: 4px 10px 10px; gap: 6px; }
+.xcards.compact .xcard-actions .btn-primary, .xcards.compact .save-btn { padding: 6px 10px; font-size: 0.76rem; }
+.xcards.compact .site-badge { font-size: 0.66rem; padding: 2px 7px; }
+.xcards.compact.list { gap: 8px; }
+.xcards.compact.list .xcard { grid-template-columns: 170px minmax(0, 1fr); min-height: 118px; }
+.xcards.compact.list .xcard-img { min-height: 118px; }
+.xcards.compact.list .xcard-body { padding: 10px 14px 2px; }
+.xcards.compact.list .xcard-price { font-size: 1.08rem; }
+.xcards.compact.list .xcard-title { font-size: 0.95rem; }
+.xcards.compact.list .xcard-actions { padding: 4px 14px 10px; }
+.xcards.compact.list .xcard.job { grid-template-columns: 58px minmax(0, 1fr); min-height: 0; }
+.xcards.compact.list .xcard.job .xcard-img > img, .xcards.compact .job-logo { width: 42px; height: 42px; font-size: 1rem; }
+.xcards.compact.list .xcard.job .xcard-img { padding: 12px 0 0 12px; }
+@media (max-width: 900px) { .xcards.compact.list .xcard { grid-template-columns: 120px minmax(0, 1fr); } .xcards.compact.list .xcard-img { grid-row: 1 / 3; min-height: 110px; } }
+
+/* Department menu inside the search box (like a store's "All ▾") */
+.dept { flex: none; max-width: 130px; margin-right: 6px; padding: 7px 8px; border: 0; border-right: 1px solid var(--border); border-radius: 10px 0 0 10px; background: var(--card-2); color: var(--fg); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+@media (max-width: 560px) { .dept { max-width: 86px; font-size: 0.78rem; } }
+.intent-note { margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
+.intent-note a { color: var(--accent); font-weight: 700; }
+.vcard .vvia { display: block; opacity: 0.75; font-size: 0.7rem; }
+.vcard .vbody small b { color: var(--fg); }

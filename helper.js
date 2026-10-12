@@ -218,7 +218,9 @@ function bestImg(img, base) {
 }
 const txt = n => (n?.textContent || "").replace(/\s+/g, " ").trim();
 const PRICE_TEXT = /(?:[A-Z]{1,3}\s?)?[$£€]\s?\d[\d,]*(?:\.\d\d)?/;
-const product = (o, via, site) => o.url && o.title && { title: o.title, url: o.url, image: o.image, domain: (() => { try { return new URL(o.url).hostname.replace(/^www\./, ""); } catch { return ""; } })(), via,
+// The shop's own name first: when an engine (Google/Bing Shopping) found it, use the shop's website.
+const shopName = (site, url) => site && !/^(Google|Bing) Shopping$/.test(site) ? site : (() => { try { const p = new URL(url).hostname.replace(/^www\./, "").split("."); const r = p.length >= 3 && p[p.length - 2].length <= 3 ? p[p.length - 3] : p[p.length - 2]; return r.charAt(0).toUpperCase() + r.slice(1); } catch { return site; } })();
+const product = (o, via, site) => (site = shopName(site, o.url), o.url && o.title) && { title: o.title, url: o.url, image: o.image, domain: (() => { try { return new URL(o.url).hostname.replace(/^www\./, ""); } catch { return ""; } })(), via,
   card: { kind: "product", name: o.title, price: o.price, rating: o.rating, reviews: o.reviews, condition: o.condition, site } };
 
 function parseAmazon(doc, base, via) {
