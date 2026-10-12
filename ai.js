@@ -347,7 +347,10 @@ async function renderAiOverview(q, results, chosen = settings.overview || "googl
   const bar = progressBar();
   const note = el("p", { className: "hint ai-note" });
   const pick = providerSelect(chosen, v => { settings.overview = v; saveSettings(); renderAiOverview(q, results, v); });
-  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("label", { className: "ai-model" }, "by ", pick)), bar.box, body, note);
+  // Folded to a few lines with "Show more", like the engines' AI overviews.
+  const expand = el("button", { type: "button", className: "ai-expand", textContent: "Show more ▾", onclick() { box.classList.toggle("open"); this.textContent = box.classList.contains("open") ? "Show less ▴" : "Show more ▾"; } });
+  box.classList.remove("open");
+  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("label", { className: "ai-model" }, "by ", pick)), bar.box, body, expand, note);
   box.hidden = false;
 
   const chain = await providerChain(chosen);

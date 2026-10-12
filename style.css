@@ -801,3 +801,79 @@ body.mode-on #topic-sites:not([hidden]) { display: flex !important; }
 .related { display: block; padding: 10px 14px; border-radius: 999px; background: var(--card-2); color: var(--fg); text-decoration: none; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .related:hover { background: var(--accent-soft); color: var(--accent); }
 .related b { font-weight: 700; }
+
+/* ---------- Results page layout, like the big engines ----------
+   Logo on the left; the search box, tabs, filters and results all start on the same line;
+   the knowledge panel sits on the right. */
+:root { --logo-w: 150px; --col: 690px; }
+@media (min-width: 1000px) {
+  .rtop .brand { width: var(--logo-w); flex: none; }
+  .rnav, .rmain { padding-left: calc(16px + var(--logo-w) + 16px) !important; }
+  .rmain { grid-template-columns: minmax(0, var(--col)) minmax(0, 360px); justify-content: start; gap: 48px; }
+  .searchbar.compact { max-width: var(--col); }
+  body:not(.web-tab) .rmain, body.mode-on .rmain { padding-left: 16px !important; grid-template-columns: minmax(0, 1fr) !important; }
+  body:not(.web-tab) .rnav, body.mode-on .rnav { padding-left: calc(16px + var(--logo-w) + 16px) !important; }
+}
+body.web-tab:not(.mode-on) .rcol { max-width: var(--col); }
+.rtabs { gap: 0; border-bottom: 1px solid var(--border); }
+.rtabs button { padding: 10px 14px 9px; font-weight: 500; font-size: 0.88rem; }
+.rtabs button[aria-selected="true"] { font-weight: 700; }
+.subtabs:not(.departments) { margin-top: 10px; }
+.subtabs:not(.departments) .chip { padding: 6px 14px; font-size: 0.85rem; border-radius: 999px; }
+
+/* Slim notice */
+.notice.slim { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; max-width: var(--col); margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; font-size: 0.82rem; border-color: color-mix(in srgb, #e8b04b 70%, var(--border)); }
+.notice.slim[hidden] { display: none; }
+.notice.slim a { color: var(--accent); font-weight: 700; }
+.notice-x { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 0.85rem; }
+
+/* Status line and Sources button, small, inside the column */
+.status-row { max-width: var(--col); margin-bottom: 6px; }
+.status-row .status { font-size: 0.8rem; }
+.sources-btn { margin-left: 0; padding: 3px 10px; font-size: 0.74rem; }
+
+/* AI overview folded to a few lines */
+.ai-card { max-width: var(--col); }
+.ai-card .ai-body { max-height: 8.6em; overflow: hidden; position: relative; }
+.ai-card .ai-body::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.4em; background: linear-gradient(transparent, color-mix(in srgb, var(--accent-soft) 40%, var(--card))); pointer-events: none; }
+.ai-card.open .ai-body { max-height: none; }
+.ai-card.open .ai-body::after { display: none; }
+.ai-expand { display: block; margin: 6px 0 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; padding: 4px 0; }
+
+/* Each result: favicon in a circle, site name over the address, then the title and snippet */
+.results { gap: 26px; }
+.result { max-width: var(--col); }
+.r-src { gap: 10px; margin-bottom: 4px; }
+.r-fav { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--card); border: 1px solid var(--border); }
+.r-fav img, .r-fav .letter { width: 16px; height: 16px; }
+.r-who { display: grid; min-width: 0; line-height: 1.25; }
+.r-who strong { font-size: 0.86rem; color: var(--fg); font-weight: 600; }
+.r-who .r-site { font-size: 0.76rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-title { display: inline-block; font-size: 1.2rem; font-weight: 500; line-height: 1.3; margin: 2px 0 2px; }
+.r-snippet { font-size: 0.9rem; line-height: 1.55; opacity: 0.9; }
+.r-meta { margin-top: 4px; font-size: 0.75rem; }
+
+/* Images row among the results */
+.image-pack { list-style: none; max-width: var(--col); padding: 4px 0; }
+.pack-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.pack-head h2 { margin: 0; font-size: 1.05rem; }
+.pack-more { margin-left: auto; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+.image-pack .image-strip { grid-template-columns: repeat(6, 1fr); margin: 0; max-width: none; gap: 6px; }
+.image-pack .img-tile { aspect-ratio: 1; border-radius: 10px; }
+@media (max-width: 560px) { .image-pack .image-strip { grid-template-columns: repeat(3, 1fr); } .r-title { font-size: 1.08rem; } }
+
+/* Knowledge panel on the right */
+.rside .answer { border-radius: 16px; }
+footer { font-size: 0.78rem; }
+/* Same left edge as the search box: the header's side space + the logo + the gap. */
+@media (min-width: 1000px) {
+  .rnav, .rmain { max-width: none !important; margin: 0 !important; width: 100%;
+    padding-left: calc(max(16px, (100% - 1180px) / 2) + var(--logo-w) + 16px) !important; padding-right: max(16px, calc((100% - 1180px) / 2)) !important; }
+  body:not(.web-tab) .rmain, body.mode-on .rmain { padding-left: max(16px, calc((100% - 1180px) / 2)) !important; }
+  .rtop .brand { margin-right: 0; }
+  .rtop { gap: 16px; }
+}
+/* Full-width pages (Shopping, Jobs, Images, Maps…): tabs and content share the page's own edge. */
+@media (min-width: 1000px) {
+  body.mode-on .rnav, body:not(.web-tab) .rnav { padding-left: max(16px, calc((100% - 1180px) / 2)) !important; }
+}

@@ -525,6 +525,17 @@ function viaText(via) {
   return [through.length && `${through.join(" · ")} (through SearXNG)`, ...rest].filter(Boolean).join(" · ");
 }
 
+// "en.wikipedia.org" → "Wikipedia", "www.abc.net.au" → "Abc"; known sites by name.
+const SITE_NAMES = { "wikipedia.org": "Wikipedia", "reddit.com": "Reddit", "news.ycombinator.com": "Hacker News", "github.com": "GitHub", "stackoverflow.com": "Stack Overflow", "youtube.com": "YouTube", "abc.net.au": "ABC", "bbc.com": "BBC", "bbc.co.uk": "BBC", "theguardian.com": "The Guardian", "nytimes.com": "The New York Times" };
+function siteName(url) {
+  const h = host(url);
+  const k = Object.keys(SITE_NAMES).find(d => h === d || h.endsWith("." + d));
+  if (k) return SITE_NAMES[k];
+  const root = siteRoot(url) || h;
+  return root.charAt(0).toUpperCase() + root.slice(1);
+}
+// The image row shown among the results (after the third one), like the engines' "Images" pack.
+let imagePack = null;
 function resultItem(r) {
   const url = safeUrl(r.url);
   if (!url) return null;
@@ -532,8 +543,9 @@ function resultItem(r) {
   const via = [].concat(r.via);
   return el("li", { className: "result" + (r.image || r.thumb ? " has-thumb" : "") },
     el("div", { className: "r-body" },
-      el("div", { className: "r-src" }, domainIcon(r.domain || host(url)),
-        el("strong", { textContent: host(url) }), path.length > 1 && breadcrumb(url) && el("span", { className: "r-site", textContent: "› " + breadcrumb(url) })),
+      el("div", { className: "r-src" }, el("span", { className: "r-fav" }, domainIcon(r.domain || host(url))),
+        el("span", { className: "r-who" }, el("strong", { textContent: siteName(url) }),
+          el("span", { className: "r-site", textContent: `${new URL(url).origin.replace(/^https?:\/\//, "https://")}${path.length > 1 && breadcrumb(url) ? " › " + breadcrumb(url) : ""}` }))),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
       r.snippet && el("p", { className: "r-snippet" }, ...highlighted(r.snippet, query)),
       el("p", { className: "r-meta" }, viaLabel(via, url) && el("span", { className: "via", textContent: "found by " + viaLabel(via, url) }), r.meta && el("span", { textContent: r.meta }))),
@@ -610,11 +622,14 @@ function renderSources(settled, sources, extraLocked = []) {
 
 function renderNotice() {
   if (helperOutdated()) { $("notice").replaceWith(Object.assign(helperUpdateBanner(), { id: "notice" })); return; }
+  // One slim line, like an engine's notice; it can be closed for a day.
+  const closedAt = store.get("unitex.notice.closed", 0);
   fill($("notice"),
-    el("strong", { textContent: "Unitex is only partly working in this browser." }),
-    el("p", { textContent: "Without Unitex Helper it can only search sources that let other websites read them directly: SearXNG servers, Qwant and open web indexes like Mwmbl, Stract, Alexandria and Wiby, plus Wikipedia, DuckDuckGo's instant answers, Reddit and more. Google, Bing, Brave, Mojeek and Yandex can't be searched until you install it." }),
-    el("a", { className: "btn-primary", href: "install.html", textContent: "Install Unitex Helper" }));
-  $("notice").hidden = !!helperVersion();
+    el("span", { textContent: "Partly working: Google, Bing, Brave, Mojeek and Yandex need Unitex Helper." }),
+    el("a", { href: "install.html", textContent: "Install it" }),
+    el("button", { type: "button", className: "notice-x", ariaLabel: "Close", textContent: "✕", onclick: () => { store.set("unitex.notice.closed", Date.now()); $("notice").hidden = true; } }));
+  $("notice").className = "notice slim";
+  $("notice").hidden = !!helperVersion() || Date.now() - closedAt < 86400000;
 }
 
 // ---------- topic box ----------
@@ -651,11 +666,16 @@ function renderTopicSites(settled) {
   const toggleSite = d => () => { offSites.has(d) ? offSites.delete(d) : offSites.add(d); store.set("unitex.offsites", [...offSites]); go(); };
   const toggleSource = n => () => { offSources.has(n) ? offSources.delete(n) : offSources.add(n); store.set("unitex.off", [...offSources]); go(); };
   // Readers that aren't one of the listed sites (job boards, stores…) get their own chips.
-  const listed = new Set(sites.map(st => SITE_READERS[st.domain]).filter(Boolean));
+  // The reader for a listed site: a known one, or a store/job reader with the same name or domain.
+  const readerFor = st => SITE_READERS[st.domain] || Object.keys(sources).find(n => {
+    const k = n.replace(/^(store|helper|jobsite|jobs)_/, "");
+    return nameKey(sources[n].name) === nameKey(st.name) || st.domain.split(/[./]/).includes(k) || (k === "googleshop" && st.domain === "google.com/shopping");
+  });
+  const listed = new Set(sites.map(readerFor).filter(Boolean));
   const extra = Object.entries(sources).filter(([n, src]) => !listed.has(n) && (/^(jobs|jobsite|store|helper)_/.test(n)) && (!src.enabled || src.enabled() || /^(jobsite|store|helper)_/.test(n)));
   fill(box,
     el("span", { className: "row-label", textContent: SITES_LABEL[topic.id] || `${topic.name} sites` }),
-    ...sites.map(st => chip(st.name, st.domain, SITE_READERS[st.domain], offSites.has(st.domain), toggleSite(st.domain))),
+    ...sites.map(st => chip(st.name, st.domain, readerFor(st), offSites.has(st.domain), toggleSite(st.domain))),
     ...extra.map(([n, src]) => chip(src.name.replace(/ \(.*\)$/, ""), null, n, offSources.has(n), toggleSource(n))),
     !on && el("a", { className: "src locked", href: "install.html", textContent: "Get Unitex Helper to search them all" }));
   box.hidden = false;
@@ -692,7 +712,7 @@ function renderTabs() {
   const c = cur(), t = TABS.find(x => x.id === tab);
   const box = $("subtabs");
   if (!t.subs) { box.hidden = true; return; }
-  fill(box, el("span", { className: "row-label", textContent: t.shop ? "Shop for" : "Show" }), ...t.subs.map(s => {
+  fill(box, t.shop && el("span", { className: "row-label", textContent: "Shop for" }), ...t.subs.map(s => {
     const b = el("button", { type: "button", className: "chip sub" + (s.id === c.sub ? " active" : ""), textContent: s.name });
     b.setAttribute("aria-pressed", s.id === c.sub);
     b.onclick = () => { sub = s.id; go(); };
@@ -858,6 +878,7 @@ function drawResults(rest, c) {
   if (c.shop || MODES[topicId]) { $("results").replaceChildren(); return; }
   const list = rest.filter(r => !siteOff(r));
   const items = list.slice(0, shown).map(resultItem).filter(Boolean);
+  if (imagePack && items.length) items.splice(Math.min(3, items.length), 0, imagePack);
   $("results").replaceChildren(...items);
   const b = moreButton("web", "Show more results");
   if (b && list.length) $("results").append(el("li", { className: "more-li" }, b));
@@ -884,6 +905,7 @@ async function go() {
   document.body.classList.toggle("shop-area", !!c.shop);
   document.body.classList.toggle("web-tab", c.kind === "web");
   $("results").replaceChildren();
+  imagePack = null;
   $("tab-more")?.replaceChildren();
   more = null;
 
@@ -1015,10 +1037,12 @@ async function go() {
   if (!c.shop && !MODES[topicId] && !main.length) $("results").replaceChildren(empty(helperVersion() ? "No results for this search." : "No results from the sources that can be read without Unitex Helper."));
 
   if (!c.shop && !MODES[topicId] && !aiStarted) renderAiOverview(query, main);
-  const tiles = roundRobin(images.map(s => s.r || []), i => i.thumb).slice(0, 8).map(imageTile).filter(Boolean);
+  const tiles = roundRobin(images.map(s => s.r || []).map(l => l.filter(i => aboutSearch(i.title, query, 0.01))), i => i.thumb).slice(0, 6).map(imageTile).filter(Boolean);
   if (tiles.length && tab === "all" && topicId === "all") {
-    fill($("image-strip"), ...tiles, el("button", { type: "button", className: "img-more", textContent: "More images", onclick: () => { tab = "images"; sub = ""; go(); } }));
-    $("image-strip").hidden = false;
+    imagePack = el("li", { className: "image-pack" },
+      el("div", { className: "pack-head" }, el("h2", { textContent: "Images" }), el("button", { type: "button", className: "pack-more", textContent: "More images →", onclick: () => { tab = "images"; sub = ""; go(); } })),
+      el("div", { className: "image-strip" }, ...tiles));
+    drawResults(rest, c);
   }
 
   $("status").textContent = MODES[topicId] ? "" : `${main.length} results`;

@@ -6,7 +6,7 @@
 
 // ---------- query words ----------
 
-const STOP_WORDS = new Set("a an the of in on at to for from by with and or is are was were be been it its this that these those what which who whom how why when where do does did can could should would will i me my you your we our they their as into about vs versus best top near".split(" "));
+const STOP_WORDS = new Set("a an the of in on at to for from by with and or is are was were be been it its this that these those what which who whom how why when where do does did can could should would will i me my you your we our they their as into about vs versus best top near work works get make use much many".split(" "));
 const queryTerms = q => [...new Set(String(q || "").toLowerCase().replace(/site:\S+|\(|\)|\bOR\b/gi, " ").split(/[^\p{L}\p{N}+#]+/u).filter(w => w.length > 1 && !STOP_WORDS.has(w)))];
 const termRe = w => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/(ies|es|s)$/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(s|es|ies|'s)?($|[^\\p{L}\\p{N}])`, "iu");
 // Words close enough to count, like the engines' typo tolerance: "panals" ≈ "panels".
@@ -54,7 +54,9 @@ function rankResults(results, q) {
     const best = Math.max(...vias.map(trustOf));
     const title = termShare(r.title, terms), all = termShare(`${r.title} ${r.snippet || ""} ${decodeURIComponent(r.url || "").replace(/[-_/.]/g, " ")}`, terms);
     // Small indexes give odd matches: they must contain every word. Big engines may match by meaning, but not by nothing.
-    if (terms.length && (best < 0.6 ? all < 1 : best < 0.85 ? all < 0.5 : all === 0 && vias.length < 2)) continue;
+    // (Questions have extra words, so with 3+ words two thirds is enough.)
+    const strict = terms.length <= 2 ? 1 : 0.66;
+    if (terms.length && (best < 0.6 ? all < strict : best < 0.85 ? all < 0.5 : all === 0 && vias.length < 2)) continue;
     if (!r.title || r.title.length < 3) continue;
     scored.push({ ...r, score: (r.score || 0) * (0.5 + all * 0.7 + title * 0.5) * (1 + 0.15 * (vias.length - 1)) });
   }
