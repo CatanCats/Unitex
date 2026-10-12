@@ -877,3 +877,82 @@ footer { font-size: 0.78rem; }
 @media (min-width: 1000px) {
   body.mode-on .rnav, body:not(.web-tab) .rnav { padding-left: max(16px, calc((100% - 1180px) / 2)) !important; }
 }
+
+/* ---------- Tools row: Search engines and sources, licence, time… ---------- */
+.tools-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 0; border: 0; background: none; max-width: var(--col); }
+body:not(.web-tab) .tools-row { max-width: none; }
+.tool-dd { position: relative; }
+.tool-btn { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.tool-btn.on, .tool-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tool-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: min(420px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; padding: 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow-lg); }
+.tool-label { font-size: 0.8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.tools-row .f-input, .tool-select { padding: 7px 10px; border-radius: 999px; font-size: 0.82rem; }
+.sp-group { margin-bottom: 10px; }
+.sp-group h4 { margin: 0 0 4px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.sp-row { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 4px 8px; padding: 5px 4px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
+.sp-row:hover { background: var(--card-2); }
+.sp-row small { grid-column: 3; color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-row.bad small { color: #b4541f; }
+.sp-row.ok small { color: #1f7a45; }
+.sp-row.locked { opacity: 0.6; cursor: default; }
+.sp-row.off .sp-name { text-decoration: line-through; opacity: 0.6; }
+.sp-row img, .sp-row .letter, .sp-dot { width: 16px; height: 16px; }
+.sp-dot { display: inline-block; border-radius: 50%; background: var(--accent-soft); }
+.sp-helper { display: block; margin: 4px 0 8px; font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+.img-via b { font-weight: 700; }
+.img-via small { font-weight: 500; opacity: 0.85; }
+
+/* ---------- Card pages, like the listing sites (realestate.com.au, SEEK, carsales) ---------- */
+.mode-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 24px; align-items: start; }
+.mode-filters { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow: auto; padding: 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--card); }
+.mode-filters h3 { margin: 0 0 12px; font-size: 1rem; }
+.mode-filters h3.mf-sources { margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 0.9rem; }
+.mf-form { display: grid; gap: 12px; }
+.mf-field { display: grid; gap: 5px; font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+.mf-field .f-input { width: 100%; box-sizing: border-box; padding: 9px 11px; font-size: 0.9rem; font-weight: 400; color: var(--fg); }
+.segmented-mini.wide { display: flex; width: 100%; }
+.segmented-mini.wide button { flex: 1; }
+.tf-checks.col { display: grid; gap: 4px; color: var(--fg); font-weight: 500; }
+.mf-clear { justify-self: start; border: 0; cursor: pointer; font-size: 0.8rem; padding: 6px 10px; }
+.filter-bar.side { display: grid; gap: 10px; margin: 12px 0 0; padding: 0; border: 0; background: none; }
+.filter-bar.side:empty { display: none; }
+.mode-top { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+.mode-top h2 { margin: 0; font-size: 1.35rem; letter-spacing: -0.01em; }
+.mode-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.mode-tools .f-input { padding: 7px 10px; border-radius: 10px; }
+.mode-tools .list-btn { margin-left: 0; }
+.mode-empty { padding: 30px 0; }
+
+/* List view: big photo on the left, details on the right */
+.xcards.list { grid-template-columns: 1fr !important; gap: 16px; }
+.xcards.list .xcard { display: grid; grid-template-columns: minmax(220px, 38%) minmax(0, 1fr); grid-template-rows: 1fr auto; min-height: 210px; }
+.xcards.list .xcard-img { grid-row: 1 / 3; height: 100%; aspect-ratio: auto; min-height: 210px; }
+.xcards.list .xcard-img > img { height: 100%; }
+.xcards.list .xcard-body { padding: 16px 18px 6px; }
+.xcards.list .xcard-price { font-size: 1.35rem; }
+.xcards.list .xcard-title { font-size: 1.05rem; -webkit-line-clamp: 2; }
+.xcards.list .xcard-actions { padding: 8px 18px 16px; justify-content: flex-start; }
+.xcards.list .xcard.no-img { grid-template-columns: 1fr; }
+.xcards.list .xcard.no-img .xcard-img { display: none; }
+/* Jobs (like SEEK): no big photo, a logo square */
+.xcards.list .xcard.job { grid-template-columns: 76px minmax(0, 1fr); min-height: 0; }
+.xcards.list .xcard.job .xcard-img { min-height: 0; height: auto; background: none; padding: 16px 0 0 16px; }
+.xcards.list .xcard.job .xcard-img > img, .job-logo { width: 56px; height: 56px; border-radius: 12px; object-fit: contain; background: var(--card-2); }
+.job-logo { display: grid; place-items: center; font-weight: 800; font-size: 1.3rem; color: var(--accent); background: var(--accent-soft); }
+.xcards.list .xcard.job .site-badge { display: none; }
+.xcards.list .xcard.job .xcard-price { order: 3; font-size: 0.95rem; color: #1f7a45; }
+.xcards.list .xcard.job .xcard-body { display: flex; flex-direction: column; gap: 4px; }
+.xcards.list .xcard.job .xcard-title { order: 1; font-size: 1.1rem; }
+.xcards.list .xcard.job .facts { order: 2; }
+.xcards.grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+@media (max-width: 900px) {
+  .mode-layout { grid-template-columns: 1fr; }
+  .mode-filters { position: static; max-height: none; }
+  .xcards.list .xcard { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .xcards.list .xcard-img { grid-row: auto; min-height: 200px; }
+  .xcards.list .xcard.job { grid-template-columns: 64px minmax(0, 1fr); }
+  .mode-tools { margin-left: 0; }
+}
+/* The old shop sidebar is now the filters panel. */
+.shop-layout { display: none; }
+.xcards.list .xcard-actions .card-open { flex: none; width: auto; padding-inline: 22px; }

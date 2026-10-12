@@ -76,6 +76,19 @@ const VIDEO_LEN = { short: [0, 240], medium: [240, 1200], long: [1200, Infinity]
 
 // ---------- images: full-screen viewer ----------
 
+// Licence of an image: "cc0", "pd", "by", "bysa", "nc" (non-commercial), "nd" or "unknown".
+function licenceKind(i) {
+  const l = String(i.license || "").toLowerCase();
+  if (/cc0|zero/.test(l)) return "cc0";
+  if (/public domain|pdm|\bpd\b/.test(l)) return "pd";
+  if (/nc/.test(l)) return "nc";
+  if (/nd/.test(l)) return "nd";
+  if (/by[- ]?sa/.test(l)) return "bysa";
+  if (/\bby\b|cc by|cc-by/.test(l)) return "by";
+  return "unknown";
+}
+const licenceOf = i => ({ cc0: "pd", pd: "pd" }[licenceKind(i)] || licenceKind(i));
+
 function viewImage(list, i) {
   const d = viewer();
   const im = list[i];
@@ -87,7 +100,7 @@ function viewImage(list, i) {
       el("img", { src: im.full || im.thumb, alt: im.title || "", referrerPolicy: "no-referrer", onerror() { if (this.src !== im.thumb) this.src = im.thumb; } }),
       el("button", { type: "button", className: "nav next", ariaLabel: "Next", textContent: "›", onclick: nav(1) })),
     el("div", { className: "viewer-foot" },
-      el("span", { className: "via", textContent: "from " + im.via }),
+      el("span", { className: "via" }, el("b", { textContent: imgSite(im) }), " · found by " + im.via),
       im.creator && el("span", { className: "hint", textContent: "by " + im.creator }),
       im.license && el("span", { className: "hint", textContent: im.license }),
       el("span", { className: "hint", textContent: `${i + 1} of ${list.length}` }),
@@ -199,8 +212,12 @@ function drawTab() {
     if (tabFilters.playable) list = list.filter(playable);
     bar.push(tabSelect("len", "Any length", [["short", "Under 4 min"], ["medium", "4–20 min"], ["long", "Over 20 min"]]), tabSelect("src", "All sources", opts(tabItems.map(v => v.via))), tabCheck("playable", "Plays here"));
   } else if (v === "images") {
+    // Like the engines' image Tools: licence and website.
+    if (tabFilters.lic) list = list.filter(i => licenceOf(i) === tabFilters.lic || (tabFilters.lic === "commercial" && ["cc0", "pd", "by", "bysa"].includes(licenceKind(i))) || (tabFilters.lic === "cc" && licenceKind(i) !== "unknown"));
+    if (tabFilters.site) list = list.filter(i => imgSite(i) === tabFilters.site);
     if (tabFilters.src) list = list.filter(v => v.via === tabFilters.src);
-    bar.push(tabSelect("src", "All sources", opts(tabItems.map(v => v.via))));
+    bar.push(tabSelect("lic", "Any licence", [["cc", "Creative Commons licences"], ["commercial", "Commercial use allowed"], ["pd", "Public domain / CC0"]]),
+      tabSelect("site", "All websites", opts(tabItems.map(imgSite)).slice(0, 60)));
   } else if (v === "books") {
     if (tabFilters.free) list = list.filter(b => bookFree(b) || b.borrow);
     if (tabFilters.src) list = list.filter(b => b.via === tabFilters.src);
@@ -215,8 +232,9 @@ function drawTab() {
   } else if (v === "news") {
     if (tabFilters.outlet) list = list.filter(n => n.outlet === tabFilters.outlet);
     if (tabFilters.region) list = list.filter(n => n.region === tabFilters.region);
+    if (tabFilters.time) { const since = Date.now() / 1000 - +tabFilters.time; list = list.filter(n => n.ts && n.ts >= since); }
     if (tabFilters.sort !== "match") list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    bar.push(tabSelect("sort", "Sort: newest", [["match", "Best match"]]), tabSelect("outlet", "All outlets", opts(tabItems.map(n => n.outlet))), tabSelect("region", "All countries", opts(tabItems.map(n => n.region))));
+    bar.push(tabSelect("time", "Any time", [["3600", "Past hour"], ["86400", "Past 24 hours"], ["604800", "Past week"], ["2592000", "Past month"]]), tabSelect("sort", "Sort: newest", [["match", "Best match"]]), tabSelect("outlet", "All outlets", opts(tabItems.map(n => n.outlet))), tabSelect("region", "All countries", opts(tabItems.map(n => n.region))));
   }
 
   tabFiltered = list;
@@ -225,8 +243,8 @@ function drawTab() {
   const grid = $("media-grid"), results = $("results"), images = $("image-grid");
   for (const x of [grid, results, images]) x.replaceChildren();
   grid.hidden = images.hidden = true;
-  $("tab-bar").hidden = !bar.filter(Boolean).length;
-  fill($("tab-bar"), ...bar, el("span", { className: "hint", textContent: `${total} of ${tabItems.length}` }));
+  $("tab-bar").hidden = false;
+  fill($("tab-bar"), sourcesPicker(), ...bar, el("span", { className: "hint", textContent: `${total} of ${tabItems.length}` }));
 
   if (v === "videos") { fill(grid, ...list.map(videoCard)); grid.className = "media-grid videos"; grid.hidden = false; }
   else if (v === "images") { fill(images, ...list.map((im, i) => { const a = imageTile(im); if (a) a.onclick = e => { e.preventDefault(); viewImage(list, i); }; return a; }).filter(Boolean)); images.hidden = false; }

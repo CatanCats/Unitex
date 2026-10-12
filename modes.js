@@ -117,7 +117,8 @@ function applyFilters(cards) {
   return out;
 }
 
-function filterBar(topic, cards) {
+function filterBar(topic, cards, side = false) {
+  const formHas = new Set(side ? Object.keys(TOPIC_FORMS[topic.id]?.fields || {}).flatMap(k => ({ min: ["min"], max: ["max"], beds: ["bedsSel"], yearMin: ["yearMin"], rating: ["ratingSel"], condition: ["condition"], deal: ["deal"] }[k] || [k])) : []);
   const kind = CARD_KINDS[topic.id];
   const input = (key, placeholder, type = "number") => {
     const i = el("input", { type, placeholder, value: filters[key] ?? "", className: "f-input", inputMode: "numeric" });
@@ -150,19 +151,19 @@ function filterBar(topic, cards) {
     }));
     return b;
   })();
-  return el("div", { className: "filter-bar" },
-    deal,
-    ["house", "product", "car"].includes(kind) && el("span", { className: "f-group" }, input("min", "Min $"), "–", input("max", "Max $")),
-    kind === "house" && select("bedsSel", "Any beds", ["1+", "2+", "3+", "4+", "5+"]),
-    kind === "car" && input("yearMin", "From year"),
+  return el("div", { className: "filter-bar" + (side ? " side" : "") },
+    !formHas.has("deal") && deal,
+    ["house", "product", "car"].includes(kind) && !formHas.has("min") && el("span", { className: "f-group" }, input("min", "Min $"), "–", input("max", "Max $")),
+    kind === "house" && !formHas.has("bedsSel") && select("bedsSel", "Any beds", ["1+", "2+", "3+", "4+", "5+"]),
+    kind === "car" && !formHas.has("yearMin") && input("yearMin", "From year"),
     kind === "job" && (() => { const c = el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.salaryOnly, onchange() { filters.salaryOnly = this.checked; drawCards(); } }), " Shows salary"); return c; })(),
     kind === "recipe" && select("category", "Any kind", [...new Set(cards.flatMap(c => [c.card.category, c.card.cuisine]).filter(Boolean))]),
     kind === "show" && select("genre", "Any genre", [...new Set(cards.flatMap(c => c.card.genres || []))]),
-    kind === "product" && select("ratingSel", "Any rating", ["4★ & up", "3★ & up"]),
-    kind === "product" && select("condition", "New or used", ["new", "used"]),
+    kind === "product" && !formHas.has("ratingSel") && select("ratingSel", "Any rating", ["4★ & up", "3★ & up"]),
+    kind === "product" && !formHas.has("condition") && select("condition", "New or used", ["new", "used"]),
     ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
-    sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
-    sortSel);
+    !side && sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
+    !side && sortSel);
 }
 
 // ---------- the cards ----------
@@ -199,13 +200,14 @@ function renderCard(c, topic) {
   const k = c.card;
   const url = safeUrl(c.url);
   if (!url) return null;
-  const img = c.image && el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
+  const img = c.image ? el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
+    : k.kind === "job" && k.company ? el("span", { className: "job-logo", textContent: k.company.trim().charAt(0).toUpperCase() }) : null;
   const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: `Buy at ${k.site || "store"}`, car: "View car", job: "View job", recipe: "Full recipe", show: "Show info" }[k.kind] || "Open" });
   const facts = {
     house: [fact("🛏", k.beds, "Bedrooms"), fact("🛁", k.baths, "Bathrooms"), fact("🚗", k.cars, "Car spaces"), k.type && el("span", { className: "fact" }, k.type)],
     product: [k.rating && fact("★", k.reviews ? `${k.rating} (${k.reviews})` : k.rating, "Rating"), k.condition && el("span", { className: "fact", textContent: k.condition })],
     car: [fact("📅", k.year, "Year"), fact("🛣", k.km && `${k.km} km`, "Kilometres"), fact("⚙️", k.gearbox, "Transmission")],
-    job: [fact("🏢", k.company, "Company"), fact("📍", k.location, "Location"), fact("🕒", k.worktype, "Work type")],
+    job: [fact("🏢", k.company, "Company"), fact("📍", k.location, "Location"), fact("🕒", k.worktype, "Work type"), k.posted && !isNaN(Date.parse(k.posted)) && fact("📅", ago(Date.parse(k.posted) / 1000), "Posted")],
     recipe: [fact("🍽", k.category, "Category"), fact("🌍", k.cuisine, "Cuisine"), k.ingredients && fact("🧂", `${k.ingredients.length} ingredients`, "Ingredients")],
     show: [fact("📅", k.years, "Years"), fact("★", k.rating, "Rating"), fact("📺", k.network, "Network")],
   }[k.kind] || [];
@@ -221,7 +223,7 @@ function renderCard(c, topic) {
     k.method && el("p", { textContent: k.method }));
   const showExtra = k.kind === "show" && k.summary && el("p", { className: "card-summary", textContent: short(k.summary, 180) });
   const genres = k.kind === "show" && k.genres?.length && el("div", { className: "card-tags" }, ...k.genres.map(g => el("span", { textContent: g })));
-  return el("article", { className: `xcard ${k.kind}${c.image ? "" : " no-img"}` },
+  return el("article", { className: `xcard ${k.kind}${c.image || k.kind === "job" ? "" : " no-img"}` },
     el("div", { className: "xcard-img" }, img, siteBadge(c), k.deal && el("span", { className: "deal-badge", textContent: k.deal === "rent" ? "For rent" : "For sale" })),
     el("div", { className: "xcard-body" },
       headline && el("div", { className: "xcard-price", textContent: headline }),
@@ -266,6 +268,78 @@ function renderShortlist() { $("shortlist").hidden = true; if (!$("cards").hidde
 
 const CARD_STEP = 12;
 let cardLimit = CARD_STEP;
+
+// Fills the filters from a typed search: "3 bedroom house for rent in Brunswick VIC" → Rent, 3+, Brunswick VIC.
+function guessForm(topicIdNow, q) {
+  if (!q) return {};
+  const where = q.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1];
+  const beds = q.match(/(\d)\s*(?:bed|br\b|bedroom)/i)?.[1];
+  const type = q.match(/\b(house|apartment|townhouse|unit|villa|land|acreage)s?\b/i)?.[1];
+  const max = q.match(/under\s*\$?([\d,]+k?)/i)?.[1];
+  if (topicIdNow === "houses") return { deal: /\bshare\b/i.test(q) ? "share" : listingKind(q), where, beds: beds && `${beds}+`, type: type && type[0].toUpperCase() + type.slice(1).toLowerCase(), max: max?.replace(/,/g, "") };
+  if (topicIdNow === "jobs") { const p = jobParts(q); return { what: p.what, where: p.where }; }
+  if (topicIdNow === "cars") return { where, max: max?.replace(/,/g, ""), deal: /\bnew\b/i.test(q) ? "new" : "used" };
+  return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim() };
+}
+
+// The topic's fill-in fields as filters: changing a choice searches again; typed fields search on Enter.
+function formFilters(topicIdNow) {
+  const form = TOPIC_FORMS[topicIdNow];
+  if (!form) return null;
+  const key = "unitex.form." + topicIdNow;
+  const v = { ...guessForm(topicIdNow, query), ...store.get(key, {}) };
+  const apply = () => {
+    store.set(key, v);
+    const q = form.build(v);
+    if (!q) return;
+    const f = form.filters ? Object.fromEntries(Object.entries(form.filters(v)).filter(([, x]) => x !== undefined)) : {};
+    query = q; filters = { ...filters, ...f }; lastTopic = topicId;
+    go();
+  };
+  const control = (k, f) => {
+    if (f.type === "seg") {
+      const cur = v[k] ?? f.options[0][0];
+      return el("div", { className: "segmented-mini wide" }, ...f.options.map(([val, t]) => el("button", { type: "button", textContent: t, className: val === cur ? "on" : "", onclick() { v[k] = val; apply(); } })));
+    }
+    if (f.type === "checks") return el("div", { className: "tf-checks col" }, ...f.options.map(([val, t]) => el("label", { className: "f-check" },
+      el("input", { type: "checkbox", checked: (v[k] || []).includes(val), onchange() { v[k] = this.checked ? [...(v[k] || []), val] : (v[k] || []).filter(x => x !== val); apply(); } }), " " + t)));
+    if (f.type === "select") { const s = el("select", { className: "f-input" }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: t, selected: (v[k] || "") === val }))); s.onchange = () => { v[k] = s.value; apply(); }; return s; }
+    const inp = el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "" });
+    inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); v[k] = inp.value.trim(); apply(); } };
+    inp.onchange = () => { v[k] = inp.value.trim(); apply(); };
+    return inp;
+  };
+  return el("div", { className: "mf-form" }, ...Object.entries(form.fields).map(([k, f]) => el("label", { className: "mf-field" }, f.label && el("span", { textContent: f.label }), control(k, f))),
+    el("button", { type: "button", className: "btn-ghost mf-clear", textContent: "Clear filters", onclick: () => { store.set(key, {}); filters = {}; drawCards(); } }));
+}
+
+// "12 homes for rent in Brunswick VIC", like the listing sites' headline.
+function cardsHeadline(topic, n) {
+  const v = { ...store.get("unitex.form." + topic.id, {}) };
+  // A typed search counts too: "web developer jobs in Melbourne" → what and where.
+  if (topic.id === "jobs" && !v.what) Object.assign(v, (({ what, where }) => ({ what, where: v.where || where }))(jobParts(query)));
+  if (!v.where) v.where = query.match(/\b(?:in|near)\s+(.+?)(?:\s+(?:under|for|with)\b.*)?$/i)?.[1] || "";
+  if (topic.id === "houses" && !store.get("unitex.form.houses", {}).deal) v.deal = listingKind(query);
+  const mode = MODES[topic.id];
+  const where = v.where && ` in ${v.where}`;
+  const one = mode.noun.replace(/e?s$/, "");
+  const noun = n === 1 ? one : mode.noun;
+  if (topic.id === "houses") return `${n} ${n === 1 ? "home" : "homes"} ${v.deal === "rent" ? "for rent" : v.deal === "share" ? "to share" : "for sale"}${where || ""}`;
+  if (topic.id === "jobs") return `${n} ${v.what ? v.what + " " : ""}${n === 1 ? "job" : "jobs"}${where || ""}`;
+  if (topic.id === "cars") return `${n} ${[v.make, v.model].filter(Boolean).join(" ") || ""} ${n === 1 ? "car" : "cars"} for sale${where || ""}`.replace(/\s+/g, " ");
+  return `${n} ${noun}${query ? ` for “${query}”` : ""}`;
+}
+
+const VIEW_DEFAULT = { house: "list", job: "list", car: "list", product: "grid", recipe: "grid", show: "grid" };
+function sortSelect(kind) {
+  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"] }[kind] || [];
+  if (!sorts.length) return null;
+  const names = { "price-asc": "Price (low to high)", "price-desc": "Price (high to low)", rating: "Best rated", reviews: "Most reviews", year: "Newest" };
+  const s = el("select", { className: "f-input", ariaLabel: "Sort" }, el("option", { value: "", textContent: "Sort: Featured" }), ...sorts.map(o => el("option", { value: o, textContent: "Sort: " + names[o], selected: filters.sort === o })));
+  s.onchange = () => { filters.sort = s.value || undefined; drawCards(); };
+  return s;
+}
+
 function drawCards() {
   const topic = topicById(topicId);
   const box = $("cards");
@@ -275,21 +349,34 @@ function drawCards() {
   const shown = applyFilters(lastCards);
   const mode = MODES[topic.id];
   if (!mode) { box.hidden = true; return; }
+  const kind = CARD_KINDS[topic.id];
   const limit = modeOn ? cardLimit : 6;
-  const moreBtn = modeOn && moreButton("cards", `Show more ${mode.noun}`);
-  fill(box,
-    el("div", { className: "cards-head" },
-      el("h2", { textContent: `${mode.icon || ""} ${shown.length} ${shown.length === 1 ? mode.noun.replace(/e?s$/, "") : mode.noun}${lastCards.length !== shown.length ? ` of ${lastCards.length}` : ""}` }),
-      shop && el("span", { className: "hint", textContent: shopFrom() }),
-      modeOn && listButton(topic)),
+  const view = store.get("unitex.view." + topic.id, VIEW_DEFAULT[kind] || "grid");
+  const moreBtn = modeOn && query && moreButton("cards", `Show more ${mode.noun}`);
+  // Left: every option as a filter, then the engines and websites. Right: the results.
+  const extras = filterBar(topic, lastCards, true);
+  const side = modeOn && el("aside", { className: "mode-filters" },
+    el("h3", { textContent: "Filters" }),
+    formFilters(topic.id),
+    extras,
+    el("h3", { className: "mf-sources", textContent: "Search engines and sources" }),
+    sourcesList(),
+    el("label", { className: "mf-field" }, el("span", { textContent: "Country" }), countrySelect()));
+  const top = el("div", { className: "mode-top" },
+    el("h2", { textContent: query ? cardsHeadline(topic, shown.length) : `${mode.icon} ${mode.name}` }),
+    shop && query && el("span", { className: "hint", textContent: shopFrom() }),
+    el("div", { className: "mode-tools" },
+      modeOn && sortSelect(kind),
+      modeOn && el("div", { className: "segmented-mini" }, ...[["list", "☰ List"], ["grid", "▦ Grid"]].map(([vv, t]) => el("button", { type: "button", textContent: t, className: vv === view ? "on" : "", onclick: () => { store.set("unitex.view." + topic.id, vv); drawCards(); } }))),
+      modeOn && listButton(topic)));
+  const main = el("section", { className: "mode-main" }, top,
     modeOn && listPanel(topic),
-    shop && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
-    el("div", { className: "shop-layout" },
-      modeOn && el("aside", { className: "shop-filters" }, el("h3", { textContent: "Filters" }), filterBar(topic, lastCards)),
-      el("div", { className: "xcards-wrap" },
-        el("div", { className: "xcards" }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
-        shown.length > 0 && moreBtn)),
-    !shown.length && el("p", { className: "hint", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode.noun} could be read for this search.` }));
+    ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
+    !query ? el("p", { className: "hint mode-empty", textContent: "Set the filters on the left, or type a search above." })
+      : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? "Nothing matches these filters." : `No ${mode.noun} could be read for this search yet.` }) : null,
+    el("div", { className: `xcards ${modeOn ? view : "grid"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
+    shown.length > 0 && moreBtn);
+  fill(box, modeOn ? el("div", { className: "mode-layout" }, side, main) : main);
   box.hidden = !lastCards.length && !modeOn;
 }
 

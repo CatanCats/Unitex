@@ -552,12 +552,14 @@ function resultItem(r) {
     (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
 
+// The website an image is on (flickr.com, wikipedia.org…), shown before the engine that found it.
+const imgSite = i => String(i.site && /\./.test(i.site) && !/\s/.test(i.site) ? i.site : host(i.url) || i.via).replace(/^www\./, "");
 function imageTile(i) {
   const url = safeUrl(i.url), thumb = safeUrl(i.thumb);
   if (!url || !thumb) return null;
   return el("a", { className: "img-tile", href: url, rel: "noopener", title: i.title || "" },
     el("img", { src: thumb, alt: i.title || "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.closest(".img-tile").remove(); } }),
-    !isSelf(i.via, i.url, i.site) && el("span", { className: "img-via", textContent: i.via }));
+    el("span", { className: "img-via" }, el("b", { textContent: imgSite(i) }), !isSelf(i.via, i.url, imgSite(i)) && el("small", { textContent: " · " + i.via.replace(/ \(through SearXNG\)$/, "") })));
 }
 
 function mediaCard(i, kind) {
@@ -574,50 +576,100 @@ function mediaCard(i, kind) {
 
 // ---------- which sources ran: the status bar ----------
 
-let sourcesOpen = false;
-let lastPanel = null;
-function renderSources(settled, sources, extraLocked = []) {
-  lastPanel = { settled, sources, extraLocked };
-  const ok = settled.filter(x => x.r?.length).length;
-  const relevant = Object.entries(sources).filter(([n, src]) => !src.enabled || src.enabled() || /^(helper|store)_/.test(n)).length;
-  const btn = $("sources-btn");
-  btn.textContent = `⚙ Sources: ${ok} of ${relevant} answered${offSources.size || offSites.size ? " · some switched off" : ""} ${sourcesOpen ? "▴" : "▾"}`;
-  btn.hidden = false;
-  btn.onclick = () => { sourcesOpen = !sourcesOpen; renderSources(settled, sources, extraLocked); };
-  const box = $("sources");
-  box.hidden = !sourcesOpen;
-  if (!sourcesOpen) return;
-  const toggle = (set, key, storeKey) => { set.has(key) ? set.delete(key) : set.add(key); store.set(storeKey, [...set]); go(); };
-  const chips = Object.entries(sources).filter(([n, src]) => !src.enabled || src.enabled() || /^(helper|store)_/.test(n)).map(([n, src]) => {
-    const r = settled.find(x => x.n === n);
-    const locked = src.enabled && !src.enabled() && /^(helper|store)_/.test(n);
-    const isOff = offSources.has(n);
-    const state = isOff ? "off" : locked ? "locked" : !r ? "off" : r.err ? "bad" : "ok";
-    const b = el("button", { type: "button", className: "src " + state, title: isOff ? "Switched off: click to search it again" : locked ? "Needs Unitex Helper" : r?.err ? r.err.message : "Click to stop searching it" },
-      { ok: "✓ ", bad: "✕ ", off: "○ ", locked: "🔒 " }[state], src.name,
-      r && !isOff && el("small", { textContent: r.err ? " " + r.err.message : ` ${r.r.length}` }));
-    b.setAttribute("aria-pressed", !isOff);
-    b.onclick = () => locked ? (location.href = "install.html") : toggle(offSources, n, "unitex.off");
-    return b;
-  });
+// ---------- Search engines and sources ----------
+// One list of every search engine, source and website for the current search, each with what it
+// returned. Untick one to leave it out. It's a dropdown in the tools row, and part of the filters
+// on Shopping, Jobs and the other card pages.
+let panelState = { settled: [], sources: {}, locked: [] };
+const ENGINE_KEYS = /^(helper_(google|bing|brave|mojeek|yandex|searxng)|searxng|qwant|mwmbl|stract|alexandria|wiby|marginalia|duckduckgo)$/;
+const WEBSITE_KEYS = /^(helper_(amazon|ebay|googleshop|bingshop)|store_|jobsite_|jobs_|listing_)/;
+
+function sourceRows() {
+  const { settled, sources } = panelState;
+  const byName = Object.fromEntries(settled.map(x => [x.n, x]));
+  const on = !!helperVersion();
+  const rows = [];
+  const state = (key, src, isOff) => {
+    const r = byName[key];
+    const locked = src && src.enabled && !src.enabled() && /^(helper|store|jobsite)_/.test(key);
+    if (isOff) return { st: "off", note: "left out" };
+    if (locked) return { st: "locked", note: "needs Unitex Helper" };
+    if (!r) return { st: "wait", note: query ? "searching…" : "" };
+    return r.err ? { st: "bad", note: r.err.message } : { st: "ok", note: `${r.r.length} found` };
+  };
+  // The topic's websites (realestate.com.au, SEEK, JB Hi-Fi…), with their own reader when Unitex has one.
   const topic = topicById(topicId);
-  const sites = topic.id !== "all" ? topicSites(topic) : [];
-  const region = el("select", { ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
-  region.onchange = () => { setRegion(region.value); go(); };
-  fill(box,
-    el("div", { className: "sp-head" }, el("strong", { textContent: "Search engines and sources" }), el("span", { className: "hint", textContent: "Click one to switch it off or on." }),
-      el("label", { className: "region" }, "Country ", region)),
-    el("div", { className: "sp-chips" }, ...chips),
-    sites.length && el("div", { className: "sp-head" }, el("strong", { textContent: SITES_LABEL[topic.id] || `${topic.name} sites` }), el("span", { className: "hint", textContent: helperVersion() ? "Searched through the engines. Click one to leave it out." : "Searched through the engines once Unitex Helper is installed. Click one to leave it out." })),
-    sites.length && el("div", { className: "sp-chips" }, ...sites.map(st => {
-      const isOff = offSites.has(st.domain);
-      const b = el("button", { type: "button", className: "src " + (isOff ? "off" : "ok") }, isOff ? "○ " : "✓ ", domainIcon(st.domain), " ", st.name);
-      b.setAttribute("aria-pressed", !isOff);
-      b.onclick = () => toggle(offSites, st.domain, "unitex.offsites");
-      return b;
-    })),
-    extraLocked.length && el("a", { className: "src locked", href: "install.html" }, "🔒 Needs Unitex Helper: ", el("small", { textContent: [...new Set(extraLocked)].join(", ") })),
-    (offSources.size || offSites.size) && el("button", { type: "button", className: "chip", textContent: "Switch everything back on", onclick: () => { offSources.clear(); offSites.clear(); store.set("unitex.off", []); store.set("unitex.offsites", []); go(); } }));
+  const sites = topic.id !== "all" && cur().kind === "web" ? topicSites(topic) : [];
+  const readerFor = st => SITE_READERS[st.domain] && sources[SITE_READERS[st.domain]] ? SITE_READERS[st.domain] : Object.keys(sources).find(n => {
+    const k = n.replace(/^(store|helper|jobsite|jobs|listing)_/, "");
+    return nameKey(sources[n].name) === nameKey(st.name) || st.domain.split(/[./]/).includes(k) || (k === "googleshop" && st.domain === "google.com/shopping") || (n === "listing_" + Object.keys(LISTING_SITES).find(x => LISTING_SITES[x].name === st.domain));
+  });
+  const listed = new Set();
+  const found = d => settled.flatMap(x => x.r || []).filter(r => { const h = host(r.url); return h === d || h.endsWith("." + d); }).length;
+  for (const st of sites) {
+    const key = readerFor(st);
+    if (key) listed.add(key);
+    const isOff = offSites.has(st.domain) || (key && offSources.has(key));
+    const s0 = key ? state(key, sources[key], isOff) : isOff ? { st: "off", note: "left out" } : on ? { st: settled.length ? "ok" : "wait", note: settled.length ? `${found(st.domain)} found through the engines` : query ? "searching…" : "" } : { st: "locked", note: "needs Unitex Helper" };
+    rows.push({ group: SITES_LABEL[topic.id] || "Websites", label: st.name, domain: st.domain, ...s0, off: isOff,
+      toggle: () => { const off = !isOff; for (const [set, k, sk] of [[offSites, st.domain, "unitex.offsites"], ...(key ? [[offSources, key, "unitex.off"]] : [])]) { off ? set.add(k) : set.delete(k); store.set(sk, [...set]); } go(); } });
+  }
+  for (const [n, src] of Object.entries(sources)) {
+    if (listed.has(n)) continue;
+    if (src.enabled && !src.enabled() && !/^(helper|store|jobsite)_/.test(n)) continue; // doesn't apply to this search
+    const isOff = offSources.has(n);
+    rows.push({ group: ENGINE_KEYS.test(n) ? "Search engines" : WEBSITE_KEYS.test(n) ? (SITES_LABEL[topic.id] || "Websites") : "Sources", label: src.name.replace(/ \((through|via) .*\)$/, ""), key: n, ...state(n, src, isOff), off: isOff,
+      toggle: () => { isOff ? offSources.delete(n) : offSources.add(n); store.set("unitex.off", [...offSources]); go(); } });
+  }
+  const order = ["Search engines", SITES_LABEL[topic.id] || "Websites", "Websites", "Sources"];
+  return rows.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+}
+
+function sourcesList() {
+  const rows = sourceRows();
+  const groups = [...new Set(rows.map(r => r.group))];
+  return el("div", { className: "sp-list" }, ...groups.map(g => el("div", { className: "sp-group" }, el("h4", { textContent: g }),
+    ...rows.filter(r => r.group === g).map(r => el("label", { className: "sp-row " + r.st, title: r.note },
+      el("input", { type: "checkbox", checked: !r.off, disabled: r.st === "locked", onchange: r.toggle }),
+      r.domain ? domainIcon(r.domain) : el("span", { className: "sp-dot" }),
+      el("span", { className: "sp-name", textContent: r.label }),
+      el("small", { textContent: r.note }))))),
+    rows.some(r => r.st === "locked") && el("a", { className: "sp-helper", href: "install.html", textContent: "Get Unitex Helper to search the locked ones" }),
+    (offSources.size || offSites.size) ? el("button", { type: "button", className: "chip", textContent: "Turn everything back on", onclick: () => { offSources.clear(); offSites.clear(); store.set("unitex.off", []); store.set("unitex.offsites", []); go(); } }) : null);
+}
+
+const countrySelect = () => {
+  const s = el("select", { className: "f-input tool-select", ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
+  s.onchange = () => { setRegion(s.value); go(); };
+  return s;
+};
+
+// The "Search engines and sources" dropdown for the tools row.
+let pickerOpen = false;
+function sourcesPicker() {
+  const rows = sourceRows();
+  const used = rows.filter(r => !r.off && r.st !== "locked").length;
+  const pop = el("div", { className: "tool-pop", hidden: !pickerOpen }, sourcesList());
+  const btn = el("button", { type: "button", className: "tool-btn" + (offSources.size || offSites.size ? " on" : ""), textContent: `Search engines and sources · ${used} of ${rows.length} ▾`,
+    onclick: e => { e.stopPropagation(); pickerOpen = !pickerOpen; pop.hidden = !pickerOpen; } });
+  return el("div", { className: "tool-dd" }, btn, pop);
+}
+document.addEventListener("click", e => { if (pickerOpen && !e.target.closest(".tool-dd")) { pickerOpen = false; document.querySelectorAll(".tool-pop").forEach(p => { p.hidden = true; }); } });
+
+// The tools row under the tabs on the All tab (and other list pages): engines and sources, and the country.
+function renderTools() {
+  const c = cur();
+  if (c.kind !== "web" || modeOn) return;
+  fill($("tab-bar"), sourcesPicker(), el("label", { className: "tool-label" }, "Country ", countrySelect()));
+  $("tab-bar").hidden = !query;
+}
+
+function renderSources(settled, sources, extraLocked = []) {
+  panelState = { settled, sources, locked: extraLocked };
+  const c = cur();
+  if (modeOn && !$("cards").hidden) drawCards();
+  else if (c.kind === "web") renderTools();
+  else if (["images", "cards", "list", "covers"].includes(c.kind) && tabItems.length) drawTab();
 }
 
 function renderNotice() {
@@ -641,44 +693,10 @@ const SITES_LABEL = { houses: "Property sites", jobs: "Job sites", cars: "Car si
 const SITE_READERS = { "realestate.com.au": "listing_realestate", "domain.com.au": "listing_domain", "seek.com.au": "jobsite_seek", "seek.co.nz": "jobsite_seek",
   "linkedin.com/jobs": "jobsite_linkedin", "au.indeed.com": "jobsite_indeed", "uk.indeed.com": "jobsite_indeed", "indeed.com": "jobsite_indeed", "ca.indeed.com": "jobsite_indeed", "nz.indeed.com": "jobsite_indeed", "jora.com": "jobsite_jora", "remoteok.com": "jobs_remoteok" };
 
-// The topic's sites (realestate.com.au, Domain, SEEK, carsales…), each with what happened: how many
-// it returned, searched through the engines, needs Unitex Helper, or switched off. Click to leave one out.
+// The topic's websites now live in "Search engines and sources"; the old row stays hidden.
 function renderTopicSites(settled) {
-  const box = $("topic-sites");
-  const topic = topicById(topicId);
-  const sites = topic.id !== "all" ? topicSites(topic) : [];
-  if (!sites.length || cur().kind !== "web") { box.hidden = true; return; }
-  const byName = Object.fromEntries((settled || []).map(x => [x.n, x]));
-  const sources = cardSourcesFor(topicId);
-  const on = !!helperVersion();
-  const found = d => (settled || []).flatMap(x => x.r || []).filter(r => { const h = host(r.url); return h === d || h.endsWith("." + d); }).length;
-  const chip = (label, domain, key, isOff, toggle) => {
-    const reader = key && (sources[key] || SOURCES[key]);
-    const usable = reader && (!reader.enabled || reader.enabled());
-    const r = key && byName[key];
-    const state = isOff ? "off" : r ? (r.err ? "bad" : "ok") : usable || on ? "ok" : "locked";
-    const note = isOff ? "switched off" : r ? (r.err ? r.err.message : `${r.r.length} found`) : !query ? (usable || on ? "ready" : "needs Unitex Helper") : usable || on ? (settled ? `${found(domain)} found` : "searching…") : "needs Unitex Helper";
-    const b = el("button", { type: "button", className: "src " + state, title: (isOff ? "Click to search it again" : "Click to leave it out") + " · " + note },
-      { ok: "✓ ", bad: "✕ ", off: "○ ", locked: "🔒 " }[state], domain && domainIcon(domain), " ", label, el("small", { textContent: " " + note }));
-    b.onclick = toggle;
-    return b;
-  };
-  const toggleSite = d => () => { offSites.has(d) ? offSites.delete(d) : offSites.add(d); store.set("unitex.offsites", [...offSites]); go(); };
-  const toggleSource = n => () => { offSources.has(n) ? offSources.delete(n) : offSources.add(n); store.set("unitex.off", [...offSources]); go(); };
-  // Readers that aren't one of the listed sites (job boards, stores…) get their own chips.
-  // The reader for a listed site: a known one, or a store/job reader with the same name or domain.
-  const readerFor = st => SITE_READERS[st.domain] || Object.keys(sources).find(n => {
-    const k = n.replace(/^(store|helper|jobsite|jobs)_/, "");
-    return nameKey(sources[n].name) === nameKey(st.name) || st.domain.split(/[./]/).includes(k) || (k === "googleshop" && st.domain === "google.com/shopping");
-  });
-  const listed = new Set(sites.map(readerFor).filter(Boolean));
-  const extra = Object.entries(sources).filter(([n, src]) => !listed.has(n) && (/^(jobs|jobsite|store|helper)_/.test(n)) && (!src.enabled || src.enabled() || /^(jobsite|store|helper)_/.test(n)));
-  fill(box,
-    el("span", { className: "row-label", textContent: SITES_LABEL[topic.id] || `${topic.name} sites` }),
-    ...sites.map(st => chip(st.name, st.domain, readerFor(st), offSites.has(st.domain), toggleSite(st.domain))),
-    ...extra.map(([n, src]) => chip(src.name.replace(/ \(.*\)$/, ""), null, n, offSources.has(n), toggleSource(n))),
-    !on && el("a", { className: "src locked", href: "install.html", textContent: "Get Unitex Helper to search them all" }));
-  box.hidden = false;
+  $("topic-sites").hidden = true;
+  if (settled) { panelState = { ...panelState, settled }; if (modeOn && !$("cards").hidden) drawCards(); }
 }
 
 // ---------- rows & tabs ----------
@@ -899,7 +917,7 @@ async function go() {
   renderTabs();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["did-you-mean", "related", "answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "sources-btn", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
+  for (const id of ["did-you-mean", "related", "answer", "image-strip", "image-grid", "media-grid", "topic-sites", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
   document.body.classList.toggle("mode-on", modeOn);
   document.body.classList.toggle("shop-area", !!c.shop);
@@ -910,8 +928,10 @@ async function go() {
   more = null;
 
   // The fill-in form for this topic (where, price, bedrooms…), shown even before anything is typed.
-  if (c.kind === "web") renderTopicForm(topicId, (q, f) => { query = q; filters = { ...filters, ...f }; lastTopic = topicId; go(); });
+  // Topics with cards have their fields in the filters on the left; others get the form above the results.
+  if (c.kind === "web" && !MODES[topicId]) renderTopicForm(topicId, (q, f) => { query = q; filters = { ...filters, ...f }; lastTopic = topicId; go(); });
   else $("topic-form").hidden = true;
+  if (modeOn) { panelState = { settled: [], sources: { ...cardSourcesFor(topicId), ...MAIN_SOURCES }, locked: [] }; lastCards = []; drawCards(); }
   renderTopicSites();
   if (query) rememberSearch(query);
   if (!query) { $("status").textContent = TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
@@ -972,7 +992,8 @@ async function go() {
   }
 
   if (!c.shop && !MODES[topicId]) aiOverviewStart();
-  renderTopicSites();
+  panelState = { settled: [], sources: { ...cardSourcesFor(topicId), ...MAIN_SOURCES }, locked: [] };
+  renderTools();
   $("results").replaceChildren(...skeletons(5));
   $("status").textContent = c.shop ? "Searching every store…" : "Searching…";
 
@@ -988,7 +1009,7 @@ async function go() {
     const rest = showCards(main.filter(r => !siteOff(r)), roundRobin(cardsSoFar.map(s => s.r || [])).filter(r => !siteOff(r)));
     if (rest.length || lastCards.length) { drawResults(rest, c); if (!MODES[topicId]) drawCards(); }
     $("status").textContent = `Searching… ${mainSoFar.length + cardsSoFar.length} of ${total} sources answered`;
-    renderTopicSites([...mainSoFar, ...cardsSoFar]);
+    panelState = { ...panelState, settled: [...mainSoFar, ...cardsSoFar] };
     // The AI overview starts once there's enough to read.
     if (!aiStarted && !c.shop && !MODES[topicId] && main.length >= 8) { aiStarted = true; renderAiOverview(query, main); }
   });
