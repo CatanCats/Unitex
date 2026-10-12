@@ -996,3 +996,6 @@ body:not(.web-tab) .tools-row { max-width: none; }
 .tools-row { position: static; margin: 0 0 12px; }
 body.mode-on .tools-row { max-width: none; }
 .did-you-mean { margin: 0 0 12px; }
+/* Job cards: show which job site it's on (SEEK, LinkedIn, Indeed…) under the logo. */
+.xcards.list .xcard.job .xcard-img { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.xcards.list .xcard.job .site-badge { display: inline-flex; position: static; font-size: 0.66rem; padding: 2px 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -14,6 +14,8 @@ function selectEngine(id) {
     recent = [id, ...recent.filter(r => r !== id)].slice(0, 5);
     store.set("unitex.recent", recent);
   }
+  // Another engine was picked: searches go to it, so the "Search for" choice goes back to All.
+  if (!e.local && homeTab !== "all") { homeTab = "all"; store.set("unitex.hometab", "all"); renderTopics(); }
   renderEngine();
 }
 
@@ -34,6 +36,8 @@ function renderTopics() {
     b.setAttribute("aria-pressed", id === homeTab);
     b.onclick = () => {
       homeTab = id;
+      // "Search for" (Shopping, Jobs…) runs through Unitex search.
+      if (id !== "all" && !byId(engineId).local) { engineId = "unitex"; store.set("unitex.engine", "unitex"); }
       store.set("unitex.hometab", id);
       renderTopics();
       renderEngine();
@@ -88,7 +92,7 @@ document.addEventListener("keydown", e => {
 // ---------- search ----------
 
 // A tab other than All always goes through Unitex search.
-const searchUrl = q => buildUrl(q, homeTab !== "all" ? { engine: "unitex", tab: homeTab } : {});
+const searchUrl = q => buildUrl(q, homeTab !== "all" && byId(engineId).local ? { engine: "unitex", tab: homeTab } : {});
 
 $("search").addEventListener("submit", e => {
   e.preventDefault();
