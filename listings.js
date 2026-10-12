@@ -3,7 +3,7 @@
 // place in the query is looked up on OpenStreetMap first.
 
 const AU_STATES = { "Victoria": "vic", "New South Wales": "nsw", "Queensland": "qld", "South Australia": "sa", "Western Australia": "wa", "Tasmania": "tas", "Australian Capital Territory": "act", "Northern Territory": "nt" };
-const PROPERTY_WORDS = /\b(houses?|homes?|apartments?|units?|flats?|townhouses?|villas?|studios?|propert(?:y|ies)|real ?estate|rooms?|to|for|a|an|the|rent(?:al|als|ing)?|lease|let|buy(?:ing)?|sale|purchase|in|near|around|with|bed(?:room)?s?|bath(?:room)?s?|car|cheap|affordable|new|\d+(?:br|bd)?)\b/gi;
+const PROPERTY_WORDS = /\b(houses?|homes?|apartments?|units?|flats?|townhouses?|villas?|studios?|propert(?:y|ies)|real ?estate|rooms?|to|for|a|an|the|rent(?:al|als|ing)?|lease|let|buy(?:ing)?|sale|purchase|in|near|around|with|bed(?:room)?s?|bath(?:room)?s?|car|cheap|affordable|new|under|over|share|land|acreage|pets?|allowed|furnished|pool|garden|air|conditioning|\d+(?:br|bd)?)\b/gi;
 
 const listingKind = q => /\b(rent|rental|rentals|renting|lease|to let)\b/i.test(q) ? "rent" : "buy";
 const listingBeds = q => +(q.match(/(\d+)\s*(?:-\s*)?(?:bed|br|bd)/i)?.[1] || 0);

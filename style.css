@@ -751,3 +751,21 @@ body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(220px, 1f
 .card-meta .card-site { color: var(--muted); }
 .news-list .more-row { list-style: none; column-span: all; }
 #news-status a { color: var(--accent); }
+
+/* ---------- Fill-in search forms (Houses, Jobs, Cars…) ---------- */
+.topic-form { margin: 0 0 18px; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--border); background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 60%, var(--card)), var(--card)); box-shadow: var(--shadow); }
+.tf-head { display: flex; align-items: center; gap: 10px; }
+.tf-head h2 { margin: 0; font-size: 1.05rem; }
+.tf-toggle { margin-left: auto; border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.topic-form.closed .tf-grid, .topic-form.closed .tf-actions { display: none; }
+.tf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px 14px; margin: 14px 0 12px; }
+.tf-field { display: grid; gap: 5px; align-content: start; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.tf-field.wide { grid-column: span 2; }
+.tf-field.checks { grid-column: 1 / -1; }
+.tf-field .f-input { width: 100%; box-sizing: border-box; padding: 9px 11px; font-size: 0.92rem; color: var(--fg); }
+.tf-field .segmented-mini { display: flex; }
+.tf-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--fg); font-weight: 500; }
+.tf-actions { display: flex; gap: 8px; }
+.tf-actions button { border: 0; cursor: pointer; }
+@media (max-width: 560px) { .tf-field.wide { grid-column: 1 / -1; } .tf-grid { grid-template-columns: 1fr 1fr; } }
+.tf-field .f-input { font-weight: 400; }

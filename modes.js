@@ -101,6 +101,11 @@ function applyFilters(cards) {
     if (filters.category && k.category !== filters.category && k.cuisine !== filters.category) return false;
     if (filters.genre && !(k.genres || []).includes(filters.genre)) return false;
     if (filters.ratingMin && !(k.rating >= filters.ratingMin)) return false;
+    if (filters.baths && !(k.baths >= filters.baths)) return false;
+    if (filters.carsMin && !(k.cars >= filters.carsMin)) return false;
+    if (filters.kmMax && k.km && +String(k.km).replace(/\D/g, "") > filters.kmMax) return false;
+    if (filters.gearbox && k.gearbox && !k.gearbox.toLowerCase().startsWith(filters.gearbox.toLowerCase().slice(0, 4))) return false;
+    if (filters.worktype && k.worktype && k.worktype.toLowerCase().replace(/[- ]/g, "") !== filters.worktype.toLowerCase().replace(/[- ]/g, "")) return false;
     if (filters.priced && p == null) return false;
     if (filters.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
     if (filters.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
@@ -318,4 +323,157 @@ function appendCards(results, extra = []) {
     if (!have.has(urlKey(c.url))) { have.add(urlKey(c.url)); lastCards.push(c); }
   }
   return rest;
+}
+
+// ---------- fill-in search forms ----------
+// Each topic gets a short form (where, price, bedrooms…). Its answers become the search words, which
+// the specialist sites and engines understand, and set the card filters. Answers are remembered per topic.
+
+const opt = list => list.map(o => Array.isArray(o) ? o : [o, o]);
+const anyOf = (label, list) => ({ type: "select", label, options: opt([["", "Any"], ...list]) });
+const priceNum = v => +String(v || "").replace(/[^\d.]/g, "") || undefined;
+const words = (...parts) => parts.flat().filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+
+const TOPIC_FORMS = {
+  houses: { title: "🏠 Find a home", fields: {
+      deal: { type: "seg", label: "I want to", options: opt([["buy", "Buy"], ["rent", "Rent"], ["share", "Share"]]) },
+      where: { label: "Where", placeholder: "Suburb, town or postcode", wide: true },
+      type: anyOf("Property type", ["House", "Apartment", "Townhouse", "Unit", "Villa", "Land", "Acreage"]),
+      beds: anyOf("Bedrooms", ["1+", "2+", "3+", "4+", "5+"]),
+      baths: anyOf("Bathrooms", ["1+", "2+", "3+"]),
+      cars: anyOf("Parking", ["1+", "2+", "3+"]),
+      min: { label: "Min price", placeholder: "$", type: "number" },
+      max: { label: "Max price", placeholder: "$", type: "number" },
+      extras: { type: "checks", label: "Must have", options: opt(["Pets allowed", "Furnished", "Pool", "Garden", "Air conditioning"]) } },
+    build: v => words(v.beds && `${parseInt(v.beds)} bedroom`, v.deal === "share" ? "room in share house" : (v.type || "house").toLowerCase(),
+      v.deal === "rent" ? "for rent" : v.deal === "share" ? "for rent" : "for sale", v.max && `under $${v.max}`, (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`),
+    filters: v => ({ min: priceNum(v.min), max: priceNum(v.max), bedsSel: v.beds || undefined, baths: parseInt(v.baths) || undefined, carsMin: parseInt(v.cars) || undefined }) },
+
+  jobs: { title: "💼 Find a job", fields: {
+      what: { label: "Job title or keywords", placeholder: "e.g. junior web developer", wide: true },
+      where: { label: "Where", placeholder: "City or suburb" },
+      worktype: anyOf("Work type", ["Full time", "Part time", "Casual", "Contract", "Internship"]),
+      level: anyOf("Experience", ["Entry level", "Mid level", "Senior"]),
+      salary: { label: "Minimum salary", placeholder: "$ per year", type: "number" },
+      extras: { type: "checks", label: "Options", options: opt(["Remote", "Work from home", "Visa sponsorship", "No experience needed"]) } },
+    build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", v.worktype?.toLowerCase(), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`),
+    filters: v => ({ worktype: v.worktype || undefined, salaryOnly: !!v.salary || undefined }) },
+
+  cars: { title: "🚗 Find a car", fields: {
+      deal: { type: "seg", label: "Condition", options: opt([["used", "Used"], ["new", "New"], ["any", "Any"]]) },
+      make: { label: "Make", placeholder: "e.g. Toyota" },
+      model: { label: "Model", placeholder: "e.g. Corolla" },
+      body: anyOf("Body type", ["Sedan", "Hatchback", "SUV", "Ute", "Wagon", "Van", "Coupe", "Convertible"]),
+      fuel: anyOf("Fuel", ["Petrol", "Diesel", "Hybrid", "Electric"]),
+      gearbox: anyOf("Transmission", ["Automatic", "Manual"]),
+      yearMin: { label: "Year from", placeholder: "e.g. 2018", type: "number" },
+      max: { label: "Max price", placeholder: "$", type: "number" },
+      kmMax: { label: "Max km", placeholder: "e.g. 80000", type: "number" },
+      where: { label: "Where", placeholder: "City or state" } },
+    build: v => words(v.deal !== "any" && (v.deal || "used"), v.yearMin && `${v.yearMin}+`, v.make, v.model, v.fuel?.toLowerCase(), v.body?.toLowerCase(), v.gearbox?.toLowerCase(), !v.make && !v.model && !v.body && "car", "for sale", v.max && `under $${v.max}`, v.where && `in ${v.where}`),
+    filters: v => ({ yearMin: priceNum(v.yearMin), max: priceNum(v.max), kmMax: priceNum(v.kmMax), gearbox: v.gearbox || undefined }) },
+
+  shopping: { title: "🛍️ What are you shopping for?", fields: {
+      what: { label: "Product", placeholder: "e.g. noise cancelling headphones", wide: true },
+      brand: { label: "Brand", placeholder: "Any brand" },
+      min: { label: "Min price", placeholder: "$", type: "number" },
+      max: { label: "Max price", placeholder: "$", type: "number" },
+      condition: { type: "seg", label: "Condition", options: opt([["", "Any"], ["new", "New"], ["used", "Used"]]) },
+      rating: anyOf("Rating", ["4★ & up", "3★ & up"]) },
+    build: v => words(v.condition === "used" && "used", v.brand, v.what),
+    filters: v => ({ min: priceNum(v.min), max: priceNum(v.max), condition: v.condition || undefined, ratingSel: v.rating || undefined }) },
+
+  marketplace: { title: "♻️ Find it second-hand", fields: {
+      what: { label: "What", placeholder: "e.g. road bike", wide: true },
+      where: { label: "Near", placeholder: "Suburb or city" },
+      max: { label: "Max price", placeholder: "$", type: "number" },
+      extras: { type: "checks", label: "Options", options: opt(["Free", "Pickup only", "Delivery"]) } },
+    build: v => words("second hand", v.what, (v.extras || []).map(e => e.toLowerCase()), v.where && `near ${v.where}`),
+    filters: v => ({ max: priceNum(v.max) }) },
+
+  reviews: { title: "★ Check reviews before you buy", fields: {
+      what: { label: "Product or service", placeholder: "e.g. robot vacuum", wide: true },
+      care: { label: "What matters most", placeholder: "e.g. battery life, noise" },
+      kind: { type: "seg", label: "Looking for", options: opt([["best", "Best ones"], ["review", "Reviews of one"], ["vs", "Compare"]]) } },
+    build: v => words(v.kind === "best" || !v.kind ? "best" : "", v.what, v.kind === "vs" ? "vs comparison" : "review", v.care && `for ${v.care}`) },
+
+  recipes: { title: "🍳 Find a recipe", fields: {
+      what: { label: "Dish or ingredients", placeholder: "e.g. chicken, lemon, rice", wide: true },
+      meal: anyOf("Meal", ["Breakfast", "Lunch", "Dinner", "Dessert", "Snack"]),
+      cuisine: anyOf("Cuisine", ["Italian", "Indian", "Chinese", "Thai", "Mexican", "Japanese", "Middle Eastern", "French", "Greek"]),
+      diet: anyOf("Diet", ["Vegetarian", "Vegan", "Gluten free", "Dairy free", "Keto", "High protein"]),
+      time: anyOf("Ready in", ["15 minutes", "30 minutes", "1 hour"]) },
+    build: v => words(v.diet?.toLowerCase(), v.cuisine, v.meal?.toLowerCase(), v.what, "recipe", v.time && `in ${v.time}`) },
+
+  movies: { title: "🎬 Find something to watch", fields: {
+      what: { label: "Title, actor or vibe", placeholder: "e.g. Severance, or 'cosy mystery'", wide: true },
+      kind: { type: "seg", label: "Type", options: opt([["", "Any"], ["movie", "Movie"], ["tv show", "TV show"]]) },
+      genre: anyOf("Genre", ["Comedy", "Drama", "Thriller", "Sci-fi", "Horror", "Romance", "Documentary", "Animation", "Crime"]),
+      watch: { type: "checks", label: "", options: opt(["Where to watch"]) } },
+    build: v => words(v.genre?.toLowerCase(), v.what, v.kind, (v.watch || []).length && "where to watch") },
+
+  travel: { title: "✈️ Plan a trip", fields: {
+      kind: { type: "seg", label: "Looking for", options: opt([["flights", "Flights"], ["hotels", "Stays"], ["things to do", "Things to do"]]) },
+      from: { label: "From", placeholder: "City or airport" },
+      to: { label: "To", placeholder: "Where to?" },
+      when: { label: "When", type: "date" },
+      back: { label: "Return", type: "date" },
+      people: anyOf("Travellers", ["1 adult", "2 adults", "Family", "Group"]) },
+    build: v => v.kind === "hotels" ? words("hotels in", v.to, v.when && `from ${v.when}`, v.back && `to ${v.back}`, v.people)
+      : v.kind === "things to do" ? words("things to do in", v.to)
+      : words("flights", v.from && `from ${v.from}`, v.to && `to ${v.to}`, v.when, v.back && `return ${v.back}`, v.people) },
+
+  events: { title: "🎟️ Find events", fields: {
+      what: { label: "What", placeholder: "e.g. live music, comedy, markets", wide: true },
+      where: { label: "Where", placeholder: "City or suburb" },
+      when: anyOf("When", ["Today", "Tonight", "This weekend", "This week", "This month"]),
+      extras: { type: "checks", label: "Options", options: opt(["Free", "Family friendly", "All ages"]) } },
+    build: v => words((v.extras || []).map(e => e.toLowerCase()), v.what || "events", v.where && `in ${v.where}`, v.when?.toLowerCase()) },
+
+  learn: { title: "🎓 Learn something", fields: {
+      what: { label: "What do you want to learn?", placeholder: "e.g. Python, guitar, Spanish", wide: true },
+      level: anyOf("Level", ["Beginner", "Intermediate", "Advanced"]),
+      format: anyOf("Format", ["Course", "Video", "Book", "Tutorial"]),
+      extras: { type: "checks", label: "Options", options: opt(["Free", "Certificate"]) } },
+    build: v => words("learn", v.what, v.level && `for ${v.level.toLowerCase()}s`, v.format?.toLowerCase(), (v.extras || []).map(e => e.toLowerCase())) },
+
+  opensource: { title: "🧩 Find open-source software", fields: {
+      replaces: { label: "Replace this app", placeholder: "e.g. Photoshop, Notion" },
+      what: { label: "Or: what it should do", placeholder: "e.g. photo backup" },
+      platform: anyOf("Runs on", ["Linux", "Windows", "Mac", "Android", "iPhone", "Self-hosted", "Web"]) },
+    build: v => v.replaces ? words("open source alternative to", v.replaces, v.platform && `for ${v.platform}`) : words("open source", v.what, v.platform && `for ${v.platform}`) },
+};
+
+function renderTopicForm(topicIdNow, onSearch) {
+  const box = $("topic-form");
+  const form = TOPIC_FORMS[topicIdNow];
+  if (!form) { box.hidden = true; return; }
+  const key = "unitex.form." + topicIdNow;
+  const v = store.get(key, {});
+  const control = (k, f) => {
+    if (f.type === "seg") {
+      const cur = v[k] ?? f.options[0][0];
+      return el("div", { className: "segmented-mini" }, ...f.options.map(([val, t]) => el("button", { type: "button", textContent: t, className: val === cur ? "on" : "", onclick() { v[k] = val; for (const b of this.parentElement.children) b.classList.toggle("on", b === this); } })));
+    }
+    if (f.type === "checks") return el("div", { className: "tf-checks" }, ...f.options.map(([val, t]) => el("label", { className: "f-check" },
+      el("input", { type: "checkbox", checked: (v[k] || []).includes(val), onchange() { v[k] = this.checked ? [...(v[k] || []), val] : (v[k] || []).filter(x => x !== val); } }), " " + t)));
+    if (f.type === "select") { const s = el("select", { className: "f-input" }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: t, selected: (v[k] || "") === val }))); s.onchange = () => { v[k] = s.value; }; return s; }
+    return el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "", oninput() { v[k] = this.value.trim(); } });
+  };
+  const submit = e => {
+    e?.preventDefault();
+    store.set(key, v);
+    const q = form.build(v);
+    if (!q) return;
+    onSearch(q, form.filters ? Object.fromEntries(Object.entries(form.filters(v)).filter(([, x]) => x !== undefined)) : {});
+  };
+  const fields = Object.entries(form.fields).map(([k, f]) => el("label", { className: "tf-field" + (f.wide ? " wide" : "") + (f.type === "checks" ? " checks" : "") }, f.label && el("span", { textContent: f.label }), control(k, f)));
+  fill(box, el("form", { className: "tf", onsubmit: submit },
+    el("div", { className: "tf-head" }, el("h2", { textContent: form.title }),
+      el("button", { type: "button", className: "tf-toggle", textContent: store.get("unitex.form.open", true) ? "Hide ▴" : "Show ▾", onclick() { const open = !store.get("unitex.form.open", true); store.set("unitex.form.open", open); box.classList.toggle("closed", !open); this.textContent = open ? "Hide ▴" : "Show ▾"; } })),
+    el("div", { className: "tf-grid" }, ...fields),
+    el("div", { className: "tf-actions" }, el("button", { type: "submit", className: "btn-primary", textContent: "Search" }),
+      el("button", { type: "button", className: "btn-ghost", textContent: "Clear", onclick: () => { store.set(key, {}); renderTopicForm(topicIdNow, onSearch); } }))));
+  box.classList.toggle("closed", !store.get("unitex.form.open", true));
+  box.hidden = false;
 }

@@ -763,7 +763,10 @@ async function go() {
   $("tab-more")?.replaceChildren();
   more = null;
 
-  if (!query) { $("status").textContent = c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
+  // The fill-in form for this topic (where, price, bedrooms…), shown even before anything is typed.
+  if (c.kind === "web") renderTopicForm(topicId, (q, f) => { query = q; filters = { ...filters, ...f }; lastTopic = topicId; go(); });
+  else $("topic-form").hidden = true;
+  if (!query) { $("status").textContent = TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
 
   if (c.kind === "ai") {
