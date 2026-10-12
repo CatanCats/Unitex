@@ -70,7 +70,7 @@ function jsonp(url, ms = 8000) {
 // ---------- sources ----------
 // Each web source returns [{ title, url, snippet, via, domain, meta, image }].
 
-// Specialist sites and sources the person switched off in the Sources panel.
+// Sites and sources the person switched off.
 let offSources = new Set(store.get("unitex.off", []));
 let offSites = new Set(store.get("unitex.offsites", []));
 const topicDomains = () => topicSites(topicById(topicId)).map(s => s.domain).filter(d => !offSites.has(d)).slice(0, 14);
@@ -437,6 +437,7 @@ const SHOP_FOR = { shopping: ["amazon", "ebay", "googleshop", "bingshop", "@stor
 function cardSourcesFor(topic) {
   const out = {};
   if (CARD_SOURCES[topic]) out[topic] = CARD_SOURCES[topic];
+  if (topic === "jobs") Object.assign(out, jobSourcesFor());
   const used = topic === "marketplace";
   for (const id of SHOP_FOR[topic] || []) {
     if (id.startsWith("@")) {
@@ -451,7 +452,7 @@ function cardSourcesFor(topic) {
 const lockedFor = sources => helperVersion() ? [] : Object.entries(sources).filter(([n]) => /^(helper|store)_/.test(n)).map(([, s]) => s.name);
 
 // The tabs. "kind" picks how results are drawn; "subs" are the filters under a tab. A sub can set a
-// topic (its specialist sites and cards), add a word to the search ("suffix"), or bring its own sources.
+// topic (its sites and cards), add a word to the search ("suffix"), or bring its own sources.
 const TABS = [
   { id: "all",      name: "All",      kind: "web", subs: [
     { id: "all", name: "Everything" }, { id: "recipes", name: "Recipes", topic: "recipes" }, { id: "events", name: "Events", topic: "events" },
@@ -593,7 +594,7 @@ function renderSources(settled, sources, extraLocked = []) {
     el("div", { className: "sp-head" }, el("strong", { textContent: "Search engines and sources" }), el("span", { className: "hint", textContent: "Click one to switch it off or on." }),
       el("label", { className: "region" }, "Country ", region)),
     el("div", { className: "sp-chips" }, ...chips),
-    sites.length && el("div", { className: "sp-head" }, el("strong", { textContent: `${topic.name} sites` }), el("span", { className: "hint", textContent: helperVersion() ? "Searched through the engines. Click one to leave it out." : "Searched through the engines once Unitex Helper is installed. Click one to leave it out." })),
+    sites.length && el("div", { className: "sp-head" }, el("strong", { textContent: SITES_LABEL[topic.id] || `${topic.name} sites` }), el("span", { className: "hint", textContent: helperVersion() ? "Searched through the engines. Click one to leave it out." : "Searched through the engines once Unitex Helper is installed. Click one to leave it out." })),
     sites.length && el("div", { className: "sp-chips" }, ...sites.map(st => {
       const isOff = offSites.has(st.domain);
       const b = el("button", { type: "button", className: "src " + (isOff ? "off" : "ok") }, isOff ? "○ " : "✓ ", domainIcon(st.domain), " ", st.name);
@@ -616,31 +617,44 @@ function renderNotice() {
 
 // ---------- topic box ----------
 
-// The topic's specialist sites (realestate.com.au, Domain, SEEK, carsales…), each with what happened:
-// read directly (with how many listings), searched through the engines, needs Unitex Helper, or switched off.
+// What the sites row is called on each topic.
+const SITES_LABEL = { houses: "Property sites", jobs: "Job sites", cars: "Car sites", marketplace: "Marketplaces", shopping: "Stores", travel: "Travel sites", reviews: "Review sites",
+  recipes: "Recipe sites", movies: "Film & TV sites", events: "Ticket sites", learn: "Learning sites", academic: "Research sites", opensource: "Open-source sites" };
+// Sites Unitex reads itself (not only through the engines): their own result shows next to the site.
+const SITE_READERS = { "realestate.com.au": "listing_realestate", "domain.com.au": "listing_domain", "seek.com.au": "jobsite_seek", "seek.co.nz": "jobsite_seek",
+  "linkedin.com/jobs": "jobsite_linkedin", "au.indeed.com": "jobsite_indeed", "uk.indeed.com": "jobsite_indeed", "indeed.com": "jobsite_indeed", "ca.indeed.com": "jobsite_indeed", "nz.indeed.com": "jobsite_indeed", "jora.com": "jobsite_jora", "remoteok.com": "jobs_remoteok" };
+
+// The topic's sites (realestate.com.au, Domain, SEEK, carsales…), each with what happened: how many
+// it returned, searched through the engines, needs Unitex Helper, or switched off. Click to leave one out.
 function renderTopicSites(settled) {
   const box = $("topic-sites");
   const topic = topicById(topicId);
   const sites = topic.id !== "all" ? topicSites(topic) : [];
   if (!sites.length || cur().kind !== "web") { box.hidden = true; return; }
-  const direct = directSites();
   const byName = Object.fromEntries((settled || []).map(x => [x.n, x]));
+  const sources = cardSourcesFor(topicId);
   const on = !!helperVersion();
   const found = d => (settled || []).flatMap(x => x.r || []).filter(r => { const h = host(r.url); return h === d || h.endsWith("." + d); }).length;
+  const chip = (label, domain, key, isOff, toggle) => {
+    const reader = key && (sources[key] || SOURCES[key]);
+    const usable = reader && (!reader.enabled || reader.enabled());
+    const r = key && byName[key];
+    const state = isOff ? "off" : r ? (r.err ? "bad" : "ok") : usable || on ? "ok" : "locked";
+    const note = isOff ? "switched off" : r ? (r.err ? r.err.message : `${r.r.length} found`) : !query ? (usable || on ? "ready" : "needs Unitex Helper") : usable || on ? (settled ? `${found(domain)} found` : "searching…") : "needs Unitex Helper";
+    const b = el("button", { type: "button", className: "src " + state, title: (isOff ? "Click to search it again" : "Click to leave it out") + " · " + note },
+      { ok: "✓ ", bad: "✕ ", off: "○ ", locked: "🔒 " }[state], domain && domainIcon(domain), " ", label, el("small", { textContent: " " + note }));
+    b.onclick = toggle;
+    return b;
+  };
+  const toggleSite = d => () => { offSites.has(d) ? offSites.delete(d) : offSites.add(d); store.set("unitex.offsites", [...offSites]); go(); };
+  const toggleSource = n => () => { offSources.has(n) ? offSources.delete(n) : offSources.add(n); store.set("unitex.off", [...offSources]); go(); };
+  // Readers that aren't one of the listed sites (job boards, stores…) get their own chips.
+  const listed = new Set(sites.map(st => SITE_READERS[st.domain]).filter(Boolean));
+  const extra = Object.entries(sources).filter(([n, src]) => !listed.has(n) && (/^(jobs|jobsite|store|helper)_/.test(n)) && (!src.enabled || src.enabled() || /^(jobsite|store|helper)_/.test(n)));
   fill(box,
-    el("span", { className: "row-label", textContent: `${topic.name} sites` }),
-    ...sites.map(st => {
-      const id = Object.keys(LISTING_SITES).find(k => LISTING_SITES[k].name === st.domain && direct.includes(k));
-      const r = id && byName["listing_" + id];
-      const isOff = offSites.has(st.domain);
-      const n = settled ? found(st.domain) : 0;
-      const state = isOff ? "off" : r ? (r.err ? "bad" : "ok") : on ? "ok" : id ? "ok" : "locked";
-      const note = isOff ? "switched off" : r ? (r.err ? r.err.message : `${r.r.length} read directly`) : on ? (settled ? `${n} found` : "searching…") : id ? "reading directly…" : "needs Unitex Helper";
-      const b = el("button", { type: "button", className: "src " + state, title: (isOff ? "Click to search it again" : "Click to leave it out") + " · " + note },
-        { ok: "✓ ", bad: "✕ ", off: "○ ", locked: "🔒 " }[state], domainIcon(st.domain), " ", st.name, el("small", { textContent: " " + note }));
-      b.onclick = () => { isOff ? offSites.delete(st.domain) : offSites.add(st.domain); store.set("unitex.offsites", [...offSites]); go(); };
-      return b;
-    }),
+    el("span", { className: "row-label", textContent: SITES_LABEL[topic.id] || `${topic.name} sites` }),
+    ...sites.map(st => chip(st.name, st.domain, SITE_READERS[st.domain], offSites.has(st.domain), toggleSite(st.domain))),
+    ...extra.map(([n, src]) => chip(src.name.replace(/ \(.*\)$/, ""), null, n, offSources.has(n), toggleSource(n))),
     !on && el("a", { className: "src locked", href: "install.html", textContent: "Get Unitex Helper to search them all" }));
   box.hidden = false;
 }
@@ -856,6 +870,7 @@ async function go() {
   // The fill-in form for this topic (where, price, bedrooms…), shown even before anything is typed.
   if (c.kind === "web") renderTopicForm(topicId, (q, f) => { query = q; filters = { ...filters, ...f }; lastTopic = topicId; go(); });
   else $("topic-form").hidden = true;
+  renderTopicSites();
   if (!query) { $("status").textContent = TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
 
@@ -941,7 +956,7 @@ async function go() {
   renderTopicSites([...settled, ...cardSettled]);
   renderSources([...cardSettled, ...settled], { ...cardSrc, ...MAIN_SOURCES }, [...LOCKED_ENGINES(), ...lockedFor(cardSrc)]);
 
-  // On a topic, results from its specialist sites (and the stores) become cards; the rest stay as a list.
+  // On a topic, results from its sites (and the stores) become cards; the rest stay as a list.
   const kept = main.filter(r => !siteOff(r));
   let rest = showCards(kept, roundRobin(cardSettled.map(s => s.r || [])).filter(r => !siteOff(r)));
   shown = STEP.web;

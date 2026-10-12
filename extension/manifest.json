@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Unitex Helper",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek, Yandex and SearXNG, live news from Google News, Bing News, Yahoo News and news websites, and products from stores, by loading their pages in your own browser.",
   "host_permissions": [
     "https://www.google.com/*",
@@ -149,7 +149,18 @@
     "https://www.tomshardware.com/*",
     "https://www.wired.com/*",
     "https://www.yahoo.com/*",
-    "https://www.zdnet.com/*"
+    "https://www.zdnet.com/*",
+    "https://www.seek.com.au/*",
+    "https://www.seek.co.nz/*",
+    "https://www.linkedin.com/*",
+    "https://au.indeed.com/*",
+    "https://uk.indeed.com/*",
+    "https://www.indeed.com/*",
+    "https://ca.indeed.com/*",
+    "https://nz.indeed.com/*",
+    "https://au.jora.com/*",
+    "https://nz.jora.com/*",
+    "https://news.search.yahoo.com/*"
   ],
   "background": {
     "service_worker": "background.js",

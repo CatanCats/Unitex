@@ -1,5 +1,5 @@
-// Specialist cards and "modes" for topic searches: houses, shopping, second-hand, cars, jobs,
-// recipes and movies & TV. Results from specialist sites become cards (photo, price, key facts,
+// Cards and "modes" for topic searches: houses, shopping, second-hand, cars, jobs,
+// recipes and movies & TV. Results from the topic's sites become cards (photo, price, key facts,
 // which website it's from, Save). Every such topic opens in its full-width mode, with filters,
 // "Show more", and Your list (saved items and a compare table) behind a button above the cards.
 
@@ -23,7 +23,7 @@ const cleanTitle = t => {
 
 const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show" };
 
-// Turns an ordinary result from one of the topic's specialist sites into a card.
+// Turns an ordinary result from one of the topic's sites into a card.
 function cardFor(r, topic) {
   if (r.card) return r;
   const kind = CARD_KINDS[topic.id];
@@ -327,7 +327,7 @@ function appendCards(results, extra = []) {
 
 // ---------- fill-in search forms ----------
 // Each topic gets a short form (where, price, bedrooms…). Its answers become the search words, which
-// the specialist sites and engines understand, and set the card filters. Answers are remembered per topic.
+// the sites and engines understand, and set the card filters. Answers are remembered per topic.
 
 const opt = list => list.map(o => Array.isArray(o) ? o : [o, o]);
 const anyOf = (label, list) => ({ type: "select", label, options: opt([["", "Any"], ...list]) });
