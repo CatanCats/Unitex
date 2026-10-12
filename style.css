@@ -777,3 +777,27 @@ body.mode-on #topic-sites:not([hidden]) { display: flex !important; }
 .ts-row button.src { display: inline-flex; align-items: center; gap: 4px; }
 .ts-row button.src small { font-weight: 500; }
 .book-price { font-weight: 700; font-size: 0.85rem; } .book-price.free { color: #1f8a4c; }
+
+/* ---------- Suggestions while typing ---------- */
+.searchbar { position: relative; }
+.suggest { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 40; margin: 0; padding: 6px; list-style: none; border-radius: 14px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow-lg); text-align: left; }
+.suggest li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; font-size: 0.95rem; }
+.suggest li.on, .suggest li:hover { background: var(--accent-soft); }
+.suggest .sg-icon { width: 18px; text-align: center; opacity: 0.6; font-size: 0.85rem; }
+.suggest .sg-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest .sg-text b { font-weight: 700; }
+.suggest li.recent .sg-text { color: var(--accent); }
+.suggest .sg-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 6px; }
+.suggest .sg-x:hover { background: var(--card-2); }
+
+/* ---------- Results like the big engines ---------- */
+.r-snippet b { font-weight: 700; color: var(--fg); }
+.r-src .r-site { color: var(--muted); }
+.did-you-mean { margin: 0 0 14px; font-size: 1rem; }
+.did-you-mean a { color: var(--accent); font-weight: 700; font-style: italic; }
+.related-box { margin: 28px 0 8px; max-width: 680px; }
+.related-box h2 { font-size: 1.05rem; margin: 0 0 10px; }
+.related-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.related { display: block; padding: 10px 14px; border-radius: 999px; background: var(--card-2); color: var(--fg); text-decoration: none; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.related:hover { background: var(--accent-soft); color: var(--accent); }
+.related b { font-weight: 700; }

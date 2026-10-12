@@ -305,12 +305,18 @@ function showCards(results, extra = []) {
   if (!MODES[topic.id]) { $("cards").hidden = true; return results; }
   const cards = [], rest = [];
   for (const r of results) { const c = cardFor(r, topic); (c ? cards : rest).push(c || r); }
-  lastCards = [...extra, ...cards].filter((c, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(c.url)) === i);
+  lastCards = [...extra, ...cards.filter(c => cardRelevant(c, 0.5))].filter((c, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(c.url)) === i);
   cardLimit = CARD_STEP;
   drawCards();
   return rest;
 }
 
+// Products, cars and jobs must be about the search (houses come from a place search, so they always are).
+function cardRelevant(c, need) {
+  if (!["product", "car", "job"].includes(c.card?.kind)) return true;
+  const what = c.card.kind === "job" ? jobParts(query).what : c.card.kind === "car" ? query.replace(/\b(used|new|for sale|in .*|under .*|\d{4}\+)\b/gi, " ") : query;
+  return aboutSearch(`${cardTitle(c)} ${c.card.company || ""}`, what, need);
+}
 // Adds the next page of results: new cards join the list, the rest is returned.
 function appendCards(results, extra = []) {
   const topic = topicById(topicId);
@@ -320,7 +326,8 @@ function appendCards(results, extra = []) {
   for (const r of [...extra, ...results]) {
     const c = cardFor(r, topic);
     if (!c) { rest.push(r); continue; }
-    if (!have.has(urlKey(c.url))) { have.add(urlKey(c.url)); lastCards.push(c); }
+    // Cards from a site's own search are trusted; ones made from engine results must be about the search.
+    if (!have.has(urlKey(c.url)) && (r.card || cardRelevant(c, 0.5))) { have.add(urlKey(c.url)); lastCards.push(c); }
   }
   return rest;
 }

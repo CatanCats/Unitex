@@ -97,6 +97,7 @@ $("search").addEventListener("submit", e => {
 });
 
 $("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));
+attachSuggestions($("q"), text => { rememberSearch(text); location.href = searchUrl(text); });
 $("find-alts").onclick = () => {
   const q = $("q").value.trim();
   if (q && !detectAlternatives(q)?.explicit) $("q").value = `open source alternatives to ${q}`;

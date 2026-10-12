@@ -92,7 +92,8 @@ const withSites = (q, domains) => domains.length ? `${q} (${domains.map(d => "si
 
 const SOURCES = {
   wikipedia: { paged: true, name: "Wikipedia", group: "main", async run(q, { page: P = 0 } = {}) {
-    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&sroffset=${P * 5}&format=json&origin=*`);
+    const d = await getJson(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=5&sroffset=${P * 5}&srinfo=suggestion&format=json&origin=*`);
+    if (!P && q === query) spellHint = d.query?.searchinfo?.suggestion || "";
     return d.query.search.map(r => ({
       title: r.title, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
       snippet: strip(r.snippet) + "…", via: "Wikipedia", domain: "wikipedia.org",
@@ -492,7 +493,8 @@ function fuse(lists) {
       if (!r || !safeUrl(r.url)) return;
       const k = urlKey(r.url);
       const seen = byKey.get(k);
-      const score = 1 / (pos + 3);
+      // A big engine's top result counts more than a small index's.
+      const score = trustOf(r.via) / (pos + 3);
       if (seen) {
         seen.score += score;
         if (!seen.via.includes(r.via)) seen.via.push(r.via);
@@ -531,9 +533,9 @@ function resultItem(r) {
   return el("li", { className: "result" + (r.image || r.thumb ? " has-thumb" : "") },
     el("div", { className: "r-body" },
       el("div", { className: "r-src" }, domainIcon(r.domain || host(url)),
-        el("strong", { textContent: host(url) }), path.length > 1 && el("span", { className: "r-site", textContent: path.slice(0, 40) })),
+        el("strong", { textContent: host(url) }), path.length > 1 && breadcrumb(url) && el("span", { className: "r-site", textContent: "› " + breadcrumb(url) })),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
-      r.snippet && el("p", { className: "r-snippet", textContent: r.snippet }),
+      r.snippet && el("p", { className: "r-snippet" }, ...highlighted(r.snippet, query)),
       el("p", { className: "r-meta" }, viaLabel(via, url) && el("span", { className: "via", textContent: "found by " + viaLabel(via, url) }), r.meta && el("span", { textContent: r.meta }))),
     (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
@@ -777,7 +779,7 @@ function mergeMain(settled) {
   const main = topicId !== "all"
     ? [...fuse(engineLists), ...fuse([...indexLists, ...otherLists])].filter((r, i, a) => a.findIndex(x => urlKey(x.url) === urlKey(r.url)) === i)
     : fuse([...engineLists, ...indexLists, ...otherLists]);
-  return { main, engineLists };
+  return { main: rankResults(main, query), engineLists };
 }
 
 // The strip of images on the All tab uses a few fast sources; the Images tab uses them all.
@@ -786,6 +788,24 @@ const STRIP_SOURCES = Object.fromEntries(Object.entries(IMAGE_SOURCES).filter(([
 // "Show more": reveals what's already loaded, then asks every source that can page for its next page.
 // It keeps going as long as any source returns something new.
 let more = null;
+let spellHint = "";
+
+// "Did you mean …?" and "Related searches", like the big engines.
+function renderSpelling() {
+  const box = $("did-you-mean");
+  const hint = spellHint && spellHint.toLowerCase() !== query.toLowerCase() ? spellHint : "";
+  fill(box, hint && el("span", {}, "Did you mean ", el("a", { href: "#", textContent: hint, onclick: e => { e.preventDefault(); query = hint; go(); } }), "?"));
+  box.hidden = !hint;
+}
+async function renderRelated(q, id) {
+  const box = $("related");
+  box.hidden = true;
+  const list = await fetchSuggestions(q).catch(() => []);
+  if (id !== runId || !list.length) return;
+  fill(box, el("h2", { textContent: "Related searches" }), el("div", { className: "related-grid" },
+    ...list.map(s => el("a", { href: "search.html?" + new URLSearchParams({ q: s }), className: "related", onclick: e => { e.preventDefault(); query = s; rememberSearch(s); go(); window.scrollTo({ top: 0 }); } }, "🔍 ", ...highlighted(s, q)))));
+  box.hidden = false;
+}
 const STEP = { web: 10, images: 40, videos: 24, books: 24, news: 20, papers: 15, maps: 50, code: 15 };
 // When the Show more button comes near the screen, the next page is fetched ahead, so it's ready on click.
 const moreObserver = "IntersectionObserver" in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) prefetchMore(); }, { rootMargin: "1500px" }) : null;
@@ -858,7 +878,7 @@ async function go() {
   renderTabs();
   renderNotice();
   renderAlternatives($("alts"), query);
-  for (const id of ["answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "sources-btn", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
+  for (const id of ["did-you-mean", "related", "answer", "image-strip", "image-grid", "media-grid", "topic-sites", "sources", "sources-btn", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
   document.body.classList.toggle("mode-on", modeOn);
   document.body.classList.toggle("shop-area", !!c.shop);
@@ -871,6 +891,7 @@ async function go() {
   if (c.kind === "web") renderTopicForm(topicId, (q, f) => { query = q; filters = { ...filters, ...f }; lastTopic = topicId; go(); });
   else $("topic-form").hidden = true;
   renderTopicSites();
+  if (query) rememberSearch(query);
   if (!query) { $("status").textContent = TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
 
@@ -891,7 +912,10 @@ async function go() {
     const cardSrc = c.topic !== "all" ? cardSourcesFor(c.topic) : {};
     const keyOf = c.kind === "images" ? i => i.thumb : r => urlKey(r.url);
     // News: only stories that are really about the search.
-    const relevantOnly = list => c.view === "news" ? list.map(s => ({ ...s, r: (s.r || []).filter(i => newsMatches(i, q)) })) : list;
+    // Images, videos and books from the open collections must have a search word in the title
+    // (big engines' own image and video sections are trusted to match by meaning).
+    const relevantOnly = list => c.view === "news" ? list.map(s => ({ ...s, r: (s.r || []).filter(i => newsMatches(i, q)) }))
+      : ["images", "videos", "books", "papers"].includes(c.view) ? list.map(s => /^helper_|^searxng$/.test(s.n) ? s : { ...s, r: (s.r || []).filter(i => aboutSearch(i.title, query, 0.01)) }) : list;
     // Engines' own sections first (they're the biggest indexes), then the open sources.
     const order = list => relevantOnly([...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))]).map(s => s.r || []);
     const step = STEP[c.view] || 20;
@@ -932,6 +956,7 @@ async function go() {
 
   const cardSrc = cardSourcesFor(topicId);
   wikiAnswer(query).catch(() => {});
+  spellHint = "";
   // Draw results as each source answers, instead of waiting for the slowest one.
   let mainSoFar = [], cardsSoFar = [], aiStarted = false;
   const total = Object.entries({ ...MAIN_SOURCES, ...cardSrc }).filter(([n, s]) => (!s.enabled || s.enabled()) && !offSources.has(n)).length;
@@ -997,6 +1022,8 @@ async function go() {
   }
 
   $("status").textContent = MODES[topicId] ? "" : `${main.length} results`;
+  renderSpelling();
+  if (!c.shop && !MODES[topicId] && main.length) renderRelated(query, id);
 }
 
 $("search").addEventListener("submit", e => {
@@ -1005,5 +1032,6 @@ $("search").addEventListener("submit", e => {
   go();
 });
 $("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));
+attachSuggestions($("q"), text => { query = text; go(); });
 
 go();
