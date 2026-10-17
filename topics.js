@@ -94,6 +94,11 @@ const TOPICS = [
     "*": [["scholar.google.com", "Google Scholar", "https://scholar.google.com/scholar?q={q}"], ["arxiv.org", "arXiv", "https://arxiv.org/search/?query={q}&searchtype=all"], ["pubmed.ncbi.nlm.nih.gov", "PubMed", "https://pubmed.ncbi.nlm.nih.gov/?term={q}"], ["semanticscholar.org", "Semantic Scholar", "https://www.semanticscholar.org/search?q={q}"], ["core.ac.uk"]],
   }},
 
+  { id: "apps", name: "Apps", hint: "e.g. photo editor, or VLC", sites: {
+    "*": [["play.google.com", "Google Play", "https://play.google.com/store/search?q={q}&c=apps"], ["apps.apple.com", "App Store", "https://www.apple.com/search/{q}?src=serp"], ["store.steampowered.com", "Steam", "https://store.steampowered.com/search/?term={q}"],
+      ["apps.microsoft.com", "Microsoft Store", "https://apps.microsoft.com/search?query={q}"], ["f-droid.org", "F-Droid", "https://search.f-droid.org/?q={q}"], ["flathub.org", "Flathub", "https://flathub.org/apps/search?q={q}"]],
+  }},
+
   { id: "opensource", name: "Open source", hint: "e.g. self-hosted photo backup", sites: {
     "*": [["github.com", "GitHub", "https://github.com/search?q={q}&type=repositories"], ["gitlab.com"], ["codeberg.org"], ["alternativeto.net", "AlternativeTo", "https://alternativeto.net/browse/search/?q={q}"], ["sourceforge.net"], ["f-droid.org"], ["flathub.org", "Flathub", "https://flathub.org/apps/search?q={q}"]],
   }},

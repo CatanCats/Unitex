@@ -1,7 +1,7 @@
 // Home page: search bar, engine/AI rows, the "Search for" row (Unitex tabs), open-source alternatives, news.
 let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit"]).filter(id => byId(id) && !byId(id).ai && !byId(id).local).slice(0, 5);
 // Which Unitex tab a search opens on (the same tabs as the results page).
-const HOME_TABS = [["all", "All"], ["ai", "AI"], ["shopping", "Shopping"], ["images", "Images"], ["videos", "Videos"], ["news", "News"], ["maps", "Maps"], ["books", "Books"], ["jobs", "Jobs"], ["travel", "Travel"]];
+const HOME_TABS = [["all", "All"], ["ai", "AI"], ["shopping", "Shopping"], ["images", "Images"], ["videos", "Videos"], ["news", "News"], ["maps", "Maps"], ["books", "Books"], ["jobs", "Jobs"], ["apps", "Apps"], ["travel", "Travel"]];
 let homeTab = HOME_TABS.some(([id]) => id === store.get("unitex.hometab")) ? store.get("unitex.hometab") : "all";
 
 // ---------- engine selection ----------
@@ -46,6 +46,32 @@ function renderTopics() {
       else $("q").focus();
     };
     return b;
+  }));
+}
+
+// ---------- areas: Shopping, Houses, Jobs… each in the colours of the site people know it from ----------
+
+// [tab, sub, name, icon, the sites it reads, tile colour, text colour, accent]
+const AREAS = [
+  ["shopping", "products", "Shopping", "🛍️", "Amazon, eBay & big stores", "#131921", "#fff", "#febd69"],
+  ["shopping", "houses", "Houses", "🏠", "realestate.com.au, Domain", "#fff", "#2b2b2b", "#e4002b"],
+  ["jobs", "", "Jobs", "💼", "SEEK, Indeed, LinkedIn", "#0d3880", "#fff", "#e60278"],
+  ["shopping", "cars", "Cars", "🚗", "carsales, Drive, Gumtree", "#0b2341", "#fff", "#2368c4"],
+  ["shopping", "secondhand", "Second-hand", "♻️", "Gumtree, eBay, Marketplace", "#3c3241", "#fff", "#72ef36"],
+  ["apps", "", "Apps", "📱", "Google Play, App Store, Steam", "#fff", "#202124", "#01875f"],
+  ["all", "recipes", "Recipes", "🍳", "taste.com.au, RecipeTin Eats", "#fff", "#2b2b2b", "#c8102e"],
+  ["all", "movies", "Movies & TV", "🎬", "IMDb, TVmaze", "#121212", "#fff", "#f5c518"],
+  ["all", "events", "Events", "🎟️", "Eventbrite, Ticketmaster", "#fff", "#1e0a3c", "#d1410c"],
+  ["travel", "", "Travel", "✈️", "Flights, stays, things to do", "#003580", "#fff", "#febb02"],
+];
+function renderAreas() {
+  $("areas").replaceChildren(...AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
+    const a = el("a", { className: "area", href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
+      el("span", { className: "area-icon", textContent: emoji, ariaHidden: "true" }), el("b", { textContent: name }), el("small", { textContent: from }), el("span", { className: "area-bar" }));
+    a.style.cssText = `--area-bg:${bg};--area-fg:${fg};--area-accent:${accent}`;
+    // Whatever is typed in the search box goes along: "headphones" → Shopping for headphones.
+    a.onclick = () => { const q = $("q").value.trim(); if (q) a.href += "&" + new URLSearchParams({ q }); };
+    return a;
   }));
 }
 
@@ -228,6 +254,7 @@ if (initial && initial !== "%s") {
   location.replace(buildUrl(initial, {}));
 } else {
   renderEngine();
+  renderAreas();
   renderTopics();
   renderAlternatives($("alts"), $("q").value);
   renderTabs();

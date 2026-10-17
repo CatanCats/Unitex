@@ -1009,3 +1009,144 @@ body.mode-on .tools-row { max-width: none; }
 .place-pop{position:absolute;left:0;right:0;top:100%;z-index:40;margin:4px 0 0;padding:4px;list-style:none;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto}
 .place-pop li{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:14px;color:var(--fg)}
 .place-pop li.on,.place-pop li:hover{background:var(--accent-soft)}
+
+/* ---------- Each area looks like the site people know it from ----------
+   body[data-look] is the topic (search.js). Brand colours go in --look-* and the accent; surfaces stay
+   the theme's own so dark mode still works. */
+body[data-look] .rtop { background: var(--look-head, color-mix(in srgb, var(--bg) 88%, transparent)); border-bottom-color: var(--look-head-line, var(--border)); }
+body[data-look] .rtop .brand, body[data-look] .rtop .icon-btn, body[data-look] .rtop .saved-btn { color: var(--look-head-fg, inherit); }
+body[data-look] .rtop .icon-btn, body[data-look] .rtop .saved-btn { background: transparent; border-color: color-mix(in srgb, currentColor 30%, transparent); box-shadow: none; }
+body[data-look] .searchbar.compact { border-radius: var(--look-radius, 14px); }
+body[data-look] .searchbar.compact .go { background: var(--look-go, linear-gradient(135deg, var(--accent), var(--accent-2))); color: var(--look-go-fg, #fff); border-radius: var(--look-radius, 10px); }
+body[data-look] .btn-primary { background: var(--look-btn, linear-gradient(135deg, var(--accent), var(--accent-2))); color: var(--look-btn-fg, #fff); border: 1px solid var(--look-btn-line, transparent); border-radius: var(--look-btn-radius, 12px); }
+body[data-look] .xcard { border-radius: var(--look-card-radius, 16px); }
+body[data-look] .xcard-price { color: var(--look-price, inherit); }
+
+/* Shopping and Reviews: Amazon. Navy bar, orange search button, yellow buttons, flat white tiles. */
+body[data-look="shopping"], body[data-look="reviews"] {
+  --accent: #e47911; --accent-2: #e47911; --accent-soft: #fff3e0;
+  --look-head: #131921; --look-head-fg: #fff; --look-head-line: #232f3e; --look-go: #febd69; --look-go-fg: #131921; --look-radius: 8px;
+  --look-btn: #ffd814; --look-btn-fg: #0f1111; --look-btn-line: #fcd200; --look-btn-radius: 100px; --look-card-radius: 8px; }
+body[data-look="shopping"] .rnav, body[data-look="reviews"] .rnav { max-width: none; background: #232f3e; padding-left: max(16px, calc((100% - 1180px) / 2)); padding-right: max(16px, calc((100% - 1180px) / 2)); }
+body[data-look="shopping"] .rtabs, body[data-look="reviews"] .rtabs { border-bottom-color: transparent; margin-top: 0; }
+body[data-look="shopping"] .rtabs button, body[data-look="reviews"] .rtabs button { color: #ddd; }
+body[data-look="shopping"] .rtabs button[aria-selected="true"], body[data-look="reviews"] .rtabs button[aria-selected="true"] { color: #fff; border-bottom-color: #febd69; }
+body[data-look="shopping"] .subtabs.departments, body[data-look="reviews"] .subtabs.departments { background: none; border: 0; padding: 6px 0 8px; }
+body[data-look="shopping"] .subtabs.departments .chip, body[data-look="reviews"] .subtabs.departments .chip { background: none; border-color: transparent; color: #fff; }
+body[data-look="shopping"] .subtabs.departments .chip.active, body[data-look="reviews"] .subtabs.departments .chip.active { border-color: #fff; }
+body[data-look="shopping"] .subtabs .row-label, body[data-look="reviews"] .subtabs .row-label { color: #ccc; }
+body[data-look="shopping"] .intent-note, body[data-look="reviews"] .intent-note { color: #ddd; }
+body[data-look="shopping"] .xcard, body[data-look="reviews"] .xcard { box-shadow: none; }
+body[data-look="shopping"] .xcard:hover { transform: none; box-shadow: 0 2px 10px rgb(0 0 0 / 0.12); }
+body[data-look="shopping"] .xcard-img { background: #fff; }
+body[data-look="shopping"] .xcard-img > img { object-fit: contain; padding: 10px; box-sizing: border-box; }
+body[data-look="shopping"] .xcard-body { display: flex; flex-direction: column; }
+body[data-look="shopping"] .xcard.product .xcard-title { order: 1; font-weight: 400; }
+body[data-look="shopping"] .xcard.product .facts { order: 2; }
+body[data-look="shopping"] .xcard.product .xcard-price { order: 3; font-size: 1.45rem; font-weight: 500; }
+body[data-look="shopping"] .xcard.product .xcard-via { order: 4; }
+body[data-look="shopping"] .xcard.product .fact:first-child { background: none; padding-left: 0; color: #de7921; }
+body[data-look="shopping"] .mode-filters { border: 0; background: none; padding-left: 0; }
+
+/* Second-hand: Gumtree. Charcoal bar, bright green. */
+body[data-look="marketplace"] { --accent: #3c8a1f; --accent-2: #3c8a1f; --accent-soft: #eafbe2;
+  --look-head: #3c3241; --look-head-fg: #fff; --look-go: #72ef36; --look-go-fg: #3c3241; --look-btn: #72ef36; --look-btn-fg: #3c3241; --look-btn-radius: 8px; --look-card-radius: 8px; }
+
+/* Houses: realestate.com.au. White bar with a red line, red outline buttons, big photos, bold prices. */
+body[data-look="houses"] { --accent: #e4002b; --accent-2: #e4002b; --accent-soft: #fdecef;
+  --look-head-line: #e4002b; --look-go: #e4002b; --look-radius: 8px; --look-btn: transparent; --look-btn-fg: #e4002b; --look-btn-line: #e4002b; --look-btn-radius: 8px; --look-card-radius: 10px; }
+body[data-look="houses"] .rtop { border-bottom-width: 3px; }
+body[data-look="houses"] .btn-primary:hover { background: #e4002b; color: #fff; filter: none; }
+body[data-look="houses"] .xcard.house .xcard-price { font-size: 1.3rem; }
+body[data-look="houses"] .xcards.list .xcard.house .xcard-img { min-height: 260px; }
+
+/* Cars: carsales. Deep navy bar, blue buttons. */
+body[data-look="cars"] { --accent: #2368c4; --accent-2: #2368c4; --accent-soft: #e8f0fb;
+  --look-head: #0b2341; --look-head-fg: #fff; --look-go: #2368c4; --look-radius: 6px; --look-btn: #2368c4; --look-btn-radius: 6px; --look-card-radius: 6px; }
+
+/* Jobs: SEEK. Navy bar, pink buttons, plain job rows with a pink line on hover. */
+body[data-look="jobs"] { --accent: #e60278; --accent-2: #e60278; --accent-soft: #fde6f2;
+  --look-head: #0d3880; --look-head-fg: #fff; --look-go: #e60278; --look-radius: 8px; --look-btn: #e60278; --look-btn-radius: 8px; --look-card-radius: 8px; }
+body[data-look="jobs"] .xcard.job { box-shadow: none; border-left: 4px solid transparent; }
+body[data-look="jobs"] .xcard.job:hover { transform: none; border-left-color: #e60278; }
+
+/* Events: Eventbrite orange. Recipes: tomato red. Movies & TV: IMDb black and yellow. */
+body[data-look="events"] { --accent: #d1410c; --accent-2: #d1410c; --accent-soft: #fdeee8; --look-head-line: #d1410c; --look-go: #d1410c; --look-btn: #d1410c; --look-btn-radius: 6px; }
+body[data-look="recipes"] { --accent: #c8102e; --accent-2: #c8102e; --accent-soft: #fbe9ec; --look-go: #c8102e; --look-btn: #c8102e; --look-btn-radius: 999px; }
+body[data-look="movies"] { --accent: #b08900; --accent-2: #b08900; --accent-soft: #fdf6dc;
+  --look-head: #121212; --look-head-fg: #fff; --look-go: #f5c518; --look-go-fg: #000; --look-btn: #f5c518; --look-btn-fg: #000; --look-btn-radius: 4px; --look-card-radius: 6px; }
+
+/* Apps: Google Play. White, green, rounded chips; the filters in a row across the top. */
+body[data-look="apps"] { --accent: #01875f; --accent-2: #01875f; --accent-soft: #e6f3ef;
+  --look-go: #01875f; --look-radius: 999px; --look-btn: #01875f; --look-btn-radius: 8px; --look-card-radius: 14px; }
+.mode-layout.top-filters { display: block; }
+.mode-layout.top-filters .mode-filters { position: static; max-height: none; overflow: visible; margin-bottom: 18px; padding: 0; border: 0; background: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.mode-layout.top-filters .mode-filters > h3 { display: none; }
+.mode-layout.top-filters .mf-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.mode-layout.top-filters .mf-field { gap: 4px; }
+.mode-layout.top-filters .mf-field:first-child { flex: 1 1 260px; }
+.mode-layout.top-filters .f-input { border-radius: 999px; padding: 8px 14px; }
+.mode-layout.top-filters .filter-bar.side { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 0; }
+.mode-layout.top-filters .mf-clear { align-self: center; }
+
+/* An app tile in the grid: icon, name, developer, stars and price, like Google Play. */
+.xcards .xcard.app { display: grid; grid-template-rows: auto auto 1fr auto; gap: 8px; padding: 14px; }
+.xcard.app .app-art { display: none; }
+.app-head { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.app-icon { flex: none; width: 64px; height: 64px; border-radius: 22%; object-fit: cover; background: var(--card-2); box-shadow: 0 1px 3px rgb(0 0 0 / 0.18); }
+.app-letter { display: grid; place-items: center; font-weight: 800; font-size: 1.5rem; color: var(--accent); }
+.app-text { min-width: 0; }
+.app-name { margin: 0; font-size: 0.98rem; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.app-name a { color: inherit; text-decoration: none; }
+.app-name a:hover { text-decoration: underline; }
+.app-dev { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0 0; font-size: 0.8rem; color: var(--muted); }
+.app-stars { color: var(--fg); font-weight: 600; }
+.app-summary { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.app-tags { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+.app-plat, .app-oss { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+.app-oss { border-color: color-mix(in srgb, #01875f 45%, transparent); color: #01875f; background: color-mix(in srgb, #01875f 10%, transparent); }
+.app-buy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.app-store { flex: 1 1 100%; font-size: 0.72rem; color: var(--muted); }
+.xcards:not(.list) .app-pricebox { display: none; }
+.xcard.app .card-open { flex: 1; justify-content: center; padding: 8px 12px; }
+
+/* An app row in the list: wide picture, name and platforms, the price box on the right, like Steam. */
+.xcards.list .xcard.app { display: grid; grid-template-columns: 230px minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; gap: 4px 16px; padding: 0; min-height: 0;
+  background: linear-gradient(90deg, #16202d, #1b2838); color: #c7d5e0; border-color: #0e1620; border-radius: 4px; overflow: hidden; }
+.xcards.list .xcard.app:hover { transform: none; background: linear-gradient(90deg, #1d2b3b, #2a475e); }
+.xcards.list .xcard.app .app-art { display: block; grid-row: 1 / 4; align-self: start; margin: 8px 0 8px 8px; background: #0e1620; aspect-ratio: 231 / 87; overflow: hidden; }
+.xcards.list .app-banner { width: 100%; height: 100%; object-fit: cover; display: block; }
+.xcards.list .app-banner.icon-only { object-fit: contain; padding: 8px; box-sizing: border-box; }
+.xcards.list .xcard.app .app-buy { gap: 6px; }
+.xcards.list .xcard.app .save-btn { padding: 4px 10px; font-size: 0.75rem; }
+.xcards.list .xcard.app .app-head { grid-column: 2; padding-top: 10px; }
+.xcards.list .xcard.app .app-icon { display: none; }
+.xcards.list .xcard.app .app-name { color: #fff; font-size: 1.05rem; }
+.xcards.list .xcard.app .app-dev, .xcards.list .xcard.app .app-meta, .xcards.list .xcard.app .app-summary { color: #8f98a0; }
+.xcards.list .xcard.app .app-stars { color: #66c0f4; }
+.xcards.list .xcard.app .app-price-small { display: none; }
+.xcards.list .xcard.app .app-summary { grid-column: 2; }
+.xcards.list .xcard.app .app-tags { grid-column: 2; padding-bottom: 10px; }
+.xcards.list .xcard.app .app-plat { border-color: #3d5468; color: #8f98a0; }
+.xcards.list .xcard.app .app-oss { color: #a4d007; border-color: #4c6b22; background: rgb(76 107 34 / 0.25); }
+.xcards.list .xcard.app .app-buy { grid-column: 3; grid-row: 1 / 4; flex-direction: column; align-items: flex-end; justify-content: center; flex-wrap: nowrap; padding: 10px 14px 10px 0; min-width: 130px; }
+.xcards.list .xcard.app .app-store { flex: none; color: #8f98a0; }
+.app-pricebox { display: inline-flex; align-items: stretch; border-radius: 2px; overflow: hidden; background: #000; font-weight: 600; }
+.app-discount { padding: 4px 6px; background: #4c6b22; color: #beee11; }
+.app-price { padding: 4px 8px; color: #fff; background: #0e1620; }
+.xcards.list .xcard.app .card-open { flex: none; background: linear-gradient(90deg, #06bfff, #2d73ff); color: #fff; border: 0; border-radius: 2px; padding: 7px 16px; }
+.xcards.list .xcard.app .save-btn { color: #c7d5e0; background: rgb(255 255 255 / 0.06); border-color: transparent; }
+@media (max-width: 720px) {
+  .xcards.list .xcard.app { grid-template-columns: 110px minmax(0, 1fr); }
+  .xcards.list .xcard.app .app-buy { grid-column: 1 / 3; grid-row: auto; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; padding: 0 12px 12px; }
+}
+
+/* ---------- Home: the areas, each in its company's colours ---------- */
+.areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-width: 900px; margin: 22px auto 0; }
+.area { display: flex; flex-direction: column; gap: 4px; text-align: left; min-height: 92px; padding: 14px; border-radius: 14px; text-decoration: none; color: var(--area-fg); background: var(--area-bg); border: 1px solid color-mix(in srgb, var(--area-fg) 12%, transparent); box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s; }
+.area:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.area .area-icon { font-size: 1.4rem; line-height: 1; }
+.area b { font-size: 1rem; }
+.area small { font-size: 0.74rem; opacity: 0.85; }
+.area .area-bar { margin-top: auto; height: 4px; width: 36px; border-radius: 4px; background: var(--area-accent); }

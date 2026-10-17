@@ -17,6 +17,9 @@ function jobChoices() {
   return { level: v.level || "", salary: sal ? (parseFloat(sal) || 0) * (/k/.test(sal) ? 1000 : 1) : 0, remote: (v.extras || []).some(x => /remote|home/i.test(x)) };
 }
 const workTypes = q => WORK_TYPES.filter(([w]) => new RegExp(`\\b${w.replace(" ", "[- ]?")}\\b`, "i").test(q));
+// A work type a site has no filter for is searched as a word ("casual barista"), so the site looks for that work type too.
+// Only one: "full time part time barista" would ask for jobs that say both. col: the WORK_TYPES column with the site's own code.
+const withTypeWords = (what, q, col) => { const ws = workTypes(q).filter(w => col == null || !w[col]); return ws.length === 1 && workTypes(q).length === 1 ? `${ws[0][0]} ${what}`.trim() : what; };
 const jobWords = q => jobParts(q).what.toLowerCase().split(/\s+/).filter(w => w.length > 2);
 // Most of the search's words, as whole words: "java developer" doesn't match "JavaScript Developer", "art" doesn't match "Smart".
 const jobMatches = (j, q) => {
@@ -139,7 +142,7 @@ const JOB_SITES = {
   linkedin: { name: "LinkedIn Jobs", domain: "linkedin.com/jobs", async run(q, { page: P = 0 } = {}) {
     const { what, where, remote } = jobParts(q);
     const loc = where || REGIONS.find(r => r.id === regionId)?.name || "";
-    const res = await helperFetch(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(what)}&location=${encodeURIComponent(loc === "Worldwide" ? "" : loc)}${remote || jobChoices().remote ? "&f_WT=2" : ""}${workTypes(q).some(w => w[2]) ? "&f_JT=" + workTypes(q).map(w => w[2]).filter(Boolean).join("%2C") : ""}${{ "Entry level": "&f_E=1%2C2", "Mid level": "&f_E=3%2C4", Senior: "&f_E=4%2C5%2C6" }[jobChoices().level] || ""}&start=${P * 25}`);
+    const res = await helperFetch(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(withTypeWords(what, q, 2))}&location=${encodeURIComponent(loc === "Worldwide" ? "" : loc)}${remote || jobChoices().remote ? "&f_WT=2" : ""}${workTypes(q).some(w => w[2]) ? "&f_JT=" + workTypes(q).map(w => w[2]).filter(Boolean).join("%2C") : ""}${{ "Entry level": "&f_E=1%2C2", "Mid level": "&f_E=3%2C4", Senior: "&f_E=4%2C5%2C6" }[jobChoices().level] || ""}&start=${P * 25}`);
     const doc = adFreeDoc(res.html);
     return [...doc.querySelectorAll(".base-card, .job-search-card")].map(c => {
       const a = c.querySelector("a.base-card__full-link, a[href*='/jobs/view/']");
@@ -162,7 +165,7 @@ const JOB_SITES = {
   jora: { name: "Jora", domain: "jora.com", regions: ["AU", "NZ"], async run(q, { page: P = 0 } = {}) {
     const { what, where } = jobParts(q);
     const h = JORA_HOSTS[regionId] || JORA_HOSTS.AU;
-    const res = await helperFetch(`https://${h}/j?q=${encodeURIComponent(what)}&l=${encodeURIComponent(where)}${P ? `&p=${P + 1}` : ""}`);
+    const res = await helperFetch(`https://${h}/j?q=${encodeURIComponent(withTypeWords(what, q))}&l=${encodeURIComponent(where)}${P ? `&p=${P + 1}` : ""}`);
     const doc = adFreeDoc(res.html);
     return [...doc.querySelectorAll(".job-card, article.result, [data-testid='job-card']")].map(c => {
       const a = c.querySelector(".job-title a, h2 a, a.job-link");

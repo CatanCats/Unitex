@@ -35,7 +35,7 @@ const cleanTitle = (t, ...names) => {
   return (parts.length > 1 && last.length <= 30 && (own || STORE_WORDS.test(last)) ? parts.slice(0, -1).join(" - ") : String(t || "")).trim() || t;
 };
 
-const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event" };
+const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event", apps: "app" };
 
 // Turns an ordinary result from one of the topic's sites into a card.
 // What one listing's address looks like on each kind of site (eBay /itm/123, Gumtree /s-ad/…, Amazon /dp/…).
@@ -57,7 +57,7 @@ const LIST_TITLE = /^\d+\s+(best|easy|quick|simple|healthy|delicious|top|great|c
 function cardFor(r, topic) {
   if (r.card) return r;
   const kind = CARD_KINDS[topic.id];
-  if (!kind || topic.id === "reviews") return null; // review articles stay as results; products come from the stores
+  if (!kind || topic.id === "reviews" || kind === "app") return null; // review articles stay as results; products and apps come from the stores
   const site = topicSites(topic).find(s => r.domain === s.domain || r.domain?.endsWith("." + s.domain) || urlKey(r.url).startsWith(s.domain));
   if (!site) return null;
   const t = textOf(r);
@@ -137,6 +137,7 @@ const MODES = {
   movies:      { name: "Watch mode",         icon: "🎬", noun: "shows" },
   reviews:     { name: "Reviews",            icon: "★", noun: "rated products" },
   events:      { name: "Events",             icon: "🎟️", noun: "events" },
+  apps:        { name: "Apps",               icon: "📱", noun: "apps" },
 };
 
 let modeOn = false; // set by search.js: on for every topic with cards
@@ -144,7 +145,7 @@ let filters = {};
 let lastCards = [];
 
 function priceOf(c) { return money(c.card.price); }
-const reviewCount = c => { const t = String(c.card.reviews || "").replace(/,/g, ""); return /k$/i.test(t) ? parseFloat(t) * 1000 : parseFloat(t) || 0; };
+const reviewCount = c => { const t = String(c.card.reviews || "").replace(/,/g, ""); const m = { k: 1e3, m: 1e6, b: 1e9 }[t.match(/\d([kmb])\b/i)?.[1].toLowerCase()] || 1; return (parseFloat(t.replace(/^\D+/, "")) || 0) * m; }; // "2.01M", "23", "Metascore 95"
 
 // ---------- strict matching of the chosen fields ----------
 const lc = s => String(s || "").toLowerCase();
@@ -260,6 +261,15 @@ function formMatches(c) {
       if (v.kind === "movie" && (k.type ? k.type !== "movie" : /\b(series|tv|season)\b/.test(t))) return false;
       if (v.kind === "tv show" && (k.type ? k.type !== "tv" : !/\b(series|tv|season|show)\b/.test(t) && !k.network)) return false;
       return true;
+    case "apps":
+      if (v.platform && !(k.platforms || []).includes(v.platform)) return false;
+      if (v.kind === "games" && !k.game) return false;
+      if (v.kind === "apps" && k.game) return false;
+      if (v.license === "free" && !k.free) return false;
+      if (v.license === "paid" && k.free !== false) return false;
+      // Open source: said by the app or its store, or the same app is on F-Droid or Flathub (VLC on Google Play).
+      if (v.license === "open" && !k.openSource && !openSourceNames().has(lc(k.name).replace(/[^a-z0-9]/g, ""))) return false;
+      return true;
     case "events":
       if (k.when && eventTime(k.when).t < todayStart()) return false; // already over
       if (v.when && !eventInRange(k.when, v.when)) return false;
@@ -269,6 +279,7 @@ function formMatches(c) {
   return true;
 }
 
+const openSourceNames = () => new Set(lastCards.filter(c => c.card.kind === "app" && c.card.openSource).map(c => lc(c.card.name).replace(/[^a-z0-9]/g, "")));
 function applyFilters(cards) {
   const form = TOPIC_FORMS[topicId];
   // The form's fields decide the keys they own (a field set back to "Any" stops filtering); the
@@ -320,7 +331,7 @@ function filterBar(topic, cards, side = false) {
     s.onchange = () => { filters[key] = s.value || undefined; drawCards(); };
     return s;
   };
-  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"] }[kind] || [];
+  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"], app: ["rating", "reviews"] }[kind] || [];
   const sortSel = sorts.length && (() => {
     const names = { "price-asc": "Price: low to high", "price-desc": "Price: high to low", rating: "Best rated", reviews: "Most reviews", year: "Newest" };
     const s = el("select", { className: "f-input", ariaLabel: "Sort" }, el("option", { value: "", textContent: "Sort: best match" }), ...sorts.map(o => el("option", { value: o, textContent: names[o], selected: filters.sort === o })));
@@ -353,6 +364,7 @@ function filterBar(topic, cards, side = false) {
     kind === "product" && !formHas.has("condition") && select("condition", "New or used", ["new", "used"]),
     ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
     !side && sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
+    kind === "app" && sites.length > 1 && select("site", "All stores", sites),
     !side && sortSel);
 }
 
@@ -383,13 +395,44 @@ function cardFacts(c) {
     job: [k.company, k.location, k.salary, k.worktype].filter(Boolean),
     recipe: [k.category, k.cuisine, k.ingredients && `${k.ingredients.length} ingredients`].filter(Boolean),
     show: [k.years, k.rating && `★ ${k.rating}`, k.network, k.stars].filter(Boolean),
+    app: [k.rating && `★ ${k.rating}`, (k.platforms || []).join(", "), k.price, k.openSource && "Open source"].filter(Boolean),
   }[k.kind] || []).map(String);
+}
+
+// An app, like the stores show one: in the grid a Google Play tile (icon, name, developer, stars, price),
+// in the list a Steam row (wide picture, platforms, the price box on the right).
+const PLATFORM_SHORT = { "iPhone & iPad": "iOS" };
+function renderAppCard(c, topic, url) {
+  const k = c.card;
+  const img = (src, cls) => src && el("img", { className: cls, src, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
+  const open = k.openSource || openSourceNames().has(lc(k.name).replace(/[^a-z0-9]/g, ""));
+  return el("article", { className: "xcard app" + (k.game ? " game" : "") },
+    el("a", { className: "app-art", href: url, rel: "noopener", ariaLabel: k.name }, img(k.banner || k.icon, k.banner ? "app-banner" : "app-banner icon-only")),
+    el("div", { className: "app-head" },
+      img(k.icon, "app-icon") || el("span", { className: "app-icon app-letter", textContent: (k.name || "?").charAt(0).toUpperCase() }),
+      el("div", { className: "app-text" },
+        el("h3", { className: "app-name" }, el("a", { href: url, rel: "noopener", textContent: k.name })),
+        el("p", { className: "app-dev", textContent: [k.developer, k.category].filter(Boolean).join(" · ") || k.site }),
+        el("p", { className: "app-meta" },
+          k.rating && el("span", { className: "app-stars", textContent: `${k.rating} ★` }),
+          k.reviews && el("span", { textContent: k.reviews }),
+          el("span", { className: "app-price-small", textContent: k.price || "" })))),
+    k.summary && el("p", { className: "app-summary", textContent: short(k.summary, 160) }),
+    el("div", { className: "app-tags" },
+      ...(k.platforms || []).map(p => el("span", { className: "app-plat", textContent: PLATFORM_SHORT[p] || p })),
+      open && el("span", { className: "app-oss", textContent: k.license && !/^open source$/i.test(k.license) ? `Open source · ${k.license}` : "Open source" })),
+    el("div", { className: "app-buy" },
+      el("span", { className: "app-store", textContent: k.site }),
+      el("span", { className: "app-pricebox" }, k.discount && el("span", { className: "app-discount", textContent: k.discount }), el("span", { className: "app-price", textContent: k.price || "See store" })),
+      el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: k.free ? "Install" : k.game ? "View game" : "View app" }),
+      saveButton(c, topic)));
 }
 
 function renderCard(c, topic) {
   const k = c.card;
   const url = safeUrl(c.url);
   if (!url) return null;
+  if (k.kind === "app") return renderAppCard(c, topic, url);
   const img = c.image ? el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
     : k.kind === "job" && k.company ? el("span", { className: "job-logo", textContent: k.company.trim().charAt(0).toUpperCase() }) : null;
   const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: `Buy at ${k.site || "store"}`, car: "View car", job: "View job", recipe: "Full recipe", show: "Show info", event: "Get tickets" }[k.kind] || "Open" });
@@ -492,6 +535,11 @@ function guessForm(topicIdNow, q) {
     return { what: q.replace(/\b(in|near)\s+.*$|\b(today|tonight|this weekend|this week|this month|events?|free|family friendly|all ages)\b/gi, " ").replace(/\s+/g, " ").trim(), where: where?.replace(EVENT_WHEN, "").trim(),
       when: cap(when), extras: pick(["Free", "Family friendly", "All ages"]) };
   }
+  if (topicIdNow === "apps") {
+    const platform = /\bandroid\b/i.test(q) ? "Android" : /\b(iphone|ipad|ios)\b/i.test(q) ? "iPhone & iPad" : /\b(windows|pc)\b/i.test(q) ? "Windows" : /\b(mac|macos)\b/i.test(q) ? "Mac" : /\blinux\b/i.test(q) ? "Linux" : "";
+    return { what: appWords(q) === q && /^(apps?|games?)$/i.test(q.trim()) ? "" : appWords(q), platform, license: /\bopen[- ]source\b/i.test(q) ? "open" : /\bpaid\b/i.test(q) ? "paid" : /\bfree\b/i.test(q) ? "free" : "",
+      kind: /\bgames?\b/i.test(q) ? "games" : "" };
+  }
   return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim(), max, where };
 }
 
@@ -592,9 +640,9 @@ function cardsHeadline(topic, n) {
   return `${n} ${noun}${query ? ` for “${query}”` : ""}`;
 }
 
-const VIEW_DEFAULT = { house: "list", job: "list", car: "list", product: "grid", recipe: "grid", show: "grid", event: "list" };
+const VIEW_DEFAULT = { house: "list", job: "list", car: "list", product: "grid", recipe: "grid", show: "grid", event: "list", app: "grid" };
 function sortSelect(kind) {
-  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"] }[kind] || [];
+  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"], app: ["rating", "reviews"] }[kind] || [];
   if (!sorts.length) return null;
   const names = { "price-asc": "Price (low to high)", "price-desc": "Price (high to low)", rating: "Best rated", reviews: "Most reviews", year: "Newest" };
   const s = el("select", { className: "f-input", ariaLabel: "Sort" }, el("option", { value: "", textContent: "Sort: Featured" }), ...sorts.map(o => el("option", { value: o, textContent: "Sort: " + names[o], selected: filters.sort === o })));
@@ -636,7 +684,8 @@ function drawCards() {
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
     shown.length > 0 && moreBtn);
-  fill(box, modeOn ? el("div", { className: "mode-layout" }, side, main) : main);
+  // Apps have their filters in a row across the top, like the app stores; the others down the left.
+  fill(box, modeOn ? el("div", { className: "mode-layout" + (TOPIC_FORMS[topic.id]?.top ? " top-filters" : "") }, side, main) : main);
   box.hidden = !lastCards.length && !modeOn;
 }
 
@@ -755,6 +804,16 @@ const TOPIC_FORMS = {
       rating: anyOf("Rating", ["4★ & up", "3★ & up"]) },
     build: v => words(v.condition === "used" && "used", v.brand, v.what),
     filters: v => ({ min: priceNum(v.min), max: priceNum(v.max), condition: v.condition || undefined, ratingSel: v.rating || undefined }) },
+
+  // Laid out as a row of filters above the apps, like the app stores' own chips.
+  apps: { title: "📱 Find an app", top: true, fields: {
+      what: { label: "App or game", placeholder: "e.g. photo editor, or VLC", wide: true },
+      platform: anyOf("Platform", ["Android", "iPhone & iPad", "Windows", "Mac", "Linux"]),
+      license: { type: "select", label: "Licence", options: opt([["", "Any licence"], ["free", "Free"], ["paid", "Paid"], ["open", "Open source"]]) },
+      kind: { type: "seg", label: "Type", options: opt([["", "All"], ["apps", "Apps"], ["games", "Games"]]) },
+      rating: anyOf("Rating", ["4★ & up", "3★ & up"]) },
+    build: v => words(v.license === "open" && "open source", v.license === "free" && "free", v.what || (v.kind === "games" ? "games" : "apps"), v.kind === "games" && v.what && "game", v.platform && `for ${v.platform}`),
+    filters: v => ({ ratingSel: v.rating || undefined }) },
 
   marketplace: { title: "♻️ Find it second-hand", fields: {
       what: { label: "What", placeholder: "e.g. road bike", wide: true },

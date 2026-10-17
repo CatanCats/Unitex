@@ -9,7 +9,7 @@ let sub = params.get("sub") || "";
 let topicId = "all"; // set from the tab and sub-filter in go()
 // Old links: ?topic=houses → Shopping › Houses, ?tab=places → Maps, ?tab=papers → Books › Research papers.
 const OLD_TOPICS = { houses: ["shopping", "houses"], cars: ["shopping", "cars"], marketplace: ["shopping", "secondhand"], shopping: ["shopping", "products"], reviews: ["shopping", "reviews"],
-  jobs: ["jobs", ""], travel: ["travel", ""], recipes: ["all", "recipes"], events: ["all", "events"], movies: ["all", "movies"], learn: ["all", "learn"], opensource: ["all", "opensource"], academic: ["books", "research"] };
+  jobs: ["jobs", ""], apps: ["apps", ""], travel: ["travel", ""], recipes: ["all", "recipes"], events: ["all", "events"], movies: ["all", "movies"], learn: ["all", "learn"], opensource: ["all", "opensource"], academic: ["books", "research"] };
 if (params.get("topic") && OLD_TOPICS[params.get("topic")] && !params.get("tab")) [tab, sub] = OLD_TOPICS[params.get("topic")];
 if (tab === "places") tab = "maps";
 if (tab === "papers") [tab, sub] = ["books", "research"];
@@ -450,6 +450,7 @@ function cardSourcesFor(topic) {
   const out = {};
   if (CARD_SOURCES[topic]) out[topic] = CARD_SOURCES[topic];
   if (topic === "jobs") Object.assign(out, jobSourcesFor());
+  if (topic === "apps") Object.assign(out, appSourcesFor());
   Object.assign(out, sectionSourcesFor(topic));
   const used = topic === "marketplace";
   for (const id of SHOP_FOR[topic] || []) {
@@ -483,6 +484,7 @@ const TABS = [
     { id: "all", name: "Books" }, { id: "free", name: "Free to read", free: true }, { id: "learn", name: "Learn", suffix: "textbook" },
     { id: "research", name: "Research papers", kind: "list", sources: PAPER_SOURCES, view: "papers", noun: "papers" }] },
   { id: "jobs",     name: "Jobs",     kind: "web", topic: "jobs", more: true },
+  { id: "apps",     name: "Apps",     kind: "web", topic: "apps" },
   { id: "travel",   name: "Travel",   kind: "web", topic: "travel", more: true },
   { id: "code",     name: "Code",     kind: "list", sources: CODE_SOURCES, noun: "results", more: true, subs: [
     { id: "all", name: "Code" }, { id: "opensource", name: "Open source", kind: "web", topic: "opensource" }] },
@@ -624,7 +626,7 @@ function mediaCard(i, kind) {
 // on Shopping, Jobs and the other card pages.
 let panelState = { settled: [], sources: {}, locked: [] };
 const ENGINE_KEYS = /^(helper_(google|bing|brave|mojeek|yandex|searxng)|searxng|qwant|mwmbl|stract|alexandria|wiby|marginalia|duckduckgo)$/;
-const WEBSITE_KEYS = /^(helper_(amazon|ebay|googleshop|bingshop)|store_|jobsite_|jobs_|listing_|site_)/;
+const WEBSITE_KEYS = /^(helper_(amazon|ebay|googleshop|bingshop|app_)|store_|jobsite_|jobs_|app_|listing_|site_)/;
 
 function sourceRows() {
   const { settled, sources } = panelState;
@@ -1002,6 +1004,8 @@ async function go() {
   for (const id of ["did-you-mean", "related", "answer", "image-strip", "image-grid", "media-grid", "topic-sites", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
   document.body.classList.toggle("mode-on", modeOn);
+  // Each area looks like the company people know it from: Shopping like Amazon, Houses like realestate.com.au, Jobs like SEEK… (style.css).
+  document.body.dataset.look = modeOn ? topicId : "";
   document.body.classList.toggle("shop-area", !!c.shop);
   document.body.classList.toggle("web-tab", c.kind === "web");
   $("results").replaceChildren();
