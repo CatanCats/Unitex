@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Unitex Helper",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek, Yandex and SearXNG, live news from Google News, Bing News, Yahoo News and news websites, products from stores, and apps from Google Play, Steam, F-Droid, Flathub and the Microsoft Store, by loading their pages in your own browser.",
   "host_permissions": [
     "https://www.google.com/*",
@@ -150,6 +150,11 @@
     "https://www.wired.com/*",
     "https://www.yahoo.com/*",
     "https://www.zdnet.com/*",
+    "https://yle.fi/*",
+    "https://tech.yahoo.com/*",
+    "https://api.theregister.com/*",
+    "https://www.cricinfo.com/*",
+    "https://www.ign.com/*",
     "https://play.google.com/*",
     "https://store.steampowered.com/*",
     "https://search.f-droid.org/*",

@@ -228,7 +228,7 @@
       {
         "source": "Yle News",
         "region": "Finland",
-        "url": "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_NEWS"
+        "url": "https://yle.fi/rss/news"
       },
       {
         "source": "CBS News",
@@ -461,7 +461,7 @@
       {
         "source": "Tom's Hardware",
         "region": "US",
-        "url": "https://www.tomshardware.com/feeds/all"
+        "url": "https://www.tomshardware.com/feeds.xml"
       },
       {
         "source": "9to5Mac",
@@ -491,7 +491,7 @@
       {
         "source": "TechRadar",
         "region": "UK",
-        "url": "https://www.techradar.com/rss"
+        "url": "https://www.techradar.com/feeds.xml"
       },
       {
         "source": "Bing News",
@@ -502,7 +502,7 @@
       {
         "source": "Yahoo News",
         "region": "Global",
-        "url": "https://www.yahoo.com/tech/rss",
+        "url": "https://tech.yahoo.com/rss",
         "aggregator": true
       },
       {
@@ -599,7 +599,7 @@
       {
         "source": "Live Science",
         "region": "US",
-        "url": "https://www.livescience.com/feeds/all"
+        "url": "https://www.livescience.com/feeds.xml"
       },
       {
         "source": "Bing News",
@@ -652,7 +652,7 @@
       {
         "source": "ESPNcricinfo",
         "region": "Global",
-        "url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"
+        "url": "https://www.cricinfo.com/rss/content/story/feeds/0.xml"
       },
       {
         "source": "CBS Sports",
@@ -739,7 +739,7 @@
       {
         "source": "IGN",
         "region": "US",
-        "url": "https://feeds.ign.com/ign/all"
+        "url": "https://www.ign.com/rss/articles/feed"
       },
       {
         "source": "The Guardian Books",
