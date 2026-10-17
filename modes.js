@@ -79,7 +79,10 @@ function cardFor(r, topic) {
     job: () => ({ kind, role: base.title.split(/\s[-|–]\s/)[0], company: (t.match(/\bat\s+([A-Z][\w&.' -]{2,40}?)(?:\s+in\s|[.,]|$)/) || [])[1],
       location: jobPlace(t),
       salary: t.match(/\$\s?\d[\d,]*(?:k)?(?:\s?[-–]\s?\$?\s?\d[\d,]*k?)?\s?(?:per hour|p\.?h\.?|an hour|per annum|p\.?a\.?|a year|\+ super)?/i)?.[0],
-      worktype: t.match(/\b(full[- ]time|part[- ]time|casual|contract|temporary|internship)\b/i)?.[1] }),
+      // Only where the work type is stated as one: in the title, "Job type: Casual", or a "Casual/Vacation ·" label.
+      worktype: (base.title.match(/\b(full[- ]time|part[- ]time|casual|contract|temporary|internship)\b/i)
+        || (r.snippet || "").match(/\b(?:job|work|employment) type:?\s*(full[- ]time|part[- ]time|casual|contract|temporary|internship)\b/i)
+        || (r.snippet || "").match(/(?:^|[·•|]\s*)(full[- ]time|part[- ]time|casual|contract|temporary|internship)(?:\/vacation)?\s*(?:[·•|]|$)/i))?.[1] }),
     recipe: () => ({ kind, name: base.title }),
     event: () => ({ kind, name: base.title, when: (t.match(/\b(mon|tue|wed|thu|fri|sat|sun)\w*,?\s+\d{1,2}\s+\w+|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*(\s+\d{4})?/i) || [])[0], price }),
     show: () => ({ kind, name: base.title }),
@@ -93,8 +96,9 @@ function jobPlace(t) {
   const labelled = t.match(/\bLocation\s*:\s*([A-Z][\w' -]{1,40}?)(?=\s*(?:[.|·•;]|$|\s{2}|\s-\s|,\s*(?:Full|Part|Casual|Contract|Salary|\$)))/)?.[1];
   if (labelled) return labelled.trim();
   const stated = t.match(new RegExp(`(?:^|[,|·•(:–-]\\s*|\\b(?:in|at|near)\\s+)([A-Z][a-z]+(?:\\s[A-Z][a-z]+)?),?\\s+(${AU_STATE})\\b(?:\\s+(\\d{4})\\b)?`))
-    || t.match(new RegExp(`\\b([A-Z][a-z]+),?\\s+(${AU_STATE})\\b(?:\\s+(\\d{4})\\b)?`));
-  if (stated && !/^(in|at|the|and|located|based|our|for)$/i.test(stated[1])) return stated.slice(1).filter(Boolean).join(" ");
+    || t.match(new RegExp(`\\b((?:[A-Z][a-z]+\\s){0,2}[A-Z][a-z]+),?\\s+(${AU_STATE})\\b(?:\\s+(\\d{4})\\b)?`)); // "Gold Coast QLD", "Surfers Paradise QLD"
+  if (stated) stated[1] = stated[1].replace(/^((?:Casual|Full|Part|Time|Contract|Temporary|Permanent|Jobs?|Hiring|Now|Urgent|Role|Position|Vacation|Internship|Seek|Indeed)\s+)+/i, "");
+  if (stated && stated[1] && !/^(in|at|the|and|located|based|our|for)$/i.test(stated[1])) return stated.slice(1).filter(Boolean).join(" ");
   const where = (typeof formState === "function" && formState("jobs").where) || "";
   if (where && has(lc(t), firstWord(where))) return where;
   return undefined;
@@ -203,6 +207,17 @@ const many = x => [].concat(x || []).filter(Boolean);
 const searchedFor = (k, word) => !!k.searchedIn && ` ${k.searchedIn} `.includes(` ${lc(word).replace(/[^a-z0-9]+/g, " ").trim()} `);
 const carMakeIn = t => typeof CAR_MAKES === "string" && new RegExp(`\\b(${CAR_MAKES})\\b`, "i").test(t); // "2020 Mazda 3" names its make
 const isNewCondition = s => /\bnew\b/i.test(s || "") && !/used|pre-?owned|demo|second/i.test(s || "");
+// Strict work type: the job itself must say it. Its work-type field decides when it has one ("Full time" is
+// never casual, even if the ad mentions "casual dress"); otherwise its title must name the type. Only SEEK's own
+// work-type filter is trusted for SEEK jobs that don't list one. A snippet merely mentioning the word doesn't count.
+const WORK_TYPE_WORDS = { "Full time": /\bfull[\s_-]?time\b|\bpermanent full\b/i, "Part time": /\bpart[\s_-]?time\b/i, Casual: /\bcasual\b/i,
+  Contract: /\b(contract|contractor|fixed[\s-]term|temp(orary)?)\b/i, Internship: /\b(intern|internship|graduate program|traineeship)\b/i };
+function jobTypeOk(c, wanted) {
+  const k = c.card, re = wanted.map(w => WORK_TYPE_WORDS[w] || new RegExp(`\\b${w}\\b`, "i"));
+  if (k.worktype) return re.some(r => r.test(String(k.worktype)));
+  if (re.some(r => r.test(cardTitle(c) || c.title || ""))) return true;
+  return !!k.typeSearched && /^SEEK$/i.test(k.site || c.via || "");
+}
 function formMatches(c) {
   const v = formState();
   const k = c.card, t = lc([cardTitle(c), c.title, c.snippet, k.company, k.location, k.worktype, k.type, k.condition, k.cuisine, k.category, (k.genres || []).join(" "), k.network, k.stars, (c.tags || []).join(" "), k.venue, k.place, k.price,
@@ -213,13 +228,12 @@ function formMatches(c) {
   if (!extras) return false;
   switch (topicId) {
     case "jobs":
-      // Job sites that were searched with the work type (SEEK, LinkedIn, Indeed) only returned that work type.
-      if (many(v.worktype).length && !(k.typeSearched && !k.worktype) && !many(v.worktype).some(w => has(lc(`${k.worktype} ${t}`), w))) return false;
-      // The same for experience (LinkedIn, Indeed) and minimum salary (SEEK, Indeed): a job that doesn't show it still matched.
+      if (many(v.worktype).length && !jobTypeOk(c, many(v.worktype))) return false;
+      // Experience (LinkedIn, Indeed) and minimum salary (SEEK, Indeed) searched on the site: a job that doesn't show it still matched.
       if (!k.levelSearched && v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
       if (!k.levelSearched && v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
       if (v.salary && !(k.salarySearched && !k.salary) && !(salaryTop(k.salary) >= salaryWanted(v.salary))) return false;
-      if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && (remoteJob || /remote|anywhere/i.test(k.location || "")))) return false;
+      if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title} ${c.snippet || ""}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && (remoteJob || /remote|anywhere/i.test(k.location || "")))) return false;
       return true;
     case "houses":
       if (v.type && !has(lc(`${k.type} ${t}`), v.type)) return false;

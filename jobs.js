@@ -87,6 +87,13 @@ const JORA_HOSTS = { AU: "au.jora.com", NZ: "nz.jora.com" };
 const textOfSel = (box, sel) => box.querySelector(sel)?.textContent.replace(/\s+/g, " ").trim() || undefined;
 
 // Any object in the page's data that has a job title and a company is a job.
+// The work type as the job site lists it: SEEK's workTypes, Indeed's job-types attributes, or a jobType field.
+function jobTypeOf(o) {
+  const list = [].concat(o.workTypes || [], o.workType || [], o.jobTypes || [], o.jobType || [], o.employmentType || [])
+    .concat((o.taxonomyAttributes || []).filter(t => /job.?types?/i.test(t.label || "")).flatMap(t => (t.attributes || []).map(a => a.label)))
+    .map(x => typeof x === "string" ? x : x?.label || x?.name || x?.description || "").filter(Boolean);
+  return [...new Set(list)].join(", ") || undefined;
+}
 function jobsFromData(html, base, via, site, urlFor) {
   const out = [], seen = new Set();
   const blobs = [...html.matchAll(/(?:SEEK_REDUX_DATA|__INITIAL_STATE__|__NEXT_DATA__"[^>]*>|providerData\["mosaic-provider-jobcards"\])\s*=?\s*(\{[\s\S]*?\})\s*;?\s*(?:<\/script>|window\.)/g)].map(m => m[1]);
@@ -102,7 +109,7 @@ function jobsFromData(html, base, via, site, urlFor) {
       out.push(jobCard({ title, url, company, logo: o.branding?.serpLogoUrl || o.companyBrandingAttributes?.logoUrl,
         location: o.location?.label || o.locations?.[0]?.label || o.formattedLocation || (typeof o.location === "string" ? o.location : undefined),
         salary: o.salaryLabel || o.salary?.label || (typeof o.salary === "string" ? o.salary : undefined) || o.salarySnippet?.text || o.extractedSalary && salaryText(o.extractedSalary.min, o.extractedSalary.max),
-        worktype: o.workTypes?.[0] || o.workType || o.jobTypes?.[0], posted: o.listingDate || o.pubDate }, via, site));
+        worktype: jobTypeOf(o), posted: o.listingDate || o.pubDate }, via, site));
     });
   }
   return out.filter(Boolean);
@@ -160,7 +167,8 @@ const JOB_SITES = {
     return [...doc.querySelectorAll(".job-card, article.result, [data-testid='job-card']")].map(c => {
       const a = c.querySelector(".job-title a, h2 a, a.job-link");
       return a && jobCard({ title: a.textContent.trim(), url: unwrapLink(a.getAttribute("href"), res.url)?.split("?")[0], company: textOfSel(c, ".job-company, .company"),
-        location: textOfSel(c, ".job-location, .location"), snippet: textOfSel(c, ".job-abstract, .abstract, p"), salary: textOfSel(c, ".badge.-salary, .salary"), posted: textOfSel(c, ".job-listed-date, .date") }, "Jora", "Jora");
+        location: textOfSel(c, ".job-location, .location"), snippet: textOfSel(c, ".job-abstract, .abstract, p"),
+        worktype: textOfSel(c, ".job-type, .badge.-job-type, [class*='job-type'], [data-testid*='job-type']") || undefined, salary: textOfSel(c, ".badge.-salary, .salary"), posted: textOfSel(c, ".job-listed-date, .date") }, "Jora", "Jora");
     }).filter(Boolean);
   }},
 };
