@@ -503,18 +503,30 @@ const storeReader = ([, name, url]) => ({ name, async run(q) {
   return storeProducts(res.html, res.url || u, name, name);
 }});
 
+// The Shopping filters, filled into each store's own search like a person would: price range and condition.
+function shopChoices() {
+  const v = typeof formState === "function" && ["shopping", "marketplace"].includes(topicId) ? formState(topicId) : {};
+  const n = x => +String(x || "").replace(/[^\d.]/g, "") || 0;
+  return { min: n(v.min), max: n(v.max), condition: v.condition || "" };
+}
 const STORE_SOURCES = {
   amazon: { paged: true, name: "Amazon", async run(q, { region, used, page: P = 0 } = {}) {
-    const { doc, base, html } = await helperDoc(`https://${storeHost("amazon", region)}/s?k=${encodeURIComponent(q)}&page=${P + 1}${used ? "&rh=p_n_condition-type%3AUsed" : ""}`);
+    const f = shopChoices();
+    const rh = [(f.min || f.max) && `p_36:${Math.round(f.min * 100)}-${f.max ? Math.round(f.max * 100) : ""}`, (used || f.condition === "used") && "p_n_condition-type:Used"].filter(Boolean).join(",");
+    const { doc, base, html } = await helperDoc(`https://${storeHost("amazon", region)}/s?k=${encodeURIComponent(q)}&page=${P + 1}${rh ? "&rh=" + encodeURIComponent(rh) : ""}`);
     if (/captcha|robot check/i.test(html.slice(0, 20000)) && !/s-search-result/.test(html)) throw new Error("asked for a CAPTCHA (open Amazon once yourself to clear it)");
     return parseAmazon(doc, base, "Amazon");
   }},
   ebay: { paged: true, name: "eBay", async run(q, { region, used, page: P = 0 } = {}) {
-    const { doc, base } = await helperDoc(`https://${storeHost("ebay", region)}/sch/i.html?_nkw=${encodeURIComponent(q)}&_pgn=${P + 1}${used ? "&LH_ItemCondition=3000" : ""}`);
+    const f = shopChoices();
+    const cond = used || f.condition === "used" ? "&LH_ItemCondition=3000" : f.condition === "new" ? "&LH_ItemCondition=1000" : "";
+    const { doc, base } = await helperDoc(`https://${storeHost("ebay", region)}/sch/i.html?_nkw=${encodeURIComponent(q)}&_pgn=${P + 1}${cond}${f.min ? "&_udlo=" + f.min : ""}${f.max ? "&_udhi=" + f.max : ""}`);
     return parseEbay(doc, base, "eBay");
   }},
   googleshop: { paged: true, name: "Google Shopping", async run(q, { page: P = 0 } = {}) {
-    const { doc, base, html } = await helperDoc(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=shop&start=${P * 20}&hl=en&gbv=1`);
+    const f = shopChoices();
+    const tbs = f.min || f.max ? `&tbs=${encodeURIComponent(`mr:1,price:1${f.min ? ",ppr_min:" + f.min : ""}${f.max ? ",ppr_max:" + f.max : ""}`)}` : "";
+    const { doc, base, html } = await helperDoc(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=shop&start=${P * 20}&hl=en&gbv=1${tbs}`);
     const dom = parsePriced(doc, base, "Google Shopping", /(^|\.)google\./);
     return dom.length ? dom : storeProducts(html, base, "Google Shopping", "Google Shopping").filter(p => !/(^|\.)google\./.test(p.domain));
   }},

@@ -335,7 +335,7 @@ function filterBar(topic, cards, side = false) {
     kind === "product" && !formHas.has("ratingSel") && select("ratingSel", "Any rating", ["4★ & up", "3★ & up"]),
     kind === "product" && !formHas.has("condition") && select("condition", "New or used", ["new", "used"]),
     ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
-    sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
+    !side && sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
     !side && sortSel);
 }
 
@@ -478,6 +478,55 @@ function guessForm(topicIdNow, q) {
   return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim(), max, where };
 }
 
+// Places pop up while you type in "Where", like the job and property sites' own location boxes
+// (OpenStreetMap's place search, closest to your country first).
+const STATE_SHORT = { "New South Wales": "NSW", Victoria: "VIC", Queensland: "QLD", "South Australia": "SA", "Western Australia": "WA", Tasmania: "TAS", "Northern Territory": "NT", "Australian Capital Territory": "ACT" };
+const REGION_CENTRE = { AU: [-25.3, 134.5, "AU"], NZ: [-41, 174, "NZ"], UK: [54, -2, "GB"], US: [39.5, -98.4, "US"], CA: [56, -106, "CA"] };
+const whereCache = new Map();
+async function findPlaces(text) {
+  const c = REGION_CENTRE[regionId];
+  const key = (c?.[2] || "*") + "|" + text.toLowerCase();
+  if (whereCache.has(key)) return whereCache.get(key);
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=10&lang=en&osm_tag=place${c ? `&lat=${c[0]}&lon=${c[1]}&location_bias_scale=0.2` : ""}`;
+  const p = getJson(url, 5000).then(d => {
+    const all = (d.features || []).map(f => f.properties).filter(x => x.name && !/^(house|street)$/.test(x.type));
+    const mine = c ? all.filter(x => x.countrycode === c[2]) : all;
+    const label = x => {
+      if (x.countrycode === "AU") return [x.name, STATE_SHORT[x.state] || x.state, x.postcode].filter(Boolean).join(" ");
+      return [x.name, x.state && x.state !== x.name ? x.state : x.county, !c && x.country].filter(Boolean).join(", ");
+    };
+    return [...new Set((mine.length ? mine : all).map(label))].slice(0, 7);
+  }).catch(() => []);
+  whereCache.set(key, p);
+  return p;
+}
+function placeSuggest(inp, pick) {
+  const pop = el("ul", { className: "place-pop", role: "listbox", hidden: true });
+  let items = [], at = -1, timer = null, asked = "";
+  const close = () => { pop.hidden = true; at = -1; };
+  const show = list => {
+    items = list; at = -1;
+    fill(pop, ...list.map((t, i) => el("li", { role: "option", textContent: t, onmousedown: e => { e.preventDefault(); close(); pick(t); }, onmouseenter() { mark(i); } })));
+    pop.hidden = !list.length;
+  };
+  const mark = i => { at = i; [...pop.children].forEach((li, n) => li.classList.toggle("on", n === i)); };
+  inp.setAttribute("autocomplete", "off");
+  inp.addEventListener("input", () => {
+    clearTimeout(timer);
+    const t = inp.value.trim();
+    if (t.length < 2) return close();
+    timer = setTimeout(async () => { asked = t; const list = await findPlaces(t); if (asked === inp.value.trim() && document.activeElement === inp) show(list); }, 220);
+  });
+  inp.addEventListener("keydown", e => {
+    if (pop.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); mark((at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length); }
+    else if (e.key === "Enter" && at >= 0) { e.preventDefault(); e.stopImmediatePropagation(); const t = items[at]; close(); pick(t); }
+    else if (e.key === "Escape") close();
+  }, true);
+  inp.addEventListener("blur", () => setTimeout(close, 150));
+  queueMicrotask(() => inp.after(pop));
+}
+
 // The topic's fill-in fields as filters: changing a choice searches again; typed fields search on Enter.
 function formFilters(topicIdNow) {
   const form = TOPIC_FORMS[topicIdNow];
@@ -506,6 +555,7 @@ function formFilters(topicIdNow) {
     inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); v[k] = inp.value.trim(); apply(); } };
     // Enter already applied it (and redrew the form, which blurs this field and fires change again).
     inp.onchange = () => { if (inp.value.trim() === (v[k] || "")) return; v[k] = inp.value.trim(); apply(); };
+    if (k === "where") placeSuggest(inp, place => { inp.value = place; v[k] = place; apply(); });
     return inp;
   };
   return el("div", { className: "mf-form" }, ...Object.entries(form.fields).map(([k, f]) => el("label", { className: "mf-field" }, f.label && el("span", { textContent: f.label }), control(k, f))),

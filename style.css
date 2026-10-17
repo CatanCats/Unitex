@@ -1004,3 +1004,8 @@ body.mode-on .tools-row { max-width: none; }
 .settings .set-check{flex-direction:row;align-items:center;gap:8px;color:inherit}
 .settings input[type=checkbox]{padding:0;width:auto}
 .set-field select{max-width:100%;min-width:0}
+
+.mf-field{position:relative}
+.place-pop{position:absolute;left:0;right:0;top:100%;z-index:40;margin:4px 0 0;padding:4px;list-style:none;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow:auto}
+.place-pop li{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:14px;color:var(--fg)}
+.place-pop li.on,.place-pop li:hover{background:var(--accent-soft)}

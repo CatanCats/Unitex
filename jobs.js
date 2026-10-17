@@ -9,7 +9,13 @@ function jobParts(q) {
   return { what: clean(m ? m[1] : q), where: m ? m[2].trim() : "", remote: /\b(remote|work from home)\b/i.test(q) };
 }
 // Work types in the search, in each job site's own filter: SEEK's worktype ids, LinkedIn's f_JT, Indeed's jt.
-const WORK_TYPES = [["full time", 242, "F", "fulltime"], ["part time", 243, "P", "parttime"], ["contract", 244, "C", "contract"], ["casual", 245, "T", "casual"], ["internship", null, "I", "internship"]];
+const WORK_TYPES = [["full time", 242, "F", "fulltime"], ["part time", 243, "P", "parttime"], ["contract", 244, "C", "contract"], ["casual", 245, null, "casual"], ["internship", null, "I", "internship"]];
+// The job filters, filled into each job site's own search: experience and minimum salary too.
+function jobChoices() {
+  const v = typeof formState === "function" && topicId === "jobs" ? formState("jobs") : {};
+  const sal = String(v.salary || "").toLowerCase().replace(/,/g, "");
+  return { level: v.level || "", salary: sal ? (parseFloat(sal) || 0) * (/k/.test(sal) ? 1000 : 1) : 0, remote: (v.extras || []).some(x => /remote|home/i.test(x)) };
+}
 const workTypes = q => WORK_TYPES.filter(([w]) => new RegExp(`\\b${w.replace(" ", "[- ]?")}\\b`, "i").test(q));
 const jobWords = q => jobParts(q).what.toLowerCase().split(/\s+/).filter(w => w.length > 2);
 // Most of the search's words, as whole words: "java developer" doesn't match "JavaScript Developer", "art" doesn't match "Smart".
@@ -107,7 +113,8 @@ const JOB_SITES = {
     const { what, where } = jobParts(q);
     const h = SEEK_HOSTS[regionId] || SEEK_HOSTS.AU;
     const wt = workTypes(q).map(w => w[1]).filter(Boolean);
-    const params = new URLSearchParams({ ...(wt.length ? { worktype: wt.join(",") } : {}), ...(P ? { page: P + 1 } : {}) }).toString();
+    const f = jobChoices();
+    const params = new URLSearchParams({ ...(wt.length ? { worktype: wt.join(",") } : {}), ...(f.salary ? { salaryrange: `${f.salary}-`, salarytype: "annual" } : {}), ...(P ? { page: P + 1 } : {}) }).toString();
     const url = `https://${h}/${what ? slug(what) + "-jobs" : "jobs"}${where ? `/in-${slug(where)}` : ""}${params ? "?" + params : ""}`;
     const res = await helperFetch(url);
     let jobs = jobsFromData(res.html, res.url, "SEEK", "SEEK", o => o.id && /^\d+$/.test(String(o.id)) && `https://${h}/job/${o.id}`);
@@ -125,7 +132,7 @@ const JOB_SITES = {
   linkedin: { name: "LinkedIn Jobs", domain: "linkedin.com/jobs", async run(q, { page: P = 0 } = {}) {
     const { what, where, remote } = jobParts(q);
     const loc = where || REGIONS.find(r => r.id === regionId)?.name || "";
-    const res = await helperFetch(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(what)}&location=${encodeURIComponent(loc === "Worldwide" ? "" : loc)}${remote ? "&f_WT=2" : ""}${workTypes(q).length ? "&f_JT=" + workTypes(q).map(w => w[2]).join("%2C") : ""}&start=${P * 25}`);
+    const res = await helperFetch(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(what)}&location=${encodeURIComponent(loc === "Worldwide" ? "" : loc)}${remote || jobChoices().remote ? "&f_WT=2" : ""}${workTypes(q).some(w => w[2]) ? "&f_JT=" + workTypes(q).map(w => w[2]).filter(Boolean).join("%2C") : ""}${{ "Entry level": "&f_E=1%2C2", "Mid level": "&f_E=3%2C4", Senior: "&f_E=4%2C5%2C6" }[jobChoices().level] || ""}&start=${P * 25}`);
     const doc = adFreeDoc(res.html);
     return [...doc.querySelectorAll(".base-card, .job-search-card")].map(c => {
       const a = c.querySelector("a.base-card__full-link, a[href*='/jobs/view/']");
@@ -137,7 +144,9 @@ const JOB_SITES = {
   indeed: { name: "Indeed", domain: "indeed.com", async run(q, { page: P = 0 } = {}) {
     const { what, where } = jobParts(q);
     const h = INDEED_HOSTS[regionId] || INDEED_HOSTS["*"];
-    const jt = workTypes(q).length === 1 ? `&jt=${workTypes(q)[0][3]}` : "";
+    const f = jobChoices();
+    const jt = (workTypes(q).length === 1 ? `&jt=${workTypes(q)[0][3]}` : "") + ({ "Entry level": "&explvl=entry_level", "Mid level": "&explvl=mid_level", Senior: "&explvl=senior_level" }[f.level] || "")
+      + (f.remote ? "&remotejob=032b3046-06a3-4876-8dfd-474eb5e7ed11" : "") + (f.salary ? `&salaryType=${encodeURIComponent("$" + f.salary.toLocaleString("en"))}` : "");
     const res = await helperFetch(`https://${h}/jobs?q=${encodeURIComponent(what)}&l=${encodeURIComponent(where)}${jt}${P ? `&start=${P * 10}` : ""}`);
     const jobs = jobsFromData(res.html, res.url, "Indeed", "Indeed", o => o.jobkey && `https://${h}/viewjob?jk=${o.jobkey}`);
     if (!jobs.length && botCheck(res.html)) throw new Error("asked for a bot check (open Indeed once yourself to clear it)");
@@ -157,7 +166,7 @@ const JOB_SITES = {
 };
 
 // Which job sites put the work type in their own search address (see their run()).
-const TYPE_SEARCHED = { seek: q => workTypes(q).some(w => w[1]), linkedin: q => workTypes(q).length > 0, indeed: q => workTypes(q).length === 1 };
+const TYPE_SEARCHED = { seek: q => workTypes(q).length > 0 && workTypes(q).every(w => w[1]), linkedin: q => workTypes(q).length > 0 && workTypes(q).every(w => w[2]), indeed: q => workTypes(q).length === 1 };
 // The job readers for this country: helper ones only with Unitex Helper.
 function jobSourcesFor() {
   // Local job sites first (SEEK, LinkedIn, Indeed, Jora), then the remote-job boards.
