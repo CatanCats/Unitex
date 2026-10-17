@@ -1180,6 +1180,8 @@ async function go() {
   if (!c.shop && !MODES[topicId] && main.length) renderRelated(query, id);
 }
 
+// "/" jumps to the search box, as on Google, YouTube and GitHub.
+document.addEventListener("keydown", e => { if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.target.matches("input, textarea, select, [contenteditable]")) { e.preventDefault(); $("q").focus(); $("q").select(); } });
 $("search").addEventListener("submit", e => {
   e.preventDefault();
   if (tab === "all" || autoMode) { userPicked = false; if (autoMode) { tab = "all"; sub = ""; } }

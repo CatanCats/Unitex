@@ -145,18 +145,27 @@ function renderLanding(topic) {
   if (!L) return el("p", { className: "hint mode-empty", textContent: "Set the filters, or type a search above." });
   const cats = typeof L.cats === "function" ? L.cats() : L.cats;
   const mine = areaSearches(topic.id);
-  const savedHere = saved.all().filter(s => s.topic === topic.id);
+  const savedHere = saved.all().filter(s => s.topic === topic.id), viewedHere = viewedItems().filter(s => s.topic === topic.id);
   const rows = [...(mine[0] ? [[`Because you searched “${mine[0]}”`, mine[0], null]] : []), ...L.rows().map(([t, q, use]) => [t, q, use || L.use])];
   return el("div", { className: "landing" },
-    el("div", { className: "landing-hero" }, el("h2", { textContent: L.title }), el("p", { textContent: L.sub() })),
+    // One line, not a banner: the page is for the items (the sites' own home pages lead with them too).
+    el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() })),
+    // A row of category chips that scrolls sideways, like Amazon's and Google Play's category bars.
     el("nav", { className: "landing-cats", ariaLabel: "Categories" }, ...cats.map(([emoji, label, q]) =>
       el("button", { type: "button", className: "landing-cat", onclick: () => searchFor(q) }, el("span", { className: "landing-cat-icon", textContent: emoji, ariaHidden: "true" }), el("span", { textContent: label })))),
     mine.length > 0 && el("div", { className: "landing-recent" }, el("span", { className: "row-label", textContent: "Your searches" }),
       ...mine.slice(0, 6).map(q => el("button", { type: "button", className: "chip", textContent: q, onclick: () => searchFor(q) }))),
-    savedHere.length > 0 && el("section", { className: "landing-row" },
-      el("div", { className: "landing-row-head" }, el("h3", { textContent: "Your saved " + MODES[topic.id].noun })),
-      el("div", { className: "landing-strip saved-strip" }, ...savedHere.slice(0, 12).map(s => el("a", { className: "saved-tile", href: s.url, rel: "noopener" },
-        s.image ? el("img", { src: s.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }) : el("span", { className: "saved-letter", textContent: (s.title || "?").charAt(0) }),
-        el("b", { textContent: s.title }), el("small", { textContent: [s.price, s.site].filter(Boolean).join(" · ") }))))),
+    // Your own things first, like Amazon's "Keep shopping for" and "Your browsing history".
+    tilesRow("Recently viewed", viewedHere),
+    tilesRow("Your saved " + MODES[topic.id].noun, savedHere),
     ...rows.map(([t, q, use]) => landingRowEl(topic, t, q, loadRow(topic, q, use))));
+}
+// Small picture tiles for things you opened or saved.
+function tilesRow(title, items) {
+  if (!items.length) return null;
+  return el("section", { className: "landing-row" },
+    el("div", { className: "landing-row-head" }, el("h3", { textContent: title })),
+    el("div", { className: "landing-strip saved-strip" }, ...items.slice(0, 14).map(s => el("a", { className: "saved-tile", href: s.url, rel: "noopener" },
+      s.image ? el("img", { src: s.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }) : el("span", { className: "saved-letter", textContent: (s.title || "?").charAt(0) }),
+      el("b", { textContent: s.title }), el("small", { textContent: [s.price, s.site].filter(Boolean).join(" · ") })))));
 }

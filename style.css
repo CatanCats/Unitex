@@ -72,9 +72,9 @@ kbd { font: 500 0.75em/1 ui-monospace, SFMono-Regular, Menlo, monospace; padding
 main { position: relative; z-index: 1; flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 16px 48px; }
 
 /* hero + search */
-.hero { max-width: 900px; margin: 9vh auto 0; text-align: center; }
+.hero { max-width: 900px; margin: 6vh auto 0; text-align: center; }
 .searchbar, .alts { max-width: 720px; margin-left: auto; margin-right: auto; }
-h1 { margin: 0 0 28px; font-size: clamp(2rem, 5.5vw, 3.1rem); line-height: 1.08; letter-spacing: -0.035em; font-weight: 700; }
+h1 { margin: 0 0 22px; font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.08; letter-spacing: -0.035em; font-weight: 700; }
 h1 span { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 .searchbar {
@@ -965,8 +965,6 @@ body:not(.web-tab) .tools-row { max-width: none; }
 .xcards.compact .facts { gap: 4px; }
 .xcards.compact .fact { font-size: 0.7rem; padding: 1px 6px; }
 .xcards.compact .xcard-via, .xcards.compact .xcard-sub { font-size: 0.68rem; }
-.xcards.compact .xcard-actions { padding: 4px 10px 10px; gap: 6px; }
-.xcards.compact .xcard-actions .btn-primary, .xcards.compact .save-btn { padding: 6px 10px; font-size: 0.76rem; }
 .xcards.compact .site-badge { font-size: 0.66rem; padding: 2px 7px; }
 .xcards.compact.list { gap: 8px; }
 .xcards.compact.list .xcard { grid-template-columns: 170px minmax(0, 1fr); min-height: 118px; }
@@ -1084,14 +1082,6 @@ body[data-look="movies"] { --accent: #b08900; --accent-2: #b08900; --accent-soft
 body[data-look="apps"] { --accent: #01875f; --accent-2: #01875f; --accent-soft: #e6f3ef;
   --look-go: #01875f; --look-radius: 999px; --look-btn: #01875f; --look-btn-radius: 8px; --look-card-radius: 14px; }
 .mode-layout.top-filters { display: block; }
-.mode-layout.top-filters .mode-filters { position: static; max-height: none; overflow: visible; margin-bottom: 18px; padding: 0; border: 0; background: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
-.mode-layout.top-filters .mode-filters > h3 { display: none; }
-.mode-layout.top-filters .mf-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
-.mode-layout.top-filters .mf-field { gap: 4px; }
-.mode-layout.top-filters .mf-field:first-child { flex: 1 1 260px; }
-.mode-layout.top-filters .f-input { border-radius: 999px; padding: 8px 14px; }
-.mode-layout.top-filters .filter-bar.side { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 0; }
-.mode-layout.top-filters .mf-clear { align-self: center; }
 
 /* An app tile in the grid: icon, name, developer, stars and price, like Google Play. */
 .xcards .xcard.app { display: grid; grid-template-rows: auto auto 1fr auto; gap: 8px; padding: 14px; }
@@ -1145,25 +1135,13 @@ body[data-look="apps"] { --accent: #01875f; --accent-2: #01875f; --accent-soft: 
   .xcards.list .xcard.app { grid-template-columns: 110px minmax(0, 1fr); }
   .xcards.list .xcard.app .app-buy { grid-column: 1 / 3; grid-row: auto; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; padding: 0 12px 12px; }
 }
-
-/* ---------- Home: the areas, each in its company's colours ---------- */
-.areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-width: 900px; margin: 22px auto 0; }
-.area { display: flex; flex-direction: column; gap: 4px; text-align: left; min-height: 92px; padding: 14px; border-radius: 14px; text-decoration: none; color: var(--area-fg); background: var(--area-bg); border: 1px solid color-mix(in srgb, var(--area-fg) 12%, transparent); box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s; }
-.area:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
-.area .area-icon { font-size: 1.4rem; line-height: 1; }
-.area b { font-size: 1rem; }
-.area small { font-size: 0.74rem; opacity: 0.85; }
-.area .area-bar { margin-top: auto; height: 4px; width: 36px; border-radius: 4px; background: var(--area-accent); }
+/* ---------- Home: "Go to" chips, each icon on its site's colour ---------- */
+.quick.areas { margin-top: 8px; }
+.chip.area { display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px 5px 5px; text-decoration: none; color: var(--fg); }
+.chip.area .area-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--area-bg); box-shadow: inset 0 0 0 2px var(--area-accent); font-size: 0.8rem; }
 
 /* ---------- Each area's front page (landing.js) ---------- */
 .landing { display: grid; gap: 22px; }
-.landing-hero { padding: 22px 24px; border-radius: var(--look-card-radius, 16px); background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 16%, var(--card)), var(--card)); border: 1px solid var(--border); }
-.landing-hero h2 { margin: 0 0 4px; font-size: 1.5rem; letter-spacing: -0.02em; }
-.landing-hero p { margin: 0; color: var(--muted); }
-.landing-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
-.landing-cat { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border: 1px solid var(--border); border-radius: var(--look-card-radius, 14px); background: var(--card); color: var(--fg); font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: transform .12s, border-color .12s; }
-.landing-cat:hover { transform: translateY(-2px); border-color: var(--accent); }
-.landing-cat-icon { font-size: 1.6rem; line-height: 1; }
 .landing-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .landing-recent .row-label { width: auto; margin: 0 4px 0 0; }
 .landing-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -1181,16 +1159,7 @@ body[data-look="apps"] { --accent: #01875f; --accent-2: #01875f; --accent-soft: 
 .saved-letter { display: grid; place-items: center; font-size: 2rem; font-weight: 800; color: var(--accent); }
 .saved-tile b { font-size: 0.85rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .saved-tile small { color: var(--muted); }
-body[data-look="shopping"] .landing-hero { background: linear-gradient(120deg, #232f3e, #37475a); color: #fff; border: 0; }
-body[data-look="shopping"] .landing-hero p { color: #ddd; }
-body[data-look="jobs"] .landing-hero { background: linear-gradient(120deg, #0d3880, #1d4fa8); color: #fff; border: 0; }
-body[data-look="jobs"] .landing-hero p { color: #dbe4ff; }
-body[data-look="movies"] .landing-hero { background: #121212; color: #fff; border: 0; }
-body[data-look="movies"] .landing-hero p { color: #bbb; }
 @media (max-width: 720px) {
-  .landing-hero { padding: 16px; }
-  .landing-hero h2 { font-size: 1.25rem; }
-  .landing-cats { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
   .landing-strip { grid-auto-columns: 72%; }
 }
 /* The rows scroll inside the page instead of widening it. */
@@ -1208,3 +1177,162 @@ body[data-look="movies"] .landing-hero p { color: #bbb; }
   .mode-filters.open .mf-toggle { margin-bottom: 8px; }
   .mode-filters > h3 { display: none; }
 }
+
+/* ======================================================================
+   Compact layout: what the shops, job and property sites do.
+   Filters are one bar of pills (SEEK, realestate.com.au, Google Play); cards are the link themselves with a
+   small heart (Amazon, SEEK), so a page shows far more results per screen.
+   ====================================================================== */
+
+/* ---------- the filter bar ---------- */
+body.mode-on #tab-bar { display: none !important; }
+.mode-layout.top-filters .mode-filters { position: sticky; top: 75px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 -4px 14px; padding: 8px 4px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: var(--bg); overflow: visible; max-height: none; }
+/* The form's pills, the extra checks and the tools all flow in the one bar. */
+.pill-bar { display: contents !important; }
+.pill-bar .mf-field { display: block; position: relative; flex: none; }
+.pill, .pill-tools .tool-btn, .pill-tools .tool-select, .mode-filters .filter-bar .f-input, .mode-filters .f-check {
+  box-sizing: border-box; height: 34px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg);
+  font: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+select.pill, .pill-tools .tool-select, .mode-filters .filter-bar select.f-input { padding-right: 30px; width: auto; max-width: 220px; }
+.pill:hover, .mode-filters .f-check:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.pill.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.pill-input { width: 150px; cursor: text; font-weight: 500; }
+.pill-input.wide { width: 200px; }
+.pill-input:focus { width: 220px; outline: none; border-color: var(--accent); }
+.pill-input::placeholder { color: var(--muted); font-weight: 600; }
+.pill-seg { height: 34px; padding: 2px; border-radius: 999px; }
+.pill-seg button { padding: 4px 12px; border-radius: 999px; font-size: 0.82rem; }
+.pill-dd { position: relative; }
+.pill-pop { position: absolute; top: 40px; left: 0; z-index: 30; display: grid; gap: 2px; min-width: 210px; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: var(--shadow-lg); }
+.pill-pop .f-check { padding: 7px 8px; border-radius: 8px; font-weight: 500; }
+.pill-pop .f-check:hover { background: var(--accent-soft); }
+.pill-clear { border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.84rem; font-weight: 700; cursor: pointer; padding: 0 6px; }
+.pill-clear:hover { text-decoration: underline; }
+.mode-filters .filter-bar.side { display: contents; }
+.mode-filters .f-check input { margin: 0; }
+.pill-tools { display: flex; gap: 6px; margin-left: auto; }
+.pill-tools .tool-dd { position: relative; }
+.mf-field .place-pop { min-width: 260px; }
+
+/* ---------- the results heading ---------- */
+.mode-top { margin-bottom: 10px; gap: 10px; }
+.mode-top h2 { font-size: 1.05rem; }
+.mode-top .segmented-mini button { padding: 4px 10px; font-size: 0.8rem; }
+.mode-top .f-input { height: 32px; padding: 0 10px; font-size: 0.82rem; }
+.list-btn { height: 32px; padding: 0 12px; font-size: 0.82rem; }
+
+/* ---------- cards ---------- */
+body.mode-on .xcards, .xcards { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.xcard { position: relative; border-radius: var(--look-card-radius, 10px); box-shadow: none; }
+.xcard:hover { transform: none; box-shadow: 0 2px 12px rgb(0 0 0 / 0.1); }
+.card-link { color: inherit; text-decoration: none; }
+.card-link::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.xcard:hover .card-link { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.card-link:focus-visible { outline: none; }
+.xcard:has(.card-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.xcard .card-more, .xcard details { position: relative; z-index: 2; }
+.save-btn.heart { position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: rgb(255 255 255 / 0.92); color: #3a3a46; font-size: 1.05rem; line-height: 1; box-shadow: 0 1px 4px rgb(0 0 0 / 0.18); cursor: pointer; }
+.save-btn.heart:hover { transform: scale(1.08); }
+.save-btn.heart.on { color: #e11d48; }
+.xcard-img { aspect-ratio: 4 / 3; }
+.xcard.product .xcard-img { aspect-ratio: 1 / 1; background: #fff; }
+.xcard.product .xcard-img > img { object-fit: contain; padding: 8px; box-sizing: border-box; }
+.xcard-body { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px 12px; }
+.xcard-title { font-size: 0.88rem; font-weight: 500; line-height: 1.3; }
+.xcard-price { font-size: 1.12rem; font-weight: 700; }
+.facts { gap: 4px; margin-top: 2px; }
+.fact { padding: 2px 7px; font-size: 0.74rem; font-weight: 600; border-radius: 6px; }
+.xcard-sub { font-size: 0.8rem; }
+.xcard-from { display: flex; align-items: center; gap: 4px; margin: 4px 0 0; font-size: 0.72rem; color: var(--muted); min-width: 0; }
+.xcard-from .site-badge { position: static; padding: 0; background: none; box-shadow: none; color: var(--muted); font-size: 0.72rem; font-weight: 600; max-width: 100%; }
+.xcard-from .site-badge img { width: 14px; height: 14px; }
+.xcard-via { display: none; }
+/* Amazon's order: title, stars, price. realestate.com.au's: price, address, rooms. */
+.xcard.product .xcard-title { order: 1; }
+.xcard.product .facts { order: 2; }
+.xcard.product .xcard-price { order: 3; }
+.xcard.product .xcard-from { order: 4; }
+.xcard.house .xcard-price, .xcard.car .xcard-price { order: 0; }
+.xcard.house .xcard-title, .xcard.car .xcard-title { order: 1; font-weight: 600; }
+.xcard.house .facts, .xcard.car .facts { order: 2; }
+.xcard.house .xcard-from, .xcard.car .xcard-from { order: 3; }
+body[data-look="shopping"] .xcard.product .xcard-price { font-size: 1.2rem; font-weight: 500; }
+
+/* Lists: one result per row, like SEEK's job list and realestate.com.au's results. */
+.xcards.list { gap: 10px; }
+.xcards.list .xcard { grid-template-columns: 240px minmax(0, 1fr); min-height: 0; }
+.xcards.list .xcard-img { min-height: 150px; }
+.xcards.list .xcard-body { padding: 12px 52px 12px 16px; }
+.xcards.list .xcard-title { font-size: 1rem; }
+.xcards.list .xcard-price { font-size: 1.15rem; }
+.xcards.compact.list .xcard { grid-template-columns: 170px minmax(0, 1fr); }
+.xcards.compact.list .xcard-img { min-height: 110px; }
+/* A job: logo, title, company and place, pay, then work type and age in small grey (SEEK). */
+.xcards.list .xcard.job { grid-template-columns: 64px minmax(0, 1fr); }
+.xcards.list .xcard.job .xcard-img { min-height: 0; padding: 14px 0 0 14px; }
+.xcards.list .xcard.job .xcard-img > img, .job-logo { width: 44px; height: 44px; border-radius: 10px; }
+.xcards.list .xcard.job .xcard-body { padding: 12px 52px 12px 6px; gap: 2px; }
+.xcard.job .xcard-title { order: 1; font-size: 1rem; font-weight: 700; }
+.xcard.job .job-where { order: 2; display: flex; flex-wrap: wrap; gap: 0 6px; margin: 0; color: var(--fg); }
+.xcard.job .job-where span + span::before { content: "·"; margin-right: 6px; color: var(--muted); }
+.xcard.job .job-co { font-weight: 600; }
+.xcard.job .xcard-price { order: 3; font-size: 0.88rem; font-weight: 600; color: #1f7a45; }
+.xcard.job .facts { order: 4; gap: 0 6px; }
+.xcard.job .fact { padding: 0; background: none; color: var(--muted); font-weight: 500; font-size: 0.78rem; }
+.xcard.job .fact + .fact::before { content: "·"; margin-right: 6px; }
+.xcard.job .xcard-from { order: 5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .xcard.job .xcard-price { color: #6fd39a; } }
+:root[data-theme="dark"] .xcard.job .xcard-price { color: #6fd39a; }
+body[data-look="jobs"] .xcard.job { border-left-width: 3px; }
+
+/* Apps: the store's tile, with the heart in the corner instead of an Install button. */
+.xcards .xcard.app { padding: 12px; gap: 6px; }
+.xcards .xcard.app .app-head { padding-right: 30px; }
+.app-icon { width: 56px; height: 56px; }
+.app-buy { gap: 6px; }
+.app-store { flex: none; }
+.xcards.list .xcard.app .save-btn.heart { top: 50%; right: 12px; transform: translateY(-50%); background: rgb(255 255 255 / 0.08); color: #c7d5e0; box-shadow: none; }
+.xcards.list .xcard.app .app-buy { padding-right: 56px; }
+
+/* ---------- front pages ---------- */
+.landing { gap: 16px; }
+.landing-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.landing-head h2 { margin: 0; font-size: 1.15rem; letter-spacing: -0.01em; }
+.landing-head span { color: var(--muted); font-size: 0.86rem; }
+.landing-cats { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 4px; margin: 0; }
+.landing-cats::-webkit-scrollbar { display: none; }
+.landing-cat { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
+.landing-cat:hover { border-color: var(--accent); color: var(--accent); }
+.landing-cat-icon { font-size: 1rem; line-height: 1; }
+.landing-row-head { margin-bottom: 6px; }
+.landing-row-head h3 { font-size: 1rem; }
+.landing-strip { grid-auto-columns: 168px; gap: 10px; }
+.landing-strip.kind-job { grid-auto-columns: 250px; }
+.landing-strip.kind-app { grid-auto-columns: 210px; }
+.landing-strip.kind-house, .landing-strip.kind-car, .landing-strip.kind-show { grid-auto-columns: 200px; }
+.landing-skel { height: 200px; }
+.saved-strip { grid-auto-columns: 132px; }
+.saved-tile { padding: 8px; gap: 3px; }
+.saved-tile b { font-size: 0.78rem; font-weight: 600; }
+.saved-tile small { font-size: 0.72rem; }
+@media (max-width: 720px) {
+  .landing-strip { grid-auto-columns: 46%; }
+  .landing-strip.kind-job { grid-auto-columns: 80%; }
+  .xcards.list .xcard:not(.job) { grid-template-columns: 120px minmax(0, 1fr); }
+  .xcards.list .xcard:not(.job) .xcard-img { grid-row: 1; min-height: 100%; }
+  .mode-layout.top-filters .mode-filters { position: static; }
+  .pill-tools { margin-left: 0; }
+  .xcards { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  .xcards.list { grid-template-columns: 1fr !important; }
+}
+.xcard.job .facts .site-badge { position: static; padding: 0; background: none; box-shadow: none; color: var(--muted); font-size: 0.78rem; font-weight: 500; gap: 4px; }
+.xcard.job .facts .site-badge img { width: 13px; height: 13px; }
+.xcard.job .facts > * + .site-badge::before { content: "·"; margin-right: 2px; }
+.xcards.list .xcard.no-img:not(.job) { grid-template-columns: minmax(0, 1fr); }
+.xcards.list .xcard.no-img:not(.job) .xcard-img { display: none; }
+/* Every product picture the same square, whatever its shape (Amazon's grid). */
+.xcard-img { flex: none; }
+.xcard.product .xcard-img { height: auto; min-height: 0; }
+.xcard.product .xcard-img > img { height: 100%; width: 100%; }
+.mode-filters .pill-pop .f-check { height: auto; padding: 7px 8px; border: 0; border-radius: 8px; background: none; font-weight: 500; }
+.mode-filters .pill-pop .f-check:hover { background: var(--accent-soft); }

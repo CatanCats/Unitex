@@ -64,10 +64,11 @@ const AREAS = [
   ["all", "events", "Events", "🎟️", "Eventbrite, Ticketmaster", "#fff", "#1e0a3c", "#d1410c"],
   ["travel", "", "Travel", "✈️", "Flights, stays, things to do", "#003580", "#fff", "#febb02"],
 ];
+// A row of chips like "Search for": each with its icon on its site's colour, the sites it reads on hover.
 function renderAreas() {
-  $("areas").replaceChildren(...AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
-    const a = el("a", { className: "area", href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
-      el("span", { className: "area-icon", textContent: emoji, ariaHidden: "true" }), el("b", { textContent: name }), el("small", { textContent: from }), el("span", { className: "area-bar" }));
+  $("areas").replaceChildren(el("span", { className: "row-label", textContent: "Go to" }), ...AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
+    const a = el("a", { className: "chip area", title: from, href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
+      el("span", { className: "area-icon", textContent: emoji, ariaHidden: "true" }), name);
     a.style.cssText = `--area-bg:${bg};--area-fg:${fg};--area-accent:${accent}`;
     // Whatever is typed in the search box goes along: "headphones" → Shopping for headphones.
     a.onclick = () => { const q = $("q").value.trim(); if (q) a.href += "&" + new URLSearchParams({ q }); };

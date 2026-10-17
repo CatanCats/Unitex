@@ -238,7 +238,8 @@ function formMatches(c) {
       if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title} ${c.snippet || ""}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && (remoteJob || /remote|anywhere/i.test(k.location || "")))) return false;
       return true;
     case "houses":
-      if (v.type && !has(lc(`${k.type} ${t}`), v.type)) return false;
+      // A home of another stated type is hidden; one that doesn't say its type stays.
+      if (v.type && (k.type ? !has(lc(k.type), v.type) : /\b(house|apartment|unit|townhouse|villa|land|acreage)s?\b/.test(t) && !has(t, v.type))) return false;
       if (v.deal === "share" ? !/share|room|flatmate/.test(t) : v.deal && k.deal && k.deal !== v.deal) return false;
       if (v.where && !has(lc(`${k.address} ${k.area} ${t}`), firstWord(v.where))) return false;
       return true;
@@ -296,15 +297,16 @@ function applyFilters(cards) {
     const p = priceOf(c), k = c.card;
     if (F.min && (p == null || p < F.min)) return false;
     if (F.max && (p == null || p > F.max)) return false;
-    if (F.beds && !(k.beds >= F.beds)) return false;
+    // A home that doesn't say its rooms isn't hidden for them (the sites were searched for them); one that says fewer is.
+    if (F.beds && k.beds != null && !(k.beds >= F.beds)) return false;
     if (F.site && k.site !== F.site) return false;
     if (F.yearMin && !(k.year >= F.yearMin)) return false;
     if (F.salaryOnly && !k.salary) return false;
     if (F.category && k.category !== F.category && k.cuisine !== F.category) return false;
     if (F.genre && !(k.genres || []).includes(F.genre)) return false;
     if (F.ratingMin && !(k.rating >= F.ratingMin)) return false;
-    if (F.baths && !(k.baths >= F.baths)) return false;
-    if (F.carsMin && !(k.cars >= F.carsMin)) return false;
+    if (F.baths && k.baths != null && !(k.baths >= F.baths)) return false;
+    if (F.carsMin && k.cars != null && !(k.cars >= F.carsMin)) return false;
     if (F.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") * (k.kmUnit === "mi" ? 1.609 : 1) <= F.kmMax)) return false;
     if (F.priced && p == null) return false;
     // A store searched with the condition (Amazon, eBay) only returned that condition, even when an item doesn't say.
@@ -378,6 +380,8 @@ function filterBar(topic, cards, side = false) {
 
 // ---------- the cards ----------
 
+// "PACK$383", "Now: $1,299.00 inc GST" → "$383", "$1,299.00": the price itself, as the shop shows it.
+const tidyPrice = p => p && (String(p).match(/(?:\b(?:AU|US|NZ|CA|A|C)\s?)?\$\s?\d[\d,]*(?:\.\d{2})?(?:\s?(?:–|-|to)\s?\$\s?\d[\d,]*(?:\.\d{2})?)?/)?.[0] || p);
 const fact = (icon, value, label) => value != null && value !== "" && el("span", { className: "fact", title: label }, icon, " ", String(value));
 
 function siteBadge(c) {
@@ -385,9 +389,10 @@ function siteBadge(c) {
   return el("span", { className: "site-badge" }, domainIcon(d), c.card.site || d);
 }
 
+// A heart in the card's corner, like the shops' and job sites' "save" (the whole card opens the listing).
 function saveButton(c, topic) {
-  const b = el("button", { type: "button", className: "save-btn" });
-  const paint = () => { const on = saved.has(c.url); b.textContent = on ? "♥ Saved" : "♡ Save"; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); };
+  const b = el("button", { type: "button", className: "save-btn heart" });
+  const paint = () => { const on = saved.has(c.url); b.textContent = on ? "♥" : "♡"; b.title = on ? "Saved: tap to remove" : "Save"; b.ariaLabel = on ? "Remove from your list" : "Save to your list"; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); };
   b.onclick = e => { e.preventDefault(); saved.toggle({ url: c.url, title: cardTitle(c), image: c.image, price: c.card.price, facts: cardFacts(c), site: c.card.site || host(c.url), topic: topic.id }); paint(); if (listOpen) drawCards(); else $("cards").querySelector(".list-btn")?.replaceWith(listButton(topic)); };
   paint();
   return b;
@@ -419,7 +424,7 @@ function renderAppCard(c, topic, url) {
     el("div", { className: "app-head" },
       img(k.icon, "app-icon") || el("span", { className: "app-icon app-letter", textContent: (k.name || "?").charAt(0).toUpperCase() }),
       el("div", { className: "app-text" },
-        el("h3", { className: "app-name" }, el("a", { href: url, rel: "noopener", textContent: k.name })),
+        el("h3", { className: "app-name" }, cardLink(c, topic, url, k.name)),
         el("p", { className: "app-dev", textContent: [k.developer, k.category].filter(Boolean).join(" · ") }),
         el("p", { className: "app-meta" },
           k.rating && el("span", { className: "app-stars", textContent: `${k.rating} ★` }),
@@ -431,9 +436,18 @@ function renderAppCard(c, topic, url) {
       open && el("span", { className: "app-oss", textContent: k.license && !/^open source$/i.test(k.license) ? `Open source · ${k.license}` : "Open source" })),
     el("div", { className: "app-buy" },
       el("span", { className: "app-store", textContent: k.site }),
-      el("span", { className: "app-pricebox" }, k.discount && el("span", { className: "app-discount", textContent: k.discount }), el("span", { className: "app-price", textContent: k.price || "See store" })),
-      el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: k.free ? "Install" : k.game ? "View game" : "View app" }),
-      saveButton(c, topic)));
+      el("span", { className: "app-pricebox" }, k.discount && el("span", { className: "app-discount", textContent: k.discount }), el("span", { className: "app-price", textContent: k.price || "See store" }))),
+    saveButton(c, topic));
+}
+
+// The card's title is its link, stretched over the whole card (CSS), as the shops and job sites do.
+// Opening one remembers it for "Recently viewed" on the area's front page.
+const viewedItems = () => store.get("unitex.viewed", []);
+function cardLink(c, topic, url, text) {
+  return el("a", { className: "card-link", href: url, rel: "noopener", textContent: text, onclick() {
+    store.set("unitex.viewed", [{ url, title: cardTitle(c), image: c.image || c.card.icon, price: c.card.price || c.card.salary, site: c.card.site || host(url), topic: topic.id, t: Date.now() },
+      ...viewedItems().filter(v => v.url !== url)].slice(0, 30));
+  } });
 }
 
 function renderCard(c, topic) {
@@ -443,21 +457,21 @@ function renderCard(c, topic) {
   if (k.kind === "app") return renderAppCard(c, topic, url);
   const img = c.image ? el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
     : k.kind === "job" && k.company ? el("span", { className: "job-logo", textContent: k.company.trim().charAt(0).toUpperCase() }) : null;
-  const open = el("a", { className: "btn-primary card-open", href: url, rel: "noopener", textContent: { house: "View listing", product: `Buy at ${k.site || "store"}`, car: "View car", job: "View job", recipe: "Full recipe", show: "Show info", event: "Get tickets" }[k.kind] || "Open" });
   const facts = {
     house: [fact("🛏", k.beds, "Bedrooms"), fact("🛁", k.baths, "Bathrooms"), fact("🚗", k.cars, "Car spaces"), k.type && el("span", { className: "fact" }, k.type)],
     product: [k.rating && fact("★", k.reviews ? `${k.rating} (${k.reviews})` : k.rating, "Rating"), k.condition && el("span", { className: "fact", textContent: k.condition })],
     car: [fact("📅", k.year, "Year"), fact("🛣", k.km && `${k.km} ${k.kmUnit || "km"}`, k.kmUnit === "mi" ? "Miles" : "Kilometres"), fact("⚙️", k.gearbox, "Transmission")],
-    job: [fact("🏢", k.company, "Company"), fact("📍", k.location, "Location"), fact("🕒", k.worktype, "Work type"), k.posted && !isNaN(Date.parse(k.posted)) && fact("📅", ago(Date.parse(k.posted) / 1000), "Posted")],
+    // Like SEEK: the company and place as plain lines, the work type and age small underneath.
+    job: [k.worktype && el("span", { className: "fact", textContent: k.worktype }), k.posted && !isNaN(Date.parse(k.posted)) && el("span", { className: "fact", textContent: ago(Date.parse(k.posted) / 1000) })],
     recipe: [fact("🍽", k.category, "Category"), fact("🌍", k.cuisine, "Cuisine"), fact("⏱", k.time, "Time"), fact("★", k.rating, "Rating"), k.ingredients && fact("🧂", `${k.ingredients.length} ingredients`, "Ingredients")],
     show: [fact("📅", k.years, "Years"), fact("★", k.rating, "Rating"), fact("📺", k.network, "Network"), fact("🎭", k.stars, "Stars")],
     event: [fact("📅", k.when && (({ t, dateOnly }) => isNaN(t) ? k.when : new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", ...(dateOnly ? {} : { hour: "numeric", minute: "2-digit" }) }))(eventTime(k.when)), "When"), fact("📍", [k.venue, k.place].filter(Boolean).join(", "), "Where")],
   }[k.kind] || [];
   const headline = {
     house: k.price || "Price on request",
-    product: k.price || "See price at store",
-    car: k.price || "Price on request",
-    job: k.salary || "Salary not listed",
+    product: tidyPrice(k.price) || "See price at store",
+    car: tidyPrice(k.price) || "Price on request",
+    job: k.salary, // like SEEK: no pay line when the ad doesn't say
     event: k.price || "",
   }[k.kind];
   const extra = k.kind === "recipe" && k.ingredients?.length && el("details", { className: "card-more" },
@@ -466,16 +480,19 @@ function renderCard(c, topic) {
     k.method && el("p", { textContent: k.method }));
   const showExtra = k.kind === "show" && k.summary && el("p", { className: "card-summary", textContent: short(k.summary, 180) });
   const genres = k.kind === "show" && k.genres?.length && el("div", { className: "card-tags" }, ...k.genres.map(g => el("span", { textContent: g })));
+  const via = viaLabel(c.via, c.url, k.site);
   return el("article", { className: `xcard ${k.kind}${c.image || k.kind === "job" ? "" : " no-img"}` },
-    el("div", { className: "xcard-img" }, img, siteBadge(c), k.deal && el("span", { className: "deal-badge", textContent: k.deal === "rent" ? "For rent" : "For sale" })),
+    el("div", { className: "xcard-img" }, img, k.deal && el("span", { className: "deal-badge", textContent: k.deal === "rent" ? "For rent" : "For sale" })),
     el("div", { className: "xcard-body" },
-      headline && el("div", { className: "xcard-price", textContent: headline }),
-      el("h3", { className: "xcard-title", textContent: cardTitle(c) }),
+      el("h3", { className: "xcard-title" }, cardLink(c, topic, url, cardTitle(c))),
+      k.kind === "job" && (k.company || k.location) && el("p", { className: "xcard-sub job-where" }, k.company && el("span", { className: "job-co", textContent: k.company }), k.location && el("span", { textContent: k.location })),
       k.area && el("p", { className: "xcard-sub", textContent: k.area }),
-      facts.some(Boolean) && el("div", { className: "facts" }, ...facts),
+      headline && el("div", { className: "xcard-price", textContent: headline }),
+      // A job's site goes on its small grey line ("Casual · 4d ago · SEEK"); other cards get their own line.
+      (facts.some(Boolean) || k.kind === "job") && el("div", { className: "facts" }, ...facts, k.kind === "job" && siteBadge(c)),
       genres, showExtra, extra,
-      viaLabel(c.via, c.url, k.site) && el("p", { className: "xcard-via", textContent: "found by " + viaLabel(c.via, c.url, k.site) })),
-    el("div", { className: "xcard-actions" }, open, saveButton(c, topic)));
+      k.kind !== "job" && el("p", { className: "xcard-from" }, siteBadge(c), via && el("span", { className: "xcard-via", textContent: "· found by " + via }))),
+    saveButton(c, topic));
 }
 
 // ---------- your list & compare ----------
@@ -640,24 +657,47 @@ function formFilters(topicIdNow) {
     filters = { ...filters, ...(form.filters ? form.filters(v) : {}) }; lastTopic = topicId;
     go();
   };
+  // A row of pills, like SEEK's and realestate.com.au's filter bar: each shows its name until it's set, then its value.
+  const toggleChecked = (k, val, on) => { v[k] = on ? [...(v[k] || []), val] : (v[k] || []).filter(x => x !== val); apply(); };
   const control = (k, f) => {
     if (f.type === "seg") {
       const cur = v[k] ?? f.options[0][0];
-      return el("div", { className: "segmented-mini wide" }, ...f.options.map(([val, t]) => el("button", { type: "button", textContent: t, className: val === cur ? "on" : "", onclick() { v[k] = val; apply(); } })));
+      return el("div", { className: "segmented-mini pill-seg", role: "group", ariaLabel: f.label || k }, ...f.options.map(([val, t]) => el("button", { type: "button", textContent: t, className: val === cur ? "on" : "", onclick() { v[k] = val; apply(); } })));
     }
-    if (f.type === "checks") return el("div", { className: "tf-checks col" }, ...f.options.map(([val, t]) => el("label", { className: "f-check" },
-      el("input", { type: "checkbox", checked: (v[k] || []).includes(val), onchange() { v[k] = this.checked ? [...(v[k] || []), val] : (v[k] || []).filter(x => x !== val); apply(); } }), " " + t)));
-    if (f.type === "select") { const s = el("select", { className: "f-input" }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: t, selected: (v[k] || "") === val }))); s.onchange = () => { v[k] = s.value; apply(); }; return s; }
-    const inp = el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "" });
+    if (f.type === "checks") {
+      const picked = many(v[k]);
+      // One option ("Where to watch"): a pill that turns on and off.
+      if (f.options.length === 1) { const [val, t] = f.options[0]; return el("button", { type: "button", className: "pill" + (picked.includes(val) ? " on" : ""), ariaPressed: String(picked.includes(val)), textContent: t, onclick: () => toggleChecked(k, val, !picked.includes(val)) }); }
+      // Several: a pill that opens its ticks ("Work type ▾", "Casual ▾", "Work type (2) ▾").
+      const name = f.label || "Options", open = openPill === topicIdNow + ":" + k;
+      return el("div", { className: "pill-dd" },
+        el("button", { type: "button", className: "pill" + (picked.length ? " on" : ""), ariaExpanded: String(open), onclick: e => { e.stopPropagation(); openPill = open ? "" : topicIdNow + ":" + k; drawCards(); } },
+          picked.length === 1 ? picked[0] : picked.length ? `${name} (${picked.length})` : name, " ▾"),
+        open && el("div", { className: "pill-pop", onclick: e => e.stopPropagation() }, ...f.options.map(([val, t]) => el("label", { className: "f-check" },
+          el("input", { type: "checkbox", checked: picked.includes(val), onchange() { toggleChecked(k, val, this.checked); } }), " " + t))));
+    }
+    if (f.type === "select") {
+      // The empty choice reads as the filter's name ("Experience"), so the pill says what it is.
+      const s = el("select", { className: "pill" + (v[k] ? " on" : ""), ariaLabel: f.label }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: val === "" ? (f.label || t) : t, selected: (v[k] || "") === val })));
+      s.onchange = () => { v[k] = s.value; apply(); };
+      return s;
+    }
+    const inp = el("input", { className: "pill pill-input" + (v[k] ? " on" : "") + (k === "where" ? " wide" : ""), type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined,
+      placeholder: k === "where" ? (f.placeholder || f.label) : f.label || f.placeholder || "", ariaLabel: f.label, value: v[k] || "" });
     inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); v[k] = inp.value.trim(); apply(); } };
     // Enter already applied it (and redrew the form, which blurs this field and fires change again).
     inp.onchange = () => { if (inp.value.trim() === (v[k] || "")) return; v[k] = inp.value.trim(); apply(); };
     if (k === "where") placeSuggest(inp, place => { inp.value = place; v[k] = place; apply(); });
     return inp;
   };
-  return el("div", { className: "mf-form" }, ...Object.entries(form.fields).map(([k, f]) => el("label", { className: "mf-field" }, f.label && el("span", { textContent: f.label }), control(k, f))),
-    el("button", { type: "button", className: "btn-ghost mf-clear", textContent: "Clear filters", onclick: () => { store.set(key, {}); filters = {}; query = form.build({}) || query; store.set(key, { _q: query }); go(); } }));
+  // The search box at the top is the keywords, so the bar starts with the filters themselves.
+  const shown = Object.entries(form.fields).filter(([k]) => k !== "what");
+  const anySet = shown.some(([k, f]) => f.type !== "seg" && many(v[k]).length);
+  return el("div", { className: "mf-form pill-bar" }, ...shown.map(([k, f]) => el("div", { className: "mf-field" + (f.type === "number" || k === "where" ? " has-pop" : "") }, control(k, f))),
+    anySet && el("button", { type: "button", className: "pill-clear", textContent: "Clear", onclick: () => { store.set(key, {}); filters = {}; query = form.build({ what: v.what }) || query; store.set(key, { _q: query }); go(); } }));
 }
+let openPill = ""; // the filter pill whose ticks are open ("jobs:worktype")
+document.addEventListener("click", e => { if (openPill && !e.target.closest(".pill-dd")) { openPill = ""; if (typeof drawCards === "function" && MODES[topicId]) drawCards(); } });
 
 // "12 homes for rent in Brunswick VIC", like the listing sites' headline.
 function cardsHeadline(topic, n) {
@@ -702,9 +742,10 @@ function drawCards() {
   const side = modeOn && el("aside", { className: "mode-filters" + (filtersOpen ? " open" : "") },
     el("button", { type: "button", className: "mf-toggle", ariaExpanded: String(filtersOpen), onclick: () => { filtersOpen = !filtersOpen; drawCards(); } },
       el("span", { textContent: "⚙ Filters" + (setCount ? ` (${setCount})` : "") }), el("span", { textContent: filtersOpen ? "▴" : "▾" })),
-    el("h3", { textContent: "Filters" }),
     formFilters(topic.id),
-    extras);
+    extras,
+    // The engines and sites, and the country, sit at the end of the same bar.
+    el("div", { className: "pill-tools" }, sourcesPicker(), countrySelect()));
   const top = el("div", { className: "mode-top" },
     query && el("h2", { textContent: cardsHeadline(topic, shown.length) }),
     query && lastCards.length > shown.length && el("span", { className: "hint mode-hidden", textContent: `${lastCards.length - shown.length} hidden: they don't match your filters` }),
@@ -721,8 +762,8 @@ function drawCards() {
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
     shown.length > 0 && moreBtn);
-  // Apps have their filters in a row across the top, like the app stores; the others down the left.
-  fill(box, modeOn ? el("div", { className: "mode-layout" + (TOPIC_FORMS[topic.id]?.top ? " top-filters" : "") }, side, main) : main);
+  // The filters are a bar of pills across the top, like the job, property and app stores' own sites.
+  fill(box, modeOn ? el("div", { className: "mode-layout top-filters" }, side, main) : main);
   box.hidden = !lastCards.length && !modeOn;
 }
 
@@ -842,8 +883,7 @@ const TOPIC_FORMS = {
     build: v => words(v.condition === "used" && "used", v.brand, v.what),
     filters: v => ({ min: priceNum(v.min), max: priceNum(v.max), condition: v.condition || undefined, ratingSel: v.rating || undefined }) },
 
-  // Laid out as a row of filters above the apps, like the app stores' own chips.
-  apps: { title: "📱 Find an app", top: true, fields: {
+  apps: { title: "📱 Find an app", fields: {
       what: { label: "App or game", placeholder: "e.g. photo editor, or VLC", wide: true },
       platform: anyOf("Platform", ["Android", "iPhone & iPad", "Windows", "Mac", "Linux"]),
       license: { type: "select", label: "Licence", options: opt([["", "Any licence"], ["free", "Free"], ["paid", "Paid"], ["open", "Open source"]]) },

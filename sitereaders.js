@@ -101,7 +101,8 @@ function cardsFromPage(html, base, kind, site) {
       const img = a.querySelector("img") || a.closest("article, li, div")?.querySelector("img");
       const title = (a.querySelector("h2, h3, h4")?.textContent || a.getAttribute("aria-label") || a.textContent || "").replace(/\s+/g, " ").trim();
       if (!img || title.length < 8 || title.length > 140) continue;
-      if (kind === "house" && !/\d/.test(title)) continue; // an address has a number ("12 Smith St"); an agent's name doesn't
+      // An address has a number ("12 Smith St"); an agent's name doesn't, and a price ("$990.00 Per Week") isn't one.
+      if (kind === "house" && (!/\d/.test(title) || /^\$|per (week|month)|\bpw\b/i.test(title))) continue;
       seen.add(url);
       const image = typeof bestImg === "function" ? bestImg(img, base) : img.getAttribute("src");
       out.push({ title, url, image, domain: hostOf(url), via: site, card: kind === "house" ? { kind, address: title, site } : { kind, name: title, site } });
@@ -109,15 +110,24 @@ function cardsFromPage(html, base, kind, site) {
     }
   }
   if (!out.length && typeof botCheck === "function" && botCheck(html)) throw new Error(`asked for a bot check (open ${site} once yourself to clear it)`);
-  // A home whose data has no price: the price printed on the page next to it ("$1,800 pw" after its address or link).
+  // A home whose data has no price or rooms: what's printed on the page next to it ("$1,800 pw", "3 bed 2 bath 1 car", "House").
   if (kind === "house") for (const c of out) {
-    if (c.card.price) continue;
+    if (c.card.price && c.card.beds != null) continue;
     let path = ""; try { path = new URL(c.url).pathname; } catch {}
     const at = [c.title, path].map(s => s && html.indexOf(s.slice(0, 40))).find(i => i > 0);
     // Up to the next listing's link (photo carousels make one card thousands of characters long).
     const folder = path.split("/").slice(0, 2).join("/") + "/", next = folder.length > 2 ? html.indexOf(`"${folder}`, at + 60) : -1;
-    const near = at > 0 && html.slice(at, next > at ? Math.min(next, at + 40000) : at + 15000).replace(/<[^>]+>/g, " ").match(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s*(?:-|–|to)\s*\$?\s?\d[\d,]*)?\s*(?:pw|p\.w\.|per week|\/\s?w(?:ee)?k|pcm|per month|k|m)?\b/i)?.[0];
-    if (near) c.card.price = near.replace(/\s+/g, " ").trim();
+    if (!(at > 0)) continue;
+    // Its card's text, with the attribute labels sites put on their room icons ("aria-label="3 bedrooms"").
+    const text = html.slice(at, next > at ? Math.min(next, at + 40000) : at + 15000).replace(/<[^>]*\baria-label="([^"]*)"[^>]*>/g, " $1 ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|\s+/g, " ");
+    const price = text.match(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s*(?:-|–|to)\s*\$?\s?\d[\d,]*)?\s*(?:pw|p\.w\.|per week|\/\s?w(?:ee)?k|pcm|per month|k|m)?\b/i)?.[0];
+    const count = re => { const n = text.match(re)?.[1]; return n == null ? undefined : +n; };
+    if (price && !c.card.price) c.card.price = price.replace(/\s+/g, " ").trim();
+    c.card.beds ??= count(/\b(\d{1,2})\s*(?:bed(?:room)?s?|br)\b/i);
+    c.card.baths ??= count(/\b(\d{1,2})\s*(?:bath(?:room)?s?)\b/i);
+    c.card.cars ??= count(/\b(\d{1,2})\s*(?:car(?:\s?(?:space|spot|park))?s?|parking(?:\s?spaces?)?|garages?)\b/i);
+    // The type only when this really is the listing's card (its price or rooms were found too), not a menu's "House".
+    if (price || c.card.beds != null) c.card.type ??= text.match(/\b(House|Apartment|Unit|Townhouse|Villa|Studio|Duplex|Flat|Land|Acreage)\b/)?.[1];
   }
   return out;
 }
