@@ -22,6 +22,9 @@ ALLOWED_HOSTS.push("flatmates.com.au", "v3.sg.media-imdb.com", "view.com.au", "w
 // More news: Teslarati, Electrek, CleanTechnica, InsideEVs, Rest of World, Global Voices, Democracy Now!,
 // Wikinews, Tildes, and community feeds on Lemmy and Mastodon.
 ALLOWED_HOSTS.push("cleantechnica.com", "electrek.co", "en.wikinews.org", "globalvoices.org", "insideevs.com", "lemmy.ml", "lemmy.world", "mander.xyz", "mastodon.social", "restofworld.org", "tildes.net", "www.democracynow.org", "www.teslarati.com");
+// The only address the helper may send a form to: Google News's own link decoder, which turns a
+// news.google.com/rss/articles/… link into the real article address.
+const POST_URLS = ["https://news.google.com/_/DotsSplashUi/data/batchexecute"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {
@@ -32,7 +35,11 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
-  fetch(url, { credentials: "include", signal: ctrl.signal, headers: { Accept: "text/html,application/xhtml+xml" } })
+  if (msg.post != null && !POST_URLS.some(p => url.href.startsWith(p))) { reply({ error: "not allowed" }); clearTimeout(timer); return; }
+  const init = msg.post != null
+    ? { method: "POST", credentials: "include", signal: ctrl.signal, headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" }, body: String(msg.post) }
+    : { credentials: "include", signal: ctrl.signal, headers: { Accept: "text/html,application/xhtml+xml" } };
+  fetch(url, init)
     .then(async r => reply({ status: r.status, url: r.url, html: (await r.text()).slice(0, 3_000_000) }))
     .catch(err => reply({ error: String(err) }))
     .finally(() => clearTimeout(timer));

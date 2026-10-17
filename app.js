@@ -164,6 +164,7 @@ function renderNews() {
     const lead = items.slice(0, 6).findIndex(i => i.image); // only a top story leads, not an old one further down
     const order = lead > 0 ? [items[lead], ...items.filter((_, n) => n !== lead)] : items;
     list.replaceChildren(...order.slice(0, shown).map((i, n) => card(i, n === 0)));
+    fixGoogleNewsLinks(list); // straight to the article, not through news.google.com
     if (order.length > shown) list.append(el("li", { className: "more-row" }, el("button", { type: "button", className: "show-more", textContent: "Show more news", onclick() { shown += PAGE; renderNews(); } })));
   }
   renderNewsStatus();

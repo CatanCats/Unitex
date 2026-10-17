@@ -308,7 +308,7 @@ function drawTab() {
   else if (v === "books") { fill(grid, ...list.map(bookCard)); grid.className = "media-grid books"; grid.hidden = false; }
   else if (v === "papers") results.replaceChildren(...list.map(paperItem));
   else if (v === "maps") results.replaceChildren(el("li", { className: "places-li" }, list.length ? drawPlaces(list) : queryMap()));
-  else if (v === "news") results.replaceChildren(...list.map(newsItem).filter(Boolean));
+  else if (v === "news") { results.replaceChildren(...list.map(newsItem).filter(Boolean)); fixGoogleNewsLinks(results); }
   else results.replaceChildren(...list.map(resultItem).filter(Boolean));
 
   $("status").textContent = list.length ? `Showing ${list.length} ${t.noun}` : "";

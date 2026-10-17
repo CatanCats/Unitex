@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Unitex Helper",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek, Yandex and SearXNG, live news from Google News, Bing News, Yahoo News and news websites, and products from stores, by loading their pages in your own browser.",
   "host_permissions": [
     "https://www.google.com/*",

@@ -22,7 +22,7 @@ function helperFetch(url, ms = 12000) {
   return p;
 }
 
-function helperFetchNow(url, ms) {
+function helperFetchNow(url, ms, post) {
   return new Promise((resolve, reject) => {
     if (!helperVersion()) return reject(new Error("Unitex Helper not installed"));
     const id = ++helperSeq;
@@ -33,7 +33,7 @@ function helperFetchNow(url, ms) {
       if (why) reject(new Error(why));
       else resolve(res);
     });
-    window.postMessage({ type: "unitex-helper-fetch", id, url }, location.origin);
+    window.postMessage({ type: "unitex-helper-fetch", id, url, ...(post != null ? { post } : {}) }, location.origin);
   });
 }
 
@@ -696,3 +696,63 @@ const HELPER_VERTICALS = {
     }},
   },
 };
+
+
+// ---------- Google News links → the article itself ----------
+// Google News feeds link to news.google.com/rss/articles/<id>. Older ids carry the article's address
+// inside them; newer ones are turned into it by Google News's own decoder (Unitex Helper 1.9+).
+const GN_ARTICLE = /^https:\/\/news\.google\.com\/(?:rss\/)?(?:articles|read)\/([A-Za-z0-9_-]+)/;
+const gnCache = (() => { try { return JSON.parse(localStorage.getItem("unitex.gnlinks") || "{}"); } catch { return {}; } })();
+function gnRemember(id, url) {
+  gnCache[id] = url;
+  const keys = Object.keys(gnCache);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 400))) delete gnCache[k];
+  try { localStorage.setItem("unitex.gnlinks", JSON.stringify(gnCache)); } catch {}
+}
+function gnFromId(id) {
+  try {
+    const bin = atob(id.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(id.length / 4) * 4, "="));
+    if (/AU_yqL/.test(bin)) return null; // the newer kind: needs Google News's decoder
+    return bin.match(/https?:\/\/[\x21-\x7e]+/)?.[0] || null;
+  } catch { return null; }
+}
+async function resolveGoogleNews(link) {
+  const id = String(link).match(GN_ARTICLE)?.[1];
+  if (!id) return link;
+  if (gnCache[id]) return gnCache[id];
+  let real = gnFromId(id);
+  if (!real && helperVersion() && !versionLess(helperVersion(), "1.9.0")) {
+    const page = await helperFetch(`https://news.google.com/rss/articles/${id}`);
+    const box = new DOMParser().parseFromString(page.html, "text/html").querySelector("[data-n-a-sg][data-n-a-ts]");
+    if (!box) throw new Error("no decoder data");
+    const req = ["garturlreq", [["X", "X", ["X", "X"], null, null, 1, 1, "US:en", null, 1, null, null, null, null, null, 0, 1], "X", "X", 1, [1, 1, 1], 1, 1, null, 0, 0, null, 0],
+      id, +box.getAttribute("data-n-a-ts"), box.getAttribute("data-n-a-sg")];
+    const body = "f.req=" + encodeURIComponent(JSON.stringify([[["Fbv4je", JSON.stringify(req), null, "generic"]]]));
+    const res = await helperFetchNow("https://news.google.com/_/DotsSplashUi/data/batchexecute", 10000, body);
+    const rows = JSON.parse(res.html.replace(/^\)\]\}'\s*/, "").split("\n").find(l => l.startsWith("[")) || "[]");
+    real = JSON.parse(rows.find(r => r[1] === "Fbv4je")?.[2] || "[]")[1];
+  }
+  if (!/^https?:\/\//.test(real || "") || GN_ARTICLE.test(real)) return link;
+  gnRemember(id, real);
+  return real;
+}
+// Swaps every Google News link inside root for the article's own address, a couple at a time.
+const gnQueue = [];
+let gnBusy = 0;
+function fixGoogleNewsLinks(root) {
+  for (const a of root?.querySelectorAll?.("a[href*='news.google.com/']") || []) {
+    const id = a.href.match(GN_ARTICLE)?.[1];
+    if (!id) continue;
+    if (gnCache[id]) { a.href = gnCache[id]; continue; }
+    if (!a.dataset.gnQueued) { a.dataset.gnQueued = 1; gnQueue.push(a); }
+  }
+  const next = () => {
+    if (gnBusy >= 2 || !gnQueue.length) return;
+    const a = gnQueue.shift();
+    gnBusy++;
+    resolveGoogleNews(a.href).then(u => { for (const x of document.querySelectorAll(`a[href="${CSS.escape(a.href)}"]`)) x.href = u; a.href = u; }, () => {})
+      .finally(() => { gnBusy--; next(); });
+    next();
+  };
+  next();
+}

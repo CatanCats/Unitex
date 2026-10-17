@@ -7,8 +7,8 @@ document.documentElement.dataset.unitexHelper = api.runtime.getManifest().versio
 
 window.addEventListener("message", e => {
   if (e.source !== window || e.data?.type !== "unitex-helper-fetch") return;
-  const { id, url } = e.data;
-  api.runtime.sendMessage({ url }, res => {
+  const { id, url, post } = e.data;
+  api.runtime.sendMessage(post != null ? { url, post } : { url }, res => {
     const error = api.runtime.lastError?.message;
     window.postMessage({ type: "unitex-helper-result", id, ...(res || { error: error || "no response" }) }, location.origin);
   });
