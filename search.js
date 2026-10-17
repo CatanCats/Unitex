@@ -526,11 +526,17 @@ function fuse(lists) {
 }
 
 // "Python (programming language) - Wikipedia" → "Python (programming language)": the site's name is shown above.
+// The site's own name is learned from there too: "… - Better Homes and Gardens" on bhg.com.au, "… | Swans Plumbing" on swansplumbing.com.au.
+const learnedNames = new Map();
 function tidyTitle(t, url) {
   const m = String(t || "").match(/^(.{2,}?)\s+[-|–—·:]\s+([^-|–—·]{2,40})$/);
   if (!m) return t;
   const tail = m[2].toLowerCase().replace(/[^a-z0-9]/g, ""), h = host(url).toLowerCase().replace(/[^a-z0-9]/g, ""), name = siteName(url).toLowerCase().replace(/[^a-z0-9]/g, "");
-  return tail && (h.includes(tail) || tail.includes(name) || name.includes(tail)) ? m[1] : t;
+  const root = (siteRoot(url) || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const initials = m[2].split(/[\s&]+/).filter(w => w && !/^(and|of|the|for)$/i.test(w)).map(w => w[0].toLowerCase()).join("");
+  const isSite = tail && (h.includes(tail) || tail.includes(name) || name.includes(tail) || (root.length >= 2 && initials === root));
+  if (isSite && root && /[A-Z]/.test(m[2]) && !learnedNames.has(root)) learnedNames.set(root, m[2].trim());
+  return isSite ? m[1] : t;
 }
 
 // Take turns between sources, dropping repeats.
@@ -553,11 +559,21 @@ function viaText(via) {
 }
 
 // "en.wikipedia.org" → "Wikipedia", "www.abc.net.au" → "Abc"; known sites by name.
-const SITE_NAMES = { "wikipedia.org": "Wikipedia", "reddit.com": "Reddit", "news.ycombinator.com": "Hacker News", "github.com": "GitHub", "stackoverflow.com": "Stack Overflow", "youtube.com": "YouTube", "abc.net.au": "ABC", "bbc.com": "BBC", "bbc.co.uk": "BBC", "theguardian.com": "The Guardian", "nytimes.com": "The New York Times" };
+const SITE_NAMES = { "wikipedia.org": "Wikipedia", "reddit.com": "Reddit", "news.ycombinator.com": "Hacker News", "github.com": "GitHub", "stackoverflow.com": "Stack Overflow", "youtube.com": "YouTube", "abc.net.au": "ABC", "bbc.com": "BBC", "bbc.co.uk": "BBC", "theguardian.com": "The Guardian", "nytimes.com": "The New York Times",
+  "news.com.au": "news.com.au", "smh.com.au": "The Sydney Morning Herald", "theage.com.au": "The Age", "afr.com": "Australian Financial Review", "theaustralian.com.au": "The Australian", "9news.com.au": "9News", "7news.com.au": "7NEWS",
+  "sbs.com.au": "SBS", "heraldsun.com.au": "Herald Sun", "dailytelegraph.com.au": "The Daily Telegraph", "couriermail.com.au": "The Courier-Mail", "perthnow.com.au": "PerthNow", "watoday.com.au": "WAtoday", "brisbanetimes.com.au": "Brisbane Times",
+  "canberratimes.com.au": "The Canberra Times", "crikey.com.au": "Crikey", "theconversation.com": "The Conversation", "finance.yahoo.com": "Yahoo Finance", "news.yahoo.com": "Yahoo News", "yahoo.com": "Yahoo", "reuters.com": "Reuters", "apnews.com": "AP News",
+  "bloomberg.com": "Bloomberg", "cnn.com": "CNN", "cnbc.com": "CNBC", "washingtonpost.com": "The Washington Post", "wsj.com": "The Wall Street Journal", "ft.com": "Financial Times", "economist.com": "The Economist", "rnz.co.nz": "RNZ", "nzherald.co.nz": "NZ Herald",
+  "stuff.co.nz": "Stuff", "cbc.ca": "CBC", "aljazeera.com": "Al Jazeera", "skynews.com.au": "Sky News Australia", "news.sky.com": "Sky News", "rba.gov.au": "Reserve Bank of Australia", "amazon.com.au": "Amazon", "ebay.com.au": "eBay" };
+// Lines a news or shop page puts in front of every article, picked up as the snippet: dropped.
+const SNIPPET_JUNK = /\b(you have reached your maximum number of saved items\.?\s*remove items from your saved list to add more\.?|save this article for later\.?|add articles to your saved list and come back to them any time\.?|sign up (now )?for (our|the) [\w ]{2,30}newsletter\.?|we use cookies[^.]*\.|this article is more than \d+ (years?|months?) old\.?|subscribe (now )?to (continue|read)[^.]*\.)\s*/gi;
+const cleanSnippet = s => String(s || "").replace(SNIPPET_JUNK, "").replace(/^\s*[.·•|-]\s*/, "").trim();
 function siteName(url) {
   const h = host(url);
   const k = Object.keys(SITE_NAMES).find(d => h === d || h.endsWith("." + d));
   if (k) return SITE_NAMES[k];
+  const learned = learnedNames.get((siteRoot(url) || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  if (learned) return learned;
   const root = siteRoot(url) || h;
   return root.charAt(0).toUpperCase() + root.slice(1);
 }
@@ -591,7 +607,7 @@ function resultItem(r) {
         el("span", { className: "r-who" }, el("strong", { textContent: r.outlet && /news\.google\.com/.test(url) ? r.outlet : siteName(url) }),
           el("span", { className: "r-site", textContent: /news\.google\.com/.test(url) ? (r.domain && !/google/.test(r.domain) ? r.domain : "") : `${new URL(url).origin}${path.length > 1 && breadcrumb(url) ? " › " + breadcrumb(url) : ""}` }))),
       el("a", { className: "r-title", href: url, rel: "noopener", textContent: r.title }),
-      r.snippet && el("p", { className: "r-snippet" }, ...highlighted(r.snippet, query)),
+      cleanSnippet(r.snippet) && el("p", { className: "r-snippet" }, ...highlighted(cleanSnippet(r.snippet), query)),
       el("p", { className: "r-meta" }, viaLabel(via, pageOf(r, url), r.outlet) && el("span", { className: "via", textContent: "found by " + viaLabel(via, pageOf(r, url), r.outlet) }), r.meta && el("span", { textContent: r.meta }))),
     (r.image || r.thumb) && el("img", { className: "r-thumb", src: r.image || r.thumb, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
 }
@@ -1020,8 +1036,8 @@ async function go() {
   else $("topic-form").hidden = true;
   if (modeOn) { panelState = { settled: [], sources: { ...cardSourcesFor(topicId), ...MAIN_SOURCES }, locked: [] }; lastCards = []; drawCards(); }
   renderTopicSites();
-  if (query) rememberSearch(query);
-  if (!query) { $("status").textContent = TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
+  if (query) { rememberSearch(query); if (modeOn) rememberAreaSearch(topicId, query); }
+  if (!query) { $("status").textContent = modeOn ? "" : TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
 
   if (c.kind === "ai") {
@@ -1054,7 +1070,9 @@ async function go() {
     tabLimit = step;
     // Show items as each source answers.
     let soFar = [];
-    const paint = throttled(() => { if (id === runId && soFar.some(s => s.r?.length)) showTab(roundRobin(order(soFar), keyOf)); });
+    // The sources list counts along as each one answers (not "0 of 0" until the slowest is done).
+    panelState = { settled: [], sources: { ...cardSrc, ...c.sources }, locked: lockedFor(c.sources) };
+    const paint = throttled(() => { if (id !== runId) return; panelState = { ...panelState, settled: soFar }; if (soFar.some(s => s.r?.length)) showTab(roundRobin(order(soFar), keyOf)); });
     const [settled, cardSettled] = await Promise.all([settle(c.sources, q, 0, s => { soFar = s; paint.soon(); }), settle(cardSrc, query)]);
     paint.now();
     if (id !== runId) return;

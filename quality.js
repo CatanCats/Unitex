@@ -57,10 +57,10 @@ function rankResults(results, q) {
     const vias = [].concat(r.via);
     const best = Math.max(...vias.map(trustOf));
     const title = termShare(r.title, terms), all = termShare(`${r.title} ${r.snippet || ""} ${safeDecode(r.url || "").replace(/[-_/.]/g, " ")}`, terms);
-    // Small indexes give odd matches: they must contain every word. Big engines may match by meaning, but not by nothing.
+    // Small indexes give odd matches: they must contain every word, and one of them in the title ("Keystone (cask)" for a leaking tap). Mid ones (and Wikipedia's own search, which reads whole articles) need a word in the title unless another engine found it too. Big engines may match by meaning, but not by nothing.
     // (Questions have extra words, so with 3+ words two thirds is enough.)
     const strict = terms.length <= 2 ? 1 : 0.66;
-    if (terms.length && (best < 0.6 ? all < strict : best < 0.85 ? all < 0.5 : all === 0 && vias.length < 2)) continue;
+    if (terms.length && (best < 0.6 ? all < strict || (terms.length > 1 && title === 0) : best < 0.9 ? all < 0.5 || (terms.length > 1 && title === 0 && !vias.some(v => trustOf(v) >= 0.9)) : all === 0 && vias.length < 2)) continue;
     if (!r.title || r.title.length < 3) continue;
     scored.push({ ...r, score: (r.score || 0) * (0.5 + all * 0.7 + title * 0.5) * (1 + 0.15 * (vias.length - 1)) });
   }

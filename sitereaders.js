@@ -101,6 +101,7 @@ function cardsFromPage(html, base, kind, site) {
       const img = a.querySelector("img") || a.closest("article, li, div")?.querySelector("img");
       const title = (a.querySelector("h2, h3, h4")?.textContent || a.getAttribute("aria-label") || a.textContent || "").replace(/\s+/g, " ").trim();
       if (!img || title.length < 8 || title.length > 140) continue;
+      if (kind === "house" && !/\d/.test(title)) continue; // an address has a number ("12 Smith St"); an agent's name doesn't
       seen.add(url);
       const image = typeof bestImg === "function" ? bestImg(img, base) : img.getAttribute("src");
       out.push({ title, url, image, domain: hostOf(url), via: site, card: kind === "house" ? { kind, address: title, site } : { kind, name: title, site } });
@@ -108,6 +109,16 @@ function cardsFromPage(html, base, kind, site) {
     }
   }
   if (!out.length && typeof botCheck === "function" && botCheck(html)) throw new Error(`asked for a bot check (open ${site} once yourself to clear it)`);
+  // A home whose data has no price: the price printed on the page next to it ("$1,800 pw" after its address or link).
+  if (kind === "house") for (const c of out) {
+    if (c.card.price) continue;
+    let path = ""; try { path = new URL(c.url).pathname; } catch {}
+    const at = [c.title, path].map(s => s && html.indexOf(s.slice(0, 40))).find(i => i > 0);
+    // Up to the next listing's link (photo carousels make one card thousands of characters long).
+    const folder = path.split("/").slice(0, 2).join("/") + "/", next = folder.length > 2 ? html.indexOf(`"${folder}`, at + 60) : -1;
+    const near = at > 0 && html.slice(at, next > at ? Math.min(next, at + 40000) : at + 15000).replace(/<[^>]+>/g, " ").match(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s*(?:-|–|to)\s*\$?\s?\d[\d,]*)?\s*(?:pw|p\.w\.|per week|\/\s?w(?:ee)?k|pcm|per month|k|m)?\b/i)?.[0];
+    if (near) c.card.price = near.replace(/\s+/g, " ").trim();
+  }
   return out;
 }
 
@@ -140,7 +151,9 @@ const SECTION_SITES = {
     CA: [["realtorca", "REALTOR.ca", q => `https://www.realtor.ca/map#view=list&GeoName=${encodeURIComponent(qWhere(q) || q)}`]],
   },
   cars: {
-    AU: [["carsales", "carsales", q => { const { make, model } = makeModel(q); return `https://www.carsales.com.au/cars/${[make, model].filter(Boolean).map(slugify).join("/")}${make ? "/" : ""}`; }],
+    // carsales takes fuel and body style in its address too: /cars/toyota/corolla/hybrid-fueltype/, /cars/suv-bodystyle/.
+    AU: [["carsales", "carsales", q => { const { make, model } = makeModel(q); const fuel = q.match(/\b(petrol|diesel|hybrid|electric)\b/i)?.[1]; const body = { hatchback: "hatch", hatch: "hatch", suv: "suv", ute: "ute", wagon: "wagon", sedan: "sedan", van: "van", coupe: "coupe", convertible: "convertible" }[q.match(/\b(hatchback|hatch|suv|ute|wagon|sedan|van|coupe|convertible)\b/i)?.[1].toLowerCase()];
+      const parts = [make, model].filter(Boolean).map(slugify).concat(fuel ? [`${fuel.toLowerCase()}-fueltype`] : [], body ? [`${body}-bodystyle`] : []); return `https://www.carsales.com.au/cars/${parts.join("/")}${parts.length ? "/" : ""}`; }],
          ["autotraderau", "Autotrader", q => { const { make, model } = makeModel(q); return `https://www.autotrader.com.au/for-sale/${[make, model].filter(Boolean).map(slugify).join("/")}`; }],
          ["drive", "Drive", q => { const { make, model } = makeModel(q); return `https://www.drive.com.au/cars-for-sale/search/${[make, model].filter(Boolean).map(slugify).join("/")}/`; }],
          ["gumtreecars", "Gumtree Cars", q => `https://www.gumtree.com.au/s-cars-vans-utes/${slugify(qWhat(q))}/k0c18320`]],
@@ -188,7 +201,7 @@ function sectionSourcesFor(topic) {
   if (!kind) return out;
   const table = SECTION_SITES[topic];
   for (const [id, name, url, when] of [...(table[regionId] || []), ...(table["*"] || [])]) {
-    out["site_" + id] = { name, enabled: () => !!helperVersion() && (!when || when(query)), async run(q) {
+    out["site_" + id] = { name, when, enabled: () => !!helperVersion() && (!when || when(query)), async run(q) {
       const u = await url(q);
       if (!u) throw new Error("add a place to search it");
       const res = await helperFetch(u);

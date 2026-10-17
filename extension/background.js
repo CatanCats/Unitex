@@ -20,7 +20,7 @@ ALLOWED_HOSTS.push("au.seek.com", "nz.seek.com", "www.seek.com.au", "www.seek.co
 // Apps: Google Play, Steam, F-Droid, Flathub and the Microsoft Store.
 // News feeds that moved to these addresses.
 ALLOWED_HOSTS.push("yle.fi", "tech.yahoo.com", "api.theregister.com", "www.cricinfo.com", "www.ign.com");
-ALLOWED_HOSTS.push("play.google.com", "store.steampowered.com", "search.f-droid.org", "flathub.org", "apps.microsoft.com");
+ALLOWED_HOSTS.push("rss.marketingtools.apple.com", "play.google.com", "store.steampowered.com", "search.f-droid.org", "flathub.org", "apps.microsoft.com");
 // Houses, cars, events, recipes and IMDb, read straight from each section's companies.
 ALLOWED_HOSTS.push("flatmates.com.au", "v3.sg.media-imdb.com", "view.com.au", "www.allhomes.com.au", "www.allrecipes.com", "www.autotrader.ca", "www.autotrader.co.uk", "www.autotrader.com", "www.autotrader.com.au", "www.bbcgoodfood.com", "www.cars.com", "www.carsales.com.au", "www.drive.com.au", "www.eventbrite.co.uk", "www.eventbrite.com", "www.eventbrite.com.au", "www.homely.com.au", "www.imdb.com", "www.meetup.com", "www.moshtix.com.au", "www.onthemarket.com", "www.realestate.co.nz", "www.realtor.ca", "www.realtor.com", "www.recipetineats.com", "www.rent.com.au", "www.skiddle.com", "www.taste.com.au", "www.ticketmaster.com", "www.ticketmaster.com.au", "www.zillow.com", "www.zoopla.co.uk");
 // More news: Teslarati, Electrek, CleanTechnica, InsideEVs, Rest of World, Global Voices, Democracy Now!,

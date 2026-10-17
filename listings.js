@@ -14,9 +14,17 @@ function auPlace(q) {
   return placeCache.get(q);
 }
 
+// The big cities are one place on the map with no postcode of their own: their centre's postcode is used.
+const CITY_POSTCODE = { sydney: ["nsw", "2000"], melbourne: ["vic", "3000"], brisbane: ["qld", "4000"], perth: ["wa", "6000"], adelaide: ["sa", "5000"], hobart: ["tas", "7000"], canberra: ["act", "2600"],
+  darwin: ["nt", "0800"], "gold coast": ["qld", "4217"], newcastle: ["nsw", "2300"], geelong: ["vic", "3220"], wollongong: ["nsw", "2500"], "sunshine coast": ["qld", "4558"], townsville: ["qld", "4810"], cairns: ["qld", "4870"] };
 async function lookUpPlace(q) {
+  // "… in Brunswick VIC 3056", as the Where suggestions write it: no lookup needed.
+  const stated = q.split(/\b(?:in|near|around)\s+/i).pop().match(/^\s*([A-Za-z][A-Za-z' -]*?),?\s+(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b,?\s*(\d{4})?\s*$/i);
+  if (stated?.[3]) return { suburb: stated[1].trim(), state: stated[2].toLowerCase(), postcode: stated[3] };
   const place = q.replace(PROPERTY_WORDS, " ").replace(/[^\p{L}\s'-]/gu, " ").replace(/\s+/g, " ").trim();
   if (!place) throw new Error("add a suburb to search listings");
+  const city = CITY_POSTCODE[place.toLowerCase().replace(/\s+(nsw|vic|qld|sa|wa|tas|act|nt)$/, "")];
+  if (city) return { suburb: place.replace(/\s+(nsw|vic|qld|sa|wa|tas|act|nt)$/i, ""), state: city[0], postcode: city[1] };
   const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&countrycodes=au&format=jsonv2&addressdetails=1&limit=1`);
   const a = (await r.json())[0]?.address;
   const state = a && AU_STATES[a.state];

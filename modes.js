@@ -143,6 +143,7 @@ const MODES = {
 let modeOn = false; // set by search.js: on for every topic with cards
 let filters = {};
 let lastCards = [];
+let filtersOpen = false; // the folded filters on a phone
 
 function priceOf(c) { return money(c.card.price); }
 const reviewCount = c => { const t = String(c.card.reviews || "").replace(/,/g, ""); const m = { k: 1e3, m: 1e6, b: 1e9 }[t.match(/\d([kmb])\b/i)?.[1].toLowerCase()] || 1; return (parseFloat(t.replace(/^\D+/, "")) || 0) * m; }; // "2.01M", "23", "Metascore 95"
@@ -366,7 +367,7 @@ function filterBar(topic, cards, side = false) {
     kind === "car" && !formHas.has("yearMin") && input("yearMin", "From year"),
     kind === "job" && (() => { const c = el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.salaryOnly, onchange() { filters.salaryOnly = this.checked; drawCards(); } }), " Shows salary"); return c; })(),
     kind === "recipe" && select("category", "Any kind", [...new Set(cards.flatMap(c => [c.card.category, c.card.cuisine]).filter(Boolean))]),
-    kind === "show" && select("genre", "Any genre", [...new Set(cards.flatMap(c => c.card.genres || []))]),
+    kind === "show" && !formHas.has("genre") && select("genre", "Any genre", [...new Set(cards.flatMap(c => c.card.genres || []))]),
     kind === "product" && !formHas.has("ratingSel") && select("ratingSel", "Any rating", ["4★ & up", "3★ & up"]),
     kind === "product" && !formHas.has("condition") && select("condition", "New or used", ["new", "used"]),
     ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
@@ -419,7 +420,7 @@ function renderAppCard(c, topic, url) {
       img(k.icon, "app-icon") || el("span", { className: "app-icon app-letter", textContent: (k.name || "?").charAt(0).toUpperCase() }),
       el("div", { className: "app-text" },
         el("h3", { className: "app-name" }, el("a", { href: url, rel: "noopener", textContent: k.name })),
-        el("p", { className: "app-dev", textContent: [k.developer, k.category].filter(Boolean).join(" · ") || k.site }),
+        el("p", { className: "app-dev", textContent: [k.developer, k.category].filter(Boolean).join(" · ") }),
         el("p", { className: "app-meta" },
           k.rating && el("span", { className: "app-stars", textContent: `${k.rating} ★` }),
           k.reviews && el("span", { textContent: k.reviews }),
@@ -550,25 +551,41 @@ function guessForm(topicIdNow, q) {
   return { what: q.replace(/\b(second hand|used|near .*|best|review|recipe)\b/gi, " ").replace(/\s+/g, " ").trim(), max, where };
 }
 
-// Places pop up while you type in "Where", like the job and property sites' own location boxes
-// (OpenStreetMap's place search, closest to your country first).
+// Places pop up while you type in "Where", like the job and property sites' own location boxes:
+// towns and suburbs in your country only (OpenStreetMap's place search inside the country), and the
+// suburbs of a postcode ("4000" → Brisbane QLD 4000, Spring Hill QLD 4000). Places you picked before come first.
 const STATE_SHORT = { "New South Wales": "NSW", Victoria: "VIC", Queensland: "QLD", "South Australia": "SA", "Western Australia": "WA", Tasmania: "TAS", "Northern Territory": "NT", "Australian Capital Territory": "ACT" };
-const REGION_CENTRE = { AU: [-25.3, 134.5, "AU"], NZ: [-41, 174, "NZ"], UK: [54, -2, "GB"], US: [39.5, -98.4, "US"], CA: [56, -106, "CA"] };
+// [country code, west, south, east, north, postcode pattern]
+const REGION_BOX = { AU: ["AU", 112, -44, 154, -10, /^\d{4}$/], NZ: ["NZ", 166, -48, 179, -34, /^\d{4}$/], UK: ["GB", -8.7, 49.8, 1.8, 60.9, /^[a-z]{1,2}\d[a-z\d]?$/i], US: ["US", -125, 24, -66, 50, /^\d{5}$/], CA: ["CA", -141, 41.6, -52, 83, /^[a-z]\d[a-z]$/i] };
+const PLACE_KINDS = /^(city|town|suburb|village|locality|quarter|neighbourhood|borough|municipality)$/;
+const NOT_A_PLACE = /\b(airport|mine|school|grammar|college|university|council|square|station|park|shopping|centre|center|cricket|ground|hospital)\b/i;
 const whereCache = new Map();
+const recentPlaces = () => store.get("unitex.places", []);
+const rememberPlace = p => store.set("unitex.places", [p, ...recentPlaces().filter(x => x !== p)].slice(0, 8));
 async function findPlaces(text) {
-  const c = REGION_CENTRE[regionId];
-  const key = (c?.[2] || "*") + "|" + text.toLowerCase();
+  const b = REGION_BOX[regionId];
+  const key = (b?.[0] || "*") + "|" + text.toLowerCase();
   if (whereCache.has(key)) return whereCache.get(key);
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=10&lang=en&osm_tag=place${c ? `&lat=${c[0]}&lon=${c[1]}&location_bias_scale=0.2` : ""}`;
-  const p = getJson(url, 5000).then(d => {
-    const all = (d.features || []).map(f => f.properties).filter(x => x.name && !/^(house|street)$/.test(x.type));
-    const mine = c ? all.filter(x => x.countrycode === c[2]) : all;
-    const label = x => {
-      if (x.countrycode === "AU") return [x.name, STATE_SHORT[x.state] || x.state, x.postcode].filter(Boolean).join(" ");
-      return [x.name, x.state && x.state !== x.name ? x.state : x.county, !c && x.country].filter(Boolean).join(", ");
-    };
-    return [...new Set((mine.length ? mine : all).map(label))].slice(0, 7);
-  }).catch(() => []);
+  const label = x => x.countrycode === "AU" || x.countrycode === "NZ" ? [x.name, STATE_SHORT[x.state] || (x.countrycode === "AU" ? x.state : ""), x.postcode].filter(Boolean).join(" ")
+    : [x.name, x.state && x.state !== x.name ? x.state : x.county, !b && x.country].filter(Boolean).join(", ");
+  const byPostcode = b && b[5].test(text.trim())
+    ? getJson(`https://api.zippopotam.us/${b[0].toLowerCase()}/${encodeURIComponent(text.trim())}`, 4000).then(d => (d.places || [])
+      .filter(p => !/\b(street|st|road|rd|po box|delivery|mail|dc|lpo)\b/i.test(p["place name"]))
+      .map(p => b[0] === "AU" ? `${p["place name"]} ${p["state abbreviation"]} ${d["post code"]}` : `${p["place name"]}, ${p.state || p["state abbreviation"]} ${d["post code"]}`)).catch(() => [])
+    : Promise.resolve([]);
+  const box = b ? `&bbox=${b.slice(1, 5).join(",")}` : "";
+  const byName = getJson(`https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=15&lang=en&osm_tag=place${box}`, 5000).then(d => (d.features || []).map(f => f.properties)
+    .filter(x => x.name && PLACE_KINDS.test(x.osm_value || x.type) && !NOT_A_PLACE.test(x.name) && (!b || x.countrycode === b[0]))
+    // Cities first, then towns and suburbs ("bris" → Brisbane before Brisbane City).
+    .sort((x, y) => ["city", "town"].includes(y.osm_value) - ["city", "town"].includes(x.osm_value))
+    .map(label)).catch(() => []);
+  const typed = text.toLowerCase().trim(), first = typed.split(/\s+/)[0];
+  // A place must have a word starting with what was typed ("bris" isn't Brim); one entry per place, with or without its postcode.
+  const starts = t => /^\d/.test(typed) || t.toLowerCase().split(/[\s,]+/).some(w => w.startsWith(first));
+  const p = Promise.all([byPostcode, byName]).then(([a, n]) => {
+    const seen = new Set();
+    return [...recentPlaces().filter(r => r.toLowerCase().startsWith(typed)), ...a, ...n.filter(starts)].filter(t => { const k = t.replace(/\s+\d{4,5}$/, "").toLowerCase(); return !seen.has(k) && seen.add(k); }).slice(0, 8);
+  });
   whereCache.set(key, p);
   return p;
 }
@@ -576,23 +593,31 @@ function placeSuggest(inp, pick) {
   const pop = el("ul", { className: "place-pop", role: "listbox", hidden: true });
   let items = [], at = -1, timer = null, asked = "";
   const close = () => { pop.hidden = true; at = -1; };
-  const show = list => {
+  const choose = t => { close(); rememberPlace(t); pick(t); };
+  // The typed start of each place in bold ("Bris|bane QLD 4000"), or a "Recent places" heading when nothing is typed.
+  const show = (list, heading) => {
     items = list; at = -1;
-    fill(pop, ...list.map((t, i) => el("li", { role: "option", textContent: t, onmousedown: e => { e.preventDefault(); close(); pick(t); }, onmouseenter() { mark(i); } })));
+    const typed = inp.value.trim().toLowerCase();
+    fill(pop, heading && el("li", { className: "place-head", textContent: heading, ariaHidden: "true" }),
+      ...list.map((t, i) => el("li", { role: "option", onmousedown: e => { e.preventDefault(); choose(t); }, onmouseenter() { mark(i); } },
+        el("span", { className: "place-pin", textContent: "📍", ariaHidden: "true" }),
+        typed && t.toLowerCase().startsWith(typed) ? el("span", {}, el("b", { textContent: t.slice(0, typed.length) }), t.slice(typed.length)) : t)));
     pop.hidden = !list.length;
   };
-  const mark = i => { at = i; [...pop.children].forEach((li, n) => li.classList.toggle("on", n === i)); };
+  const mark = i => { at = i; [...pop.querySelectorAll("[role=option]")].forEach((li, n) => li.classList.toggle("on", n === i)); };
   inp.setAttribute("autocomplete", "off");
+  const showRecent = () => { if (inp.value.trim().length < 2 && recentPlaces().length) show(recentPlaces().slice(0, 6), "Recent places"); };
+  inp.addEventListener("focus", showRecent);
   inp.addEventListener("input", () => {
     clearTimeout(timer);
     const t = inp.value.trim();
-    if (t.length < 2) return close();
-    timer = setTimeout(async () => { asked = t; const list = await findPlaces(t); if (asked === inp.value.trim() && document.activeElement === inp) show(list); }, 220);
+    if (t.length < 2) { close(); return showRecent(); }
+    timer = setTimeout(async () => { asked = t; const list = await findPlaces(t); if (asked === inp.value.trim() && document.activeElement === inp) show(list); }, 180);
   });
   inp.addEventListener("keydown", e => {
     if (pop.hidden) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); mark((at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length); }
-    else if (e.key === "Enter" && at >= 0) { e.preventDefault(); e.stopImmediatePropagation(); const t = items[at]; close(); pick(t); }
+    else if ((e.key === "Enter" || e.key === "Tab") && at >= 0) { e.preventDefault(); e.stopImmediatePropagation(); choose(items[at]); }
     else if (e.key === "Escape") close();
   }, true);
   inp.addEventListener("blur", () => setTimeout(close, 150));
@@ -672,23 +697,27 @@ function drawCards() {
   const moreBtn = modeOn && query && moreButton("cards", `Show more ${mode.noun}`);
   // Left: every option as a filter, then the engines and websites. Right: the results.
   const extras = filterBar(topic, lastCards, true);
-  const side = modeOn && el("aside", { className: "mode-filters" },
+  // On a phone the filters fold away behind a button that says how many are set.
+  const setCount = Object.entries(formState(topic.id)).filter(([k, x]) => k !== "_q" && k !== "what" && (Array.isArray(x) ? x.length : x && x !== "any")).length;
+  const side = modeOn && el("aside", { className: "mode-filters" + (filtersOpen ? " open" : "") },
+    el("button", { type: "button", className: "mf-toggle", ariaExpanded: String(filtersOpen), onclick: () => { filtersOpen = !filtersOpen; drawCards(); } },
+      el("span", { textContent: "⚙ Filters" + (setCount ? ` (${setCount})` : "") }), el("span", { textContent: filtersOpen ? "▴" : "▾" })),
     el("h3", { textContent: "Filters" }),
     formFilters(topic.id),
     extras);
   const top = el("div", { className: "mode-top" },
-    el("h2", { textContent: query ? cardsHeadline(topic, shown.length) : `${mode.icon} ${mode.name}` }),
+    query && el("h2", { textContent: cardsHeadline(topic, shown.length) }),
     query && lastCards.length > shown.length && el("span", { className: "hint mode-hidden", textContent: `${lastCards.length - shown.length} hidden: they don't match your filters` }),
     shop && query && el("span", { className: "hint", textContent: shopFrom() }),
     el("div", { className: "mode-tools" },
-      modeOn && sortSelect(kind),
-      modeOn && el("div", { className: "segmented-mini" }, ...[["list", "☰ List"], ["grid", "▦ Grid"]].map(([vv, t]) => el("button", { type: "button", textContent: t, className: vv === view ? "on" : "", onclick: () => { store.set("unitex.view." + topic.id, vv); drawCards(); } }))),
+      modeOn && query && sortSelect(kind),
+      modeOn && query && el("div", { className: "segmented-mini" }, ...[["list", "☰ List"], ["grid", "▦ Grid"]].map(([vv, t]) => el("button", { type: "button", textContent: t, className: vv === view ? "on" : "", onclick: () => { store.set("unitex.view." + topic.id, vv); drawCards(); } }))),
       modeOn && listButton(topic)));
-  const main = el("section", { className: "mode-main" }, top,
+  const main = el("section", { className: "mode-main" }, (query || listOpen) && top,
     modeOn && listPanel(topic),
     ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
     topic.id === "apps" && !helperVersion() && el("p", { className: "shop-note" }, "Google Play, Steam, F-Droid, Flathub and the Microsoft Store need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, apps only come from Apple's App Store and Mac App Store."),
-    !query ? el("p", { className: "hint mode-empty", textContent: "Set the filters on the left, or type a search above." })
+    !query ? renderLanding(topic)
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
     shown.length > 0 && moreBtn);
@@ -898,7 +927,9 @@ function renderTopicForm(topicIdNow, onSearch) {
     if (f.type === "checks") return el("div", { className: "tf-checks" }, ...f.options.map(([val, t]) => el("label", { className: "f-check" },
       el("input", { type: "checkbox", checked: (v[k] || []).includes(val), onchange() { v[k] = this.checked ? [...(v[k] || []), val] : (v[k] || []).filter(x => x !== val); } }), " " + t)));
     if (f.type === "select") { const s = el("select", { className: "f-input" }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: t, selected: (v[k] || "") === val }))); s.onchange = () => { v[k] = s.value; }; return s; }
-    return el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "", oninput() { v[k] = this.value.trim(); } });
+    const inp = el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "", oninput() { v[k] = this.value.trim(); } });
+    if (["where", "from", "to"].includes(k)) placeSuggest(inp, place => { inp.value = place; v[k] = place; });
+    return inp;
   };
   const submit = e => {
     e?.preventDefault();
