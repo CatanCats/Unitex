@@ -509,19 +509,22 @@ function shopChoices() {
   const n = x => +String(x || "").replace(/[^\d.]/g, "") || 0;
   return { min: n(v.min), max: n(v.max), condition: v.condition || "" };
 }
+// The store was searched for new or used items only, so its items pass that filter even when they don't say their condition.
+const conditionSearched = (items, cond) => cond ? items.map(p => ({ ...p, card: { ...p.card, conditionSearched: cond } })) : items;
 const STORE_SOURCES = {
   amazon: { paged: true, name: "Amazon", async run(q, { region, used, page: P = 0 } = {}) {
     const f = shopChoices();
     const rh = [(f.min || f.max) && `p_36:${Math.round(f.min * 100)}-${f.max ? Math.round(f.max * 100) : ""}`, (used || f.condition === "used") && "p_n_condition-type:Used"].filter(Boolean).join(",");
     const { doc, base, html } = await helperDoc(`https://${storeHost("amazon", region)}/s?k=${encodeURIComponent(q)}&page=${P + 1}${rh ? "&rh=" + encodeURIComponent(rh) : ""}`);
     if (/captcha|robot check/i.test(html.slice(0, 20000)) && !/s-search-result/.test(html)) throw new Error("asked for a CAPTCHA (open Amazon once yourself to clear it)");
-    return parseAmazon(doc, base, "Amazon");
+    return conditionSearched(parseAmazon(doc, base, "Amazon"), used || f.condition === "used" ? "used" : "");
   }},
   ebay: { paged: true, name: "eBay", async run(q, { region, used, page: P = 0 } = {}) {
     const f = shopChoices();
-    const cond = used || f.condition === "used" ? "&LH_ItemCondition=3000" : f.condition === "new" ? "&LH_ItemCondition=1000" : "";
+    const asked = used || f.condition === "used" ? "used" : f.condition === "new" ? "new" : "";
+    const cond = { used: "&LH_ItemCondition=3000", new: "&LH_ItemCondition=1000" }[asked] || "";
     const { doc, base } = await helperDoc(`https://${storeHost("ebay", region)}/sch/i.html?_nkw=${encodeURIComponent(q)}&_pgn=${P + 1}${cond}${f.min ? "&_udlo=" + f.min : ""}${f.max ? "&_udhi=" + f.max : ""}`);
-    return parseEbay(doc, base, "eBay");
+    return conditionSearched(parseEbay(doc, base, "eBay"), asked);
   }},
   googleshop: { paged: true, name: "Google Shopping", async run(q, { page: P = 0 } = {}) {
     const f = shopChoices();

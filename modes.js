@@ -207,16 +207,19 @@ function formMatches(c) {
   const v = formState();
   const k = c.card, t = lc([cardTitle(c), c.title, c.snippet, k.company, k.location, k.worktype, k.type, k.condition, k.cuisine, k.category, (k.genres || []).join(" "), k.network, k.stars, (c.tags || []).join(" "), k.venue, k.place, k.price,
     k.make, k.model, k.gearbox, k.year, k.km, k.body, k.fuel].join(" "));
-  const extras = (v.extras || []).every(x => EXTRA_WORDS[x] ? EXTRA_WORDS[x].test(t) : has(t, x));
+  // A job from a remote-only board, or from a site searched for remote jobs (LinkedIn, Indeed), is remote even when it doesn't say so.
+  const remoteJob = !!(k.remote || k.remoteSearched);
+  const extras = (v.extras || []).every(x => (remoteJob && /^(Remote|Work from home)$/.test(x)) || (EXTRA_WORDS[x] ? EXTRA_WORDS[x].test(t) : has(t, x)));
   if (!extras) return false;
   switch (topicId) {
     case "jobs":
       // Job sites that were searched with the work type (SEEK, LinkedIn, Indeed) only returned that work type.
       if (many(v.worktype).length && !(k.typeSearched && !k.worktype) && !many(v.worktype).some(w => has(lc(`${k.worktype} ${t}`), w))) return false;
-      if (v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
-      if (v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
-      if (v.salary && !(salaryTop(k.salary) >= salaryWanted(v.salary))) return false;
-      if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && /remote|anywhere/i.test(k.location || ""))) return false;
+      // The same for experience (LinkedIn, Indeed) and minimum salary (SEEK, Indeed): a job that doesn't show it still matched.
+      if (!k.levelSearched && v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
+      if (!k.levelSearched && v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
+      if (v.salary && !(k.salarySearched && !k.salary) && !(salaryTop(k.salary) >= salaryWanted(v.salary))) return false;
+      if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && (remoteJob || /remote|anywhere/i.test(k.location || "")))) return false;
       return true;
     case "houses":
       if (v.type && !has(lc(`${k.type} ${t}`), v.type)) return false;
@@ -252,7 +255,6 @@ function formMatches(c) {
   return true;
 }
 
-const BAR_KEYS = new Set(["salaryOnly"]); // also a checkbox in the filter bar, so the form leaving it off doesn't untick it
 function applyFilters(cards) {
   const form = TOPIC_FORMS[topicId];
   // The form's fields decide the keys they own (a field set back to "Any" stops filtering); the
@@ -260,7 +262,7 @@ function applyFilters(cards) {
   const F = { ...filters };
   if (form?.filters) for (const [key, x] of Object.entries(form.filters(formState()))) {
     if (x !== undefined && x !== "") F[key] = x;
-    else if (!BAR_KEYS.has(key)) delete F[key];
+    else delete F[key];
   }
   F.beds = F.bedsSel ? parseInt(F.bedsSel) : undefined;
   F.ratingMin = F.ratingSel ? parseInt(F.ratingSel) : undefined;
@@ -279,8 +281,9 @@ function applyFilters(cards) {
     if (F.carsMin && !(k.cars >= F.carsMin)) return false;
     if (F.kmMax && !(k.km && +String(k.km).replace(/\D/g, "") * (k.kmUnit === "mi" ? 1.609 : 1) <= F.kmMax)) return false;
     if (F.priced && p == null) return false;
-    if (F.condition === "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
-    if (F.condition === "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
+    // A store searched with the condition (Amazon, eBay) only returned that condition, even when an item doesn't say.
+    if (F.condition === "new" && k.conditionSearched !== "new" && /used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
+    if (F.condition === "used" && k.conditionSearched !== "used" && !/used|pre-owned|refurb|second/i.test(k.condition || "")) return false;
     // Every field chosen in the filters must match: a Casual job search shows only casual jobs.
     return formMatches(c);
   });
@@ -712,8 +715,8 @@ const TOPIC_FORMS = {
       level: anyOf("Experience", ["Entry level", "Mid level", "Senior"]),
       salary: { label: "Minimum salary", placeholder: "$ per year", type: "number" },
       extras: { type: "checks", label: "Options", options: opt(["Remote", "Work from home", "Visa sponsorship", "No experience needed"]) } },
-    build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", many(v.worktype).map(w => w.toLowerCase()), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`),
-    filters: v => ({ salaryOnly: !!v.salary || undefined }) },
+    // A minimum salary doesn't hide jobs that don't show one when the site was searched with it (SEEK, Indeed); "Shows salary" does.
+    build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", many(v.worktype).map(w => w.toLowerCase()), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`) },
 
   cars: { title: "🚗 Find a car", fields: {
       deal: { type: "seg", label: "Condition", options: opt([["used", "Used"], ["new", "New"], ["any", "Any"]]) },

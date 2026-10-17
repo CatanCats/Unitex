@@ -167,6 +167,10 @@ const JOB_SITES = {
 
 // Which job sites put the work type in their own search address (see their run()).
 const TYPE_SEARCHED = { seek: q => workTypes(q).length > 0 && workTypes(q).every(w => w[1]), linkedin: q => workTypes(q).length > 0 && workTypes(q).every(w => w[2]), indeed: q => workTypes(q).length === 1 };
+// Which of the other filters each job site puts in its own search address (see their run()).
+const FILTERS_SEARCHED = { seek: { salary: true }, linkedin: { remote: true, level: true }, indeed: { remote: true, level: true, salary: true } };
+// Boards that only list remote jobs, even when a job's place says "Worldwide" or "Europe".
+const REMOTE_BOARDS = new Set(["remotive", "remoteok", "himalayas", "jobicy"]);
 // The job readers for this country: helper ones only with Unitex Helper.
 function jobSourcesFor() {
   // Local job sites first (SEEK, LinkedIn, Indeed, Jora), then the remote-job boards.
@@ -175,8 +179,14 @@ function jobSourcesFor() {
     if (s.regions && regionId !== "*" && !s.regions.includes(regionId)) continue;
     // These sites searched the place themselves (Broadbeach is on the Gold Coast), so their places are trusted.
     // SEEK, LinkedIn and Indeed were asked for the work type too (worktype=, f_JT=, jt=), so theirs only has that work type.
-    out["jobsite_" + id] = { ...s, paged: true, enabled: () => !!helperVersion(), run: async (q, o) => (await s.run(q, o)).map(j => ({ ...j, card: { ...j.card, placeSearched: !!jobParts(q).where, typeSearched: !!TYPE_SEARCHED[id]?.(q) } })) };
+    // The same goes for remote, experience and minimum salary: a job that doesn't say so itself still matched the site's filter.
+    out["jobsite_" + id] = { ...s, paged: true, enabled: () => !!helperVersion(), run: async (q, o) => {
+      const f = jobChoices(), asked = FILTERS_SEARCHED[id] || {};
+      const searched = { placeSearched: !!jobParts(q).where, typeSearched: !!TYPE_SEARCHED[id]?.(q),
+        remoteSearched: !!asked.remote && (f.remote || (id === "linkedin" && jobParts(q).remote)), levelSearched: !!asked.level && !!f.level, salarySearched: !!asked.salary && !!f.salary };
+      return (await s.run(q, o)).map(j => ({ ...j, card: { ...j.card, ...searched } }));
+    } };
   }
-  for (const [id, s] of Object.entries(JOB_BOARDS)) out["jobs_" + id] = s;
+  for (const [id, s] of Object.entries(JOB_BOARDS)) out["jobs_" + id] = REMOTE_BOARDS.has(id) ? { ...s, run: async (q, o) => (await s.run(q, o)).map(j => ({ ...j, card: { ...j.card, remote: true } })) } : s;
   return out;
 }
