@@ -1,6 +1,7 @@
 // The newest Unitex Helper version, and what changed. Bump this together with extension/manifest.json.
-const HELPER_LATEST = "1.10.1";
+const HELPER_LATEST = "1.10.2";
 const HELPER_CHANGES = {
+  "1.10.2": "SEEK jobs load again: SEEK moved to au.seek.com and nz.seek.com.",
   "1.10.1": "Fixes news from Yle, TechRadar, Yahoo Tech, Tom's Hardware, The Register, Live Science, ESPNcricinfo and IGN, whose feeds moved.",
   "1.10.0": "Adds the new Apps area: reads Google Play, Steam, F-Droid, Flathub and the Microsoft Store, so apps and games show with their platforms, prices and licences.",
   "1.9.0": "Google News stories link straight to the article on the news website, instead of going through news.google.com.",

@@ -85,7 +85,8 @@ const JOB_BOARDS = {
 
 const slug = s => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const INDEED_HOSTS = { AU: "au.indeed.com", UK: "uk.indeed.com", US: "www.indeed.com", CA: "ca.indeed.com", NZ: "nz.indeed.com", "*": "www.indeed.com" };
-const SEEK_HOSTS = { AU: "www.seek.com.au", NZ: "www.seek.co.nz" };
+// SEEK moved from www.seek.com.au / www.seek.co.nz to au.seek.com / nz.seek.com (the old ones redirect).
+const SEEK_HOSTS = { AU: "au.seek.com", NZ: "nz.seek.com" };
 const JORA_HOSTS = { AU: "au.jora.com", NZ: "nz.jora.com" };
 const textOfSel = (box, sel) => box.querySelector(sel)?.textContent.replace(/\s+/g, " ").trim() || undefined;
 

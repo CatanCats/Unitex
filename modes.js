@@ -315,6 +315,13 @@ function applyFilters(cards) {
   const by = { "price-asc": (a, b) => (priceOf(a) ?? Infinity) - (priceOf(b) ?? Infinity), "price-desc": (a, b) => (priceOf(b) ?? -1) - (priceOf(a) ?? -1),
     "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[F.sort];
   if (by) out = [...out].sort(by);
+  // Apps come from seven stores at once: with no sort picked, the ones named like the search come first
+  // ("vlc" → VLC, VLC for Android… before a game that only matched a word in its description).
+  else if (topicId === "apps") {
+    const want = lc(appWords(query)).replace(/[^a-z0-9 ]/g, "").trim(), squash = s => lc(s).replace(/[^a-z0-9]/g, "");
+    const score = c => { const n = lc(c.card.name).replace(/[^a-z0-9 ]/g, ""); return !want ? 0 : squash(n) === squash(want) ? 3 : n.startsWith(want) ? 2 : has(n, want) ? 1 : 0; };
+    out = out.map((c, i) => [c, score(c), i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]).map(x => x[0]);
+  }
   return out;
 }
 
