@@ -680,6 +680,7 @@ function drawCards() {
   const main = el("section", { className: "mode-main" }, top,
     modeOn && listPanel(topic),
     ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
+    topic.id === "apps" && !helperVersion() && el("p", { className: "shop-note" }, "Google Play, Steam, F-Droid, Flathub and the Microsoft Store need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, apps only come from Apple's App Store and Mac App Store."),
     !query ? el("p", { className: "hint mode-empty", textContent: "Set the filters on the left, or type a search above." })
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
