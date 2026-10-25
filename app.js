@@ -2,7 +2,8 @@
 let recent = store.get("unitex.recent", ["google", "bing", "ecosia", "duckduckgo", "reddit"]).filter(id => byId(id) && !byId(id).ai && !byId(id).local).slice(0, 5);
 // Which Unitex tab a search opens on (the same tabs as the results page).
 const HOME_TABS = [["all", "All"], ["ai", "AI"], ["shopping", "Shopping"], ["images", "Images"], ["videos", "Videos"], ["news", "News"], ["maps", "Maps"], ["books", "Books"], ["jobs", "Jobs"], ["apps", "Apps"], ["travel", "Travel"]];
-let homeTab = HOME_TABS.some(([id]) => id === store.get("unitex.hometab")) ? store.get("unitex.hometab") : "all";
+// Shopping, Jobs, Apps and Travel are areas with their own pages now (chips in the same row), so a search starts on All.
+let homeTab = HOME_TABS.some(([id]) => id === store.get("unitex.hometab")) && !["shopping", "jobs", "apps", "travel"].includes(store.get("unitex.hometab")) ? store.get("unitex.hometab") : "all";
 
 // ---------- engine selection ----------
 
@@ -31,8 +32,10 @@ function renderEngine() {
 
 // ---------- what to search for (Unitex tabs) ----------
 
+// One row: what kind of results (All, Images, News…), then the areas with their own pages (Shopping, Houses, Jobs…).
+const AREA_TABS = new Set(["shopping", "jobs", "apps", "travel"]); // these are areas below, not result kinds
 function renderTopics() {
-  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Search for" }), ...HOME_TABS.filter(([id]) => id !== "ai" || aiEnabled()).map(([id, name]) => {
+  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), ...HOME_TABS.filter(([id]) => (id !== "ai" || aiEnabled()) && !AREA_TABS.has(id)).map(([id, name]) => {
     const b = el("button", { type: "button", className: "chip topic" + (id === homeTab ? " active" : ""), textContent: name });
     b.setAttribute("aria-pressed", id === homeTab);
     b.onclick = () => {
@@ -46,7 +49,7 @@ function renderTopics() {
       else $("q").focus();
     };
     return b;
-  }));
+  }), el("span", { className: "quick-sep", ariaHidden: "true" }), ...areaChips());
 }
 
 // ---------- areas: Shopping, Houses, Jobs… each in the colours of the site people know it from ----------
@@ -64,17 +67,46 @@ const AREAS = [
   ["all", "events", "Events", "🎟️", "Eventbrite, Ticketmaster", "#fff", "#1e0a3c", "#d1410c"],
   ["travel", "", "Travel", "✈️", "Flights, stays, things to do", "#003580", "#fff", "#febb02"],
 ];
-// A row of chips like "Search for": each with its icon on its site's colour, the sites it reads on hover.
-function renderAreas() {
-  $("areas").replaceChildren(el("span", { className: "row-label", textContent: "Go to" }), ...AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
+// Chips in the same row, each with its icon on its site's colour, the sites it reads on hover.
+function areaChips() {
+  return AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
     const a = el("a", { className: "chip area", title: from, href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
       el("span", { className: "area-icon", textContent: emoji, ariaHidden: "true" }), name);
     a.style.cssText = `--area-bg:${bg};--area-fg:${fg};--area-accent:${accent}`;
     // Whatever is typed in the search box goes along: "headphones" → Shopping for headphones.
     a.onclick = () => { const q = $("q").value.trim(); if (q) a.href += "&" + new URLSearchParams({ q }); };
     return a;
-  }));
+  });
 }
+
+// ---------- custom search ----------
+// "Custom search" under the box opens a full-size "Custom" button beside the Unitex button: pick which
+// engines and indexes Unitex asks. The results page uses the same choice ("unitex.off").
+
+const CUSTOM_SOURCES = [
+  ["Search engines (with Unitex Helper)", HELPER_ENGINES.map(e => ["helper_" + e.id, e.name])],
+  ["Open indexes", [["wikipedia", "Wikipedia"], ["duckduckgo", "DuckDuckGo answers"], ["qwant", "Qwant"], ["mwmbl", "Mwmbl"], ["stract", "Stract"], ["marginalia", "Marginalia"], ["alexandria", "Alexandria"], ["wiby", "Wiby"], ["reddit", "Reddit"], ["hackernews", "Hacker News"]]],
+];
+const customOff = () => new Set(store.get("unitex.off", []));
+const allCustom = () => CUSTOM_SOURCES.flatMap(([, list]) => list.map(([k]) => k));
+function renderCustom() {
+  const open = store.get("unitex.custom", false), off = customOff();
+  const on = allCustom().filter(k => !off.has(k)).length;
+  $("custom-link").hidden = open;
+  $("custom-btn").hidden = !open;
+  if (!open) { $("custom-pop").hidden = true; return; }
+  $("custom-btn").replaceChildren(el("span", { textContent: "⚙" }), el("span", { textContent: `Custom · ${on} of ${allCustom().length}` }), el("span", { textContent: "▾", ariaHidden: "true" }));
+  fill($("custom-pop"),
+    ...CUSTOM_SOURCES.map(([group, list]) => el("div", { className: "pgroup" }, el("h4", { textContent: group }), el("div", { className: "custom-list" },
+      ...list.map(([k, name]) => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !off.has(k), onchange() {
+        const now = customOff(); this.checked ? now.delete(k) : now.add(k); store.set("unitex.off", [...now]); renderCustom(); } }), " " + name))))),
+    el("div", { className: "custom-foot" },
+      el("button", { type: "button", className: "chip", textContent: "Everything on", onclick: () => { const now = customOff(); allCustom().forEach(k => now.delete(k)); store.set("unitex.off", [...now]); renderCustom(); } }),
+      el("button", { type: "button", className: "custom-hide", textContent: "Hide custom search", onclick: () => { store.set("unitex.custom", false); renderCustom(); $("q").focus(); } })));
+}
+$("custom-link").onclick = () => { store.set("unitex.custom", true); selectEngine("unitex"); renderCustom(); $("custom-pop").hidden = false; $("custom-btn").setAttribute("aria-expanded", "true"); };
+$("custom-btn").onclick = e => { e.stopPropagation(); const pop = $("custom-pop"); pop.hidden = !pop.hidden; $("custom-btn").setAttribute("aria-expanded", String(!pop.hidden)); };
+document.addEventListener("click", e => { if (!$("custom-pop").hidden && !e.target.closest("#custom-pop, #custom-btn, #custom-link")) { $("custom-pop").hidden = true; $("custom-btn").setAttribute("aria-expanded", "false"); } });
 
 // ---------- picker ----------
 
@@ -255,8 +287,8 @@ if (initial && initial !== "%s") {
   location.replace(buildUrl(initial, {}));
 } else {
   renderEngine();
-  renderAreas();
   renderTopics();
+  renderCustom();
   renderAlternatives($("alts"), $("q").value);
   renderTabs();
   // Unitex Helper marks the page when it loads; give it a moment so the first read includes it.

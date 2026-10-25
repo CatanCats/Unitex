@@ -885,7 +885,8 @@ const TOPIC_FORMS = {
 
   apps: { title: "📱 Find an app", fields: {
       what: { label: "App or game", placeholder: "e.g. photo editor, or VLC", wide: true },
-      platform: anyOf("Platform", ["Android", "iPhone & iPad", "Windows", "Mac", "Linux"]),
+      // Device tabs, like Google Play's Phone / Tablet / TV chips.
+      platform: { type: "seg", label: "Platform", options: opt([["", "All devices"], ["Android", "Android"], ["iPhone & iPad", "iPhone & iPad"], ["Windows", "Windows"], ["Mac", "Mac"], ["Linux", "Linux"]]) },
       license: { type: "select", label: "Licence", options: opt([["", "Any licence"], ["free", "Free"], ["paid", "Paid"], ["open", "Open source"]]) },
       kind: { type: "seg", label: "Type", options: opt([["", "All"], ["apps", "Apps"], ["games", "Games"]]) },
       rating: anyOf("Rating", ["4★ & up", "3★ & up"]) },

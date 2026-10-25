@@ -594,7 +594,7 @@ body.mode-on .xcards { grid-template-columns: repeat(auto-fill, minmax(240px, 1f
 .places-li { list-style: none; }
 .places-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; align-items: start; }
 .places { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow: auto; }
-.place { border: 1px solid var(--border); border-radius: 12px; background: var(--card); overflow: hidden; }
+.place { flex: none; border: 1px solid var(--border); border-radius: 12px; background: var(--card); overflow: hidden; }
 .place.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .place-pick { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 10px 12px 6px; border: 0; background: none; text-align: left; color: inherit; cursor: pointer; }
 .place-pick strong { font-size: 0.92rem; }
@@ -1136,7 +1136,6 @@ body[data-look="apps"] { --accent: #01875f; --accent-2: #01875f; --accent-soft: 
   .xcards.list .xcard.app .app-buy { grid-column: 1 / 3; grid-row: auto; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; padding: 0 12px 12px; }
 }
 /* ---------- Home: "Go to" chips, each icon on its site's colour ---------- */
-.quick.areas { margin-top: 8px; }
 .chip.area { display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px 5px 5px; text-decoration: none; color: var(--fg); }
 .chip.area .area-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--area-bg); box-shadow: inset 0 0 0 2px var(--area-accent); font-size: 0.8rem; }
 
@@ -1336,3 +1335,116 @@ body[data-look="jobs"] .xcard.job { border-left-width: 3px; }
 .xcard.product .xcard-img > img { height: 100%; width: 100%; }
 .mode-filters .pill-pop .f-check { height: auto; padding: 7px 8px; border: 0; border-radius: 8px; background: none; font-weight: 500; }
 .mode-filters .pill-pop .f-check:hover { background: var(--accent-soft); }
+
+/* ---------- Home: custom search and the combined row ---------- */
+.custom-link { display: block; margin: 8px auto 0; padding: 2px 6px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.custom-link:hover { color: var(--accent); }
+.custom-btn { gap: 6px; }
+.custom-pop { width: min(520px, calc(100vw - 32px)); }
+.custom-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; }
+.custom-list .f-check { padding: 5px 4px; font-size: 0.86rem; }
+.custom-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.custom-hide { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.8rem; cursor: pointer; }
+.custom-hide:hover { color: var(--accent); text-decoration: underline; }
+.quick-sep { flex: none; width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.custom-pop { text-align: left; }
+.custom-list .f-check { display: flex; justify-content: flex-start; align-items: center; gap: 8px; }
+.custom-pop .pgroup h4 { margin: 4px 0 6px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+/* ---------- the place panel (Google's and Bing's place card) ---------- */
+.answer.place { padding: 0; overflow: hidden; }
+.answer.place > :not(.place-map) { margin-left: 16px; margin-right: 16px; }
+.place-map { display: block; width: 100%; height: 220px; border: 0; background: var(--card-2); }
+.answer.place h2 { margin-top: 12px; margin-bottom: 2px; }
+.place-kind { margin-top: 0; color: var(--muted); font-size: 0.86rem; }
+.place-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.place-btn { padding: 6px 12px; font-size: 0.8rem; text-decoration: none; }
+.place-about { font-size: 0.88rem; line-height: 1.5; }
+.place-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin-top: 10px; margin-bottom: 16px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.85rem; }
+.place-facts dt { font-weight: 700; }
+.place-facts dd { margin: 0; color: var(--muted); }
+.answer.place .answer-src { display: inline-flex; margin-bottom: 12px; }
+
+/* ---------- Maps: the start map and the places list ---------- */
+.map-start { position: relative; }
+.map-start-frame { display: block; width: 100%; height: calc(100vh - 210px); min-height: 420px; border: 0; border-radius: 14px; background: var(--card-2); }
+.map-type { position: absolute; right: 12px; bottom: 28px; height: 32px; padding: 0 28px 0 10px; border: 0; border-radius: 8px; background: #fff; color: #202124; font: inherit; font-size: 0.8rem; font-weight: 600; box-shadow: 0 1px 6px rgb(0 0 0 / 0.3); cursor: pointer; }
+body.maps-start .rmain { grid-template-columns: minmax(0, 1fr) !important; }
+body.maps-start .rside { display: none; }
+.place-pick { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; text-align: left; }
+.place-img { flex: none; width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--card-2); }
+.place-text { display: grid; gap: 2px; min-width: 0; }
+.place-rating { font-size: 0.82rem; color: var(--muted); }
+.place-rating b { color: #e37400; }
+.place-open { color: #c5221f; }
+.place-open.is-open { color: #188038; }
+
+/* ---------- shop fronts: the app store and the book shop (landing.js) ---------- */
+.store-li { list-style: none; }
+.store { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; align-items: start; }
+.store-nav { position: sticky; top: 84px; display: grid; gap: 2px; max-height: calc(100vh - 100px); overflow: auto; padding-right: 4px; }
+.store-nav h4 { margin: 14px 10px 4px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.store-nav-item { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; font-size: 0.88rem; font-weight: 600; text-align: left; cursor: pointer; }
+.store-nav-item:hover { background: var(--card-2); }
+.store-nav-item.on { background: var(--accent-soft); color: var(--accent); }
+.store-main { display: grid; gap: 22px; min-width: 0; }
+.store-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.store-head h2 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.store-head span { color: var(--muted); font-size: 0.86rem; }
+/* Featured banners, like the stores' "Today" stories. */
+.store-hero { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+.store-banner { position: relative; display: flex; align-items: flex-end; min-height: 220px; overflow: hidden; border-radius: 18px; color: #fff; text-decoration: none; background: #222; isolation: isolate; }
+.store-banner-bg { position: absolute; inset: 0; z-index: -2; background-size: cover; background-position: center; }
+.store-banner:not(.wide) .store-banner-bg { filter: blur(26px) saturate(1.4); transform: scale(1.3); }
+.store-banner::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, transparent 35%, rgb(0 0 0 / 0.72)); }
+.store-banner-art { position: absolute; top: 18px; left: 18px; width: 84px; height: 84px; border-radius: 22%; box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); object-fit: cover; }
+.store-banner.book .store-banner-art { width: 92px; height: 138px; border-radius: 4px; }
+.store-banner-text { display: grid; gap: 2px; padding: 16px; }
+.store-banner-text small { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; }
+.store-banner-text b { font-size: 1.2rem; line-height: 1.2; }
+.store-banner-text span { font-size: 0.82rem; opacity: 0.85; }
+.store-banner.skeleton { min-height: 220px; border-radius: 18px; }
+/* Shelves of tiles: rounded app icons, book covers. */
+.store-strip.app { grid-auto-columns: 112px; }
+.store-strip.book { grid-auto-columns: 128px; }
+.store-tile { display: grid; gap: 3px; align-content: start; color: var(--fg); text-decoration: none; min-width: 0; }
+.store-tile b { font-size: 0.82rem; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.store-tile small { font-size: 0.74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-meta { display: flex; gap: 6px; }
+.store-art { display: grid; place-items: center; overflow: hidden; background: var(--card-2); color: var(--accent); font-weight: 800; font-size: 1.4rem; }
+.store-tile.app .store-art { width: 112px; height: 112px; border-radius: 22%; box-shadow: 0 1px 4px rgb(0 0 0 / 0.15); }
+.store-tile.app.game .store-art { width: 112px; height: 112px; }
+.store-tile.book .store-art { width: 128px; height: 192px; border-radius: 4px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.2); }
+.store-art img { width: 100%; height: 100%; object-fit: cover; }
+.store-tile:hover b { text-decoration: underline; }
+.store-skel.app { height: 150px; border-radius: 22%; }
+.store-skel.book { height: 230px; border-radius: 6px; }
+/* The numbered chart. */
+.store-ranks { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 20px; margin: 0; padding: 0; list-style: none; }
+.store-ranks li { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.store-rank { width: 22px; flex: none; font-weight: 800; color: var(--muted); text-align: right; }
+.store-rank-item { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--fg); text-decoration: none; }
+.store-rank-item img, .store-rank-item .store-art { flex: none; width: 48px; height: 48px; border-radius: 22%; object-fit: cover; }
+.store-ranks.book .store-rank-item img { width: 40px; height: 60px; border-radius: 3px; }
+.store-rank-item span { display: grid; min-width: 0; }
+.store-rank-item b { font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-rank-item small { color: var(--muted); font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-rank-item:hover b { text-decoration: underline; }
+/* Apps keep the pill bar above; on the store front the device tabs are the first thing. */
+body[data-look="apps"] .landing { gap: 0; }
+@media (max-width: 860px) {
+  .store { grid-template-columns: 1fr; }
+  .store-nav { position: static; display: flex; overflow-x: auto; max-height: none; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
+  .store-nav h4 { display: none; }
+  .store-nav-item { flex: none; width: auto; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 0.82rem; }
+  .store-hero { grid-template-columns: 1fr; }
+  .store-hero > :nth-child(n+2) { display: none; }
+}
+/* The shop fronts fill the page width without widening it; Books and Maps use the whole width. */
+.store, .store-main, .store-shelf, .store-li, .store-chart { min-width: 0; max-width: 100%; }
+#results:has(.store-li), #results:has(.map-start) { min-width: 0; }
+body.store-start .rmain { grid-template-columns: minmax(0, 1fr) !important; }
+body.store-start .rside { display: none; }
+/* A book banner: the cover on the right, the words beside it, like the book shops' featured cards. */
+.store-banner.book .store-banner-art { left: auto; right: 18px; top: 50%; transform: translateY(-50%); }
+.store-banner.book .store-banner-text { max-width: calc(100% - 130px); }

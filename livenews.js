@@ -50,7 +50,10 @@ function parseFeed(xml, via, fallbackSource) {
     const outlet = xmlText(n, "News:Source") || srcEl?.textContent.trim() || fallbackSource;
     if (outlet && title.endsWith(" - " + outlet)) title = title.slice(0, -outlet.length - 3);
     const descHtml = xmlText(n, "description", "summary", "content", "content:encoded");
-    const img = n.getElementsByTagName("media:content")[0]?.getAttribute("url") || n.getElementsByTagName("media:thumbnail")[0]?.getAttribute("url")
+    // The biggest picture the feed offers (The Guardian lists 140px and 460px), not just the first.
+    const media = [...n.getElementsByTagName("media:content"), ...n.getElementsByTagName("media:thumbnail")].filter(e => e.getAttribute("url") && !/video|audio/.test(e.getAttribute("medium") || e.getAttribute("type") || ""))
+      .sort((a, b) => (+b.getAttribute("width") || 0) - (+a.getAttribute("width") || 0));
+    const img = media[0]?.getAttribute("url")
       || [...n.getElementsByTagName("enclosure")].find(e => /^image\//.test(e.getAttribute("type") || ""))?.getAttribute("url")
       || n.getElementsByTagName("News:Image")[0]?.textContent.trim() || descHtml.match(/<img[^>]+src="([^"]+)"/)?.[1];
     const goodImg = img && !BAD_IMG.test(img) ? img.replace(/^(https:\/\/[^/]*bing\.(?:com|net)\/th\?id=[^&]+).*$/, "$1&w=640&h=360") : null;
@@ -58,7 +61,7 @@ function parseFeed(xml, via, fallbackSource) {
     let domain = hostOf(link);
     if (domain.endsWith("news.google.com")) domain = hostOf(srcEl?.getAttribute("url") || "") || domain;
     const summary = via === "Google News" ? "" : cut(stripTags(descHtml), 220);
-    return title && /^https?:/.test(link) && { title, url: link, source: outlet || domain, domain, via: [via], published: when ? Math.floor(when / 1000) : null, image: goodImg && /^https?:|^\/\//.test(goodImg) ? goodImg.replace(/^\/\//, "https://") : null, summary: summary.length > 25 ? summary : "" };
+    return title && /^https?:/.test(link) && { title, url: link, source: outlet || domain, domain, via: [via], published: when ? Math.floor(when / 1000) : null, image: goodImg && /^https?:|^\/\//.test(goodImg) ? biggerImage(goodImg.replace(/^\/\//, "https://")) : null, summary: summary.length > 25 ? summary : "" };
   }).filter(Boolean);
 }
 

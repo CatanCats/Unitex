@@ -70,7 +70,7 @@ function videoCard(v) {
       el("strong", { textContent: v.title }),
       // The website (YouTube, Vimeo, PeerTube…) and channel first; the engine that found it last.
       el("small", {}, el("b", { textContent: siteName(v.url) }), v.by && ` · ${v.by}`),
-      !isSelf(v.via, v.url) && el("small", { className: "vvia", textContent: "via " + v.via.replace(/ \(through SearXNG\)$/, "") })),
+      !isSelf(v.via, v.url) && el("small", { className: "vvia", textContent: "via " + v.via })),
     tabSave(v, "videos"));
   return card;
 }
@@ -174,6 +174,19 @@ function mapFor(p) {
   return MAPS.find(m => m.id === mapId).url(p, [s, n, w, e], pad);
 }
 
+// The Maps tab before a search: just a map of where you are, filling the page, with a small switch in
+// its corner for the kind of map (like the maps sites' layers button).
+const START_MAPS = [["m", "Map"], ["k", "Satellite"], ["h", "Hybrid"], ["p", "Terrain"]];
+function mapsHome() {
+  const place = (typeof homePlace === "function" && homePlace()) || "Australia";
+  let type = store.get("unitex.maptype", "m");
+  const src = () => `https://maps.google.com/maps?q=${encodeURIComponent(place)}&t=${type}&z=${recentPlaces?.().length ? 12 : 4}&output=embed`;
+  const frame = el("iframe", { className: "map-start-frame", title: "Map", src: src(), referrerPolicy: "no-referrer-when-downgrade", allowFullscreen: true });
+  const sel = el("select", { className: "map-type", ariaLabel: "Kind of map" }, ...START_MAPS.map(([t, name]) => el("option", { value: t, textContent: name, selected: t === type })));
+  sel.onchange = () => { type = sel.value; store.set("unitex.maptype", type); frame.src = src(); };
+  return el("div", { className: "map-start" }, frame, sel);
+}
+
 // No places could be read: the map still shows the search itself (Google's map finds "cafes in brisbane").
 function queryMap() {
   return el("div", { className: "map-box wide" },
@@ -181,6 +194,8 @@ function queryMap() {
     el("small", { className: "hint", textContent: "Map data © Google" }));
 }
 function drawPlaces(list) {
+  // The maps' own business listings (ratings, photos, hours) first, like a maps app; plain map points after.
+  list = [...list.filter(p => p.rating || p.image), ...list.filter(p => !(p.rating || p.image))];
   let current = list[0];
   const frame = el("iframe", { className: "map-frame", title: "Map", src: mapFor(current), loading: "lazy", referrerPolicy: "no-referrer-when-downgrade", allowFullscreen: true });
   const credit = el("small", { className: "hint", textContent: "Map " + MAPS.find(m => m.id === mapId).by });
@@ -189,12 +204,21 @@ function drawPlaces(list) {
     b.onclick = () => { mapId = m.id; store.set("unitex.map", m.id); frame.src = mapFor(current); credit.textContent = "Map " + m.by; for (const x of picker.children) x.classList.toggle("active", x === b); };
     return b;
   }));
+  // Each place like a maps app's list: photo, name, stars, category, address, opening hours, then actions.
   const items = list.map(p => {
-    const li = el("li", { className: "place" + (p === current ? " on" : "") },
+    const li = el("li", { className: "place" + (p === current ? " on" : "") + (p.image ? " has-img" : "") },
       el("button", { type: "button", className: "place-pick", onclick: () => { current = p; frame.src = mapFor(p); for (const x of items) x.classList.toggle("on", x === li); } },
-        el("strong", { textContent: p.title }), el("small", { textContent: [p.kind, p.snippet].filter(Boolean).join(" · ") })),
+        p.image && el("img", { className: "place-img", src: p.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
+        el("span", { className: "place-text" },
+          el("strong", { textContent: p.title }),
+          p.rating && el("span", { className: "place-rating" }, el("b", { textContent: `${p.rating} ★` }), p.reviews && ` (${p.reviews}${p.ratingBy ? " · " + p.ratingBy : ""})`),
+          el("small", { textContent: [p.kind, p.snippet].filter(Boolean).join(" · ") }),
+          p.open && el("small", { className: "place-open" + (/^open/i.test(p.open) ? " is-open" : ""), textContent: p.open }))),
       el("div", { className: "place-actions" }, el("span", { className: "via", textContent: p.via }),
-        el("a", { href: `https://www.openstreetmap.org/directions?to=${p.lat},${p.lon}`, rel: "noopener", className: "btn-ghost small-btn", textContent: "Directions" }), tabSave(p, "places")));
+        el("a", { href: `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`, rel: "noopener", target: "_blank", className: "btn-ghost small-btn", textContent: "Directions" }),
+        p.website && el("a", { href: p.website, rel: "noopener", target: "_blank", className: "btn-ghost small-btn", textContent: "Website" }),
+        p.phone && el("a", { href: "tel:" + p.phone.replace(/[^\d+]/g, ""), className: "btn-ghost small-btn", textContent: p.phone }),
+        tabSave(p, "places")));
     return li;
   });
   return el("div", { className: "places-wrap" }, el("ul", { className: "places" }, ...items), el("div", { className: "map-box" }, picker, frame, credit));

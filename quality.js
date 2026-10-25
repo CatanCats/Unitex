@@ -43,9 +43,9 @@ function termShare(text, terms) {
 // ---------- trust: how much each source counts ----------
 
 const SOURCE_TRUST = [
-  [/through searxng/i, 0.8], [/^google/i, 1], [/^bing/i, 0.95], [/^duckduckgo/i, 0.9], [/^brave/i, 0.9], [/through searxng/i, 0.8], [/^wikipedia/i, 0.85],
+  [/^google/i, 1], [/^bing/i, 0.95], [/^duckduckgo/i, 0.9], [/^brave/i, 0.9], [/^wikipedia/i, 0.85],
   [/^(realestate|domain|seek|linkedin|indeed|jora|amazon|ebay)/i, 1], [/^yandex/i, 0.75], [/^qwant/i, 0.7], [/^mojeek/i, 0.65],
-  [/^searxng/i, 0.7], [/^reddit/i, 0.55], [/^hacker news/i, 0.45], [/^stract/i, 0.4], [/^mwmbl/i, 0.3], [/^marginalia/i, 0.3], [/^alexandria/i, 0.25], [/^wiby/i, 0.15],
+  [/^reddit/i, 0.55], [/^hacker news/i, 0.45], [/^stract/i, 0.4], [/^mwmbl/i, 0.3], [/^marginalia/i, 0.3], [/^alexandria/i, 0.25], [/^wiby/i, 0.15],
 ];
 const trustOf = via => { for (const [re, w] of SOURCE_TRUST) if (re.test(via || "")) return w; return 0.5; };
 

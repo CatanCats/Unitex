@@ -8,6 +8,21 @@ const present = kids => kids.filter(k => k !== null && k !== undefined && k !== 
 const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...present(kids)); return n; };
 const fill = (node, ...kids) => node.replaceChildren(...present(kids));
 
+// A small thumbnail address → the same picture at a size that stays sharp on a card (~800px).
+// Only where the size is plain in the address; signed addresses (s=, sig=) would break if changed.
+function biggerImage(u) {
+  if (!u) return u;
+  let s = String(u);
+  if (/[?&](s|sig|signature|token|hash)=/i.test(s)) return s;
+  s = s.replace(/(ichef\.bbci\.co\.uk\/(?:news|ace\/standard|ace\/ws|images\/ic))\/\d{2,3}\//, "$1/976/") // BBC
+    .replace(/(googleusercontent\.com\/[^=\s]+)=(?:[swh]\d+[-\w]*)$/, "$1=w800") // Google News / Play
+    .replace(/-\d{2,3}x\d{2,3}(\.(?:jpe?g|png|webp))(\?|$)/i, "$1$2") // WordPress "-150x150.jpg"
+    .replace(/([?&](?:width|w|imwidth|resize_w)=)(\d{2,3})(?=&|$)/i, (m, k, n) => +n < 600 ? k + 800 : m)
+    .replace(/([?&](?:height|h)=)(\d{2,3})(?=&|$)/i, (m, k, n) => +n < 400 ? k + 450 : m)
+    .replace(/\/(resizefill|resize)_w\d+_h\d+\//, "/$1_w800_h450/"); // Yahoo
+  return s;
+}
+
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },

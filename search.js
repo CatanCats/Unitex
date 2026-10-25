@@ -80,7 +80,7 @@ const topicDomains = () => topicSites(topicById(topicId)).map(s => s.domain).fil
 const siteOff = r => offSites.size && [...offSites].some(d => { const h = host(r.url); return h === d || h.endsWith("." + d) || (h + new URL(r.url).pathname).startsWith(d); });
 
 // "found by Amazon" on an amazon.com page says nothing, so a source that is the site itself isn't shown.
-const nameKey = s => String(s || "").toLowerCase().replace(/\(through searxng\)/, "").replace(/\b(images?|videos?|news|shopping|books|search page|video library|image library|\(.*\))\b/g, "").replace(/[^a-z0-9]/g, "");
+const nameKey = s => String(s || "").toLowerCase().replace(/\b(images?|videos?|news|shopping|books|search page|video library|image library|\(.*\))\b/g, "").replace(/[^a-z0-9]/g, "");
 const SELF_ALIAS = { hacker: "ycombinator", wikimediacommons: "wikimedia", internetarchive: "archive", projectgutenberg: "gutenberg", unitex: "", libraryofcongress: "loc" };
 function siteRoot(u) {
   const parts = host(u).split(".");
@@ -102,20 +102,6 @@ const SOURCES = {
     }));
     if (!P) out.spell = d.query?.searchinfo?.suggestion || "";
     return out;
-  }},
-  // SearXNG metasearch: public servers that allow other websites to read their results (format=json).
-  // Each result lists the engines that found it, so they get the credit.
-  searxng: { paged: true, name: "SearXNG (direct)", group: "main", async run(q, { page: P = 0 } = {}) {
-    const reasons = [];
-    for (const server of SEARX_HOSTS) {
-      try {
-        const d = await getJson(`https://${server}/search?q=${encodeURIComponent(withSites(q, topicDomains()))}&format=json&categories=general&pageno=${P + 1}&language=all`, 6000);
-        const out = (d.results || []).flatMap(r => (r.engines?.length ? r.engines : ["SearXNG"]).map(e => ({
-          title: strip(r.title) || host(r.url), url: r.url, snippet: short(strip(r.content)), via: e === "SearXNG" ? e : `${engineName(e)} (through SearXNG)`, domain: host(r.url) })));
-        if (out.length || Array.isArray(d.results)) return out; // a server that answered: no results is an answer
-      } catch (e) { reasons.push(e.message); }
-    }
-    throw new Error(reasons.every(r => r === reasons[0]) && reasons[0] ? `public servers: ${reasons[0]}` : "no public server answered");
   }},
   qwant: { paged: true, name: "Qwant", group: "main", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://api.qwant.com/v3/search/web?q=${encodeURIComponent(q)}&count=10&offset=${P * 10}&locale=en_GB&device=desktop`);
@@ -284,6 +270,12 @@ const BOOK_SOURCES = {
     return (d.docs || []).map(b => ({ title: b.title, url: `https://openlibrary.org${b.key}`, thumb: b.cover_i && `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`, via: "Open Library",
       author: b.author_name?.slice(0, 2).join(", "), year: b.first_publish_year, free: b.ebook_access === "public", borrow: b.ebook_access === "borrowable", meta: [b.author_name?.slice(0, 2).join(", "), b.first_publish_year].filter(Boolean).join(" · ") }));
   }},
+  // Apple Books' own e-book shop (its search lets other websites read it): prices, ratings and covers.
+  applebooks: { name: "Apple Books", async run(q) {
+    const d = await getJson(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=ebook&limit=12&country=${{ AU: "au", NZ: "nz", UK: "gb", US: "us", CA: "ca" }[regionId] || "us"}`, 9000);
+    return (d.results || []).map(b => ({ title: b.trackName, url: b.trackViewUrl, thumb: (b.artworkUrl100 || "").replace(/100x100/, "300x450"), via: "Apple Books", author: b.artistName,
+      year: b.releaseDate?.slice(0, 4), price: b.formattedPrice, free: +b.price === 0, rating: b.averageUserRating, meta: [b.artistName, b.releaseDate?.slice(0, 4), b.formattedPrice].filter(Boolean).join(" · ") }));
+  }},
   googlebooks: { paged: true, name: "Google Books", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12&startIndex=${P * 12}`);
     return (d.items || []).map(({ volumeInfo: v, accessInfo: a, saleInfo: sale }) => ({ price: sale?.saleability === "FREE" ? "$0" : sale?.retailPrice ? `${sale.retailPrice.currencyCode === "GBP" ? "£" : "$"}${sale.retailPrice.amount}` : undefined, title: v.title + (v.subtitle ? ": " + v.subtitle : ""), url: v.infoLink, thumb: v.imageLinks?.thumbnail?.replace(/^http:/, "https:"), via: "Google Books", snippet: short(v.description, 180),
@@ -388,33 +380,15 @@ Object.assign(VIDEO_SOURCES, {
   }},
 });
 
-// Engines' own image and video sections that let other websites read them: SearXNG servers (each
-// result names the engine that found it: Google, Bing, Flickr, Unsplash, Vimeo, YouTube…) and Qwant.
-async function searxJson(q, category, P = 0) {
-  const reasons = [];
-  for (const server of SEARX_HOSTS) {
-    try {
-      const d = await getJson(`https://${server}/search?q=${encodeURIComponent(q)}&format=json&categories=${category}&language=all&pageno=${P + 1}`, 6000);
-      if (d.results?.length) return d.results;
-    } catch (e) { reasons.push(e.message); }
-  }
-  throw new Error(reasons[0] ? `public servers: ${reasons[0]}` : "no public server answered");
-}
-const searxEngine = (r, kind) => `${engineName(String(r.engine || r.engines?.[0] || "SearXNG").replace(/[ .]*(images?|videos?)$/i, ""))} ${kind} (through SearXNG)`;
+// Engines' own image and video sections that let other websites read them: Qwant.
 const qwantSecs = d => d > 36000 ? Math.round(d / 1000) : d;
 Object.assign(IMAGE_SOURCES, {
-  searxng: { paged: true, name: "SearXNG Images (Google, Bing, Flickr, Unsplash…)", async run(q, { page: P = 0 } = {}) {
-    return (await searxJson(q, "images", P)).filter(r => r.thumbnail_src || r.img_src).slice(0, 30).map(r => ({ thumb: r.thumbnail_src || r.img_src, full: r.img_src, url: r.url, title: strip(r.title), via: searxEngine(r, "Images"), site: host(r.url) }));
-  }},
   qwant: { paged: true, name: "Qwant Images", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://api.qwant.com/v3/search/images?q=${encodeURIComponent(q)}&count=30&offset=${P * 30}&locale=en_GB&device=desktop&safesearch=1`);
     return (d.data?.result?.items || []).map(i => ({ thumb: i.thumbnail, full: i.media, url: i.url, title: i.title, via: "Qwant Images", site: host(i.url) }));
   }},
 });
 Object.assign(VIDEO_SOURCES, {
-  searxng: { paged: true, name: "SearXNG Videos (YouTube, Vimeo, Bing…)", async run(q, { page: P = 0 } = {}) {
-    return (await searxJson(q, "videos", P)).slice(0, 24).map(r => ({ title: strip(r.title), url: r.url, thumb: r.thumbnail || r.img_src, by: r.author, secs: durSecs(r.length), ts: r.publishedDate ? tsOf(r.publishedDate) : undefined, via: searxEngine(r, "Videos"), embed: ytEmbed(r.url) || r.iframe_src || undefined }));
-  }},
   qwant: { paged: true, name: "Qwant Videos", async run(q, { page: P = 0 } = {}) {
     const d = await getJson(`https://api.qwant.com/v3/search/videos?q=${encodeURIComponent(q)}&count=20&offset=${P * 20}&locale=en_GB&device=desktop&safesearch=1`);
     return (d.data?.result?.items || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumbnail, secs: qwantSecs(v.duration), ts: v.date ? tsOf(+v.date) : undefined, by: v.channel || v.source, via: "Qwant Videos", embed: ytEmbed(v.url) }));
@@ -431,6 +405,21 @@ Object.assign(BOOK_SOURCES, {
   }},
 });
 Object.assign(PLACE_SOURCES, {
+  // Bing Maps' own results list, through the helper: the businesses and places on the map, with their
+  // category, rating, address, opening hours, phone and website (like a maps app's results).
+  helper_bingmaps: { name: "Bing Maps", enabled: () => !!helperVersion(), async run(q, { page: P = 0 } = {}) {
+    const r = await helperFetch(`https://www.bing.com/maps/overlaybfpr?q=${encodeURIComponent(q)}&count=18&first=${P * 18}&form=MPSRBX`);
+    const doc = new DOMParser().parseFromString(r.html, "text/html");
+    return [...doc.querySelectorAll("[data-entity]")].map(a => {
+      let d; try { d = JSON.parse(a.getAttribute("data-entity")); } catch { return null; }
+      const e = d.entity || {}, pt = d.routablePoint || {}, lat = pt.latitude ?? d.geometry?.y, lon = pt.longitude ?? d.geometry?.x;
+      if (!e.title || lat == null) return null;
+      const where = encodeURIComponent(`${e.title} ${e.address || ""}`.trim());
+      return { title: e.title, url: `https://www.bing.com/maps?q=${where}&cp=${lat}~${lon}&lvl=17`, via: "Bing Maps", snippet: e.address, lat, lon, kind: e.primaryCategoryName,
+        rating: e.ratingValue, reviews: e.ratingCount, ratingBy: e.ratingSourceName, phone: e.phone, website: safeUrl(e.website || ""), open: e.openHoursText,
+        image: e.imageUrl ? e.imageUrl.replace(/^\//, "https://www.bing.com/") : undefined };
+    }).filter(Boolean);
+  }},
   photon: { name: "Photon (Komoot)", async run(q) {
     const d = await getJson(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=10`);
     return (d.features || []).map(f => { const p = f.properties, [lon, lat] = f.geometry.coordinates; const where = [p.street, p.city, p.state, p.country].filter(Boolean).join(", ");
@@ -503,7 +492,7 @@ function fuse(lists) {
   // Metasearch ranking: a page that several engines rank highly comes first (reciprocal rank fusion).
   const byKey = new Map();
   for (const list of lists) {
-    const place = new Map(); // SearXNG lists one row per engine for the same page
+    const place = new Map(); // an engine may list the same page twice
     list.forEach(r => {
       if (!r || !safeUrl(r.url)) return;
       const k = urlKey(r.url);
@@ -551,12 +540,8 @@ function roundRobin(lists, key = r => urlKey(r.url)) {
   return out;
 }
 
-// "Google (through SearXNG)", "Bing (through SearXNG)", "Qwant" → "Google · Bing (through SearXNG) · Qwant"
-function viaText(via) {
-  const through = via.filter(v => v.endsWith(" (through SearXNG)")).map(v => v.replace(" (through SearXNG)", ""));
-  const rest = via.filter(v => !v.endsWith(" (through SearXNG)"));
-  return [through.length && `${through.join(" · ")} (through SearXNG)`, ...rest].filter(Boolean).join(" · ");
-}
+// "Google", "Bing", "Qwant" → "Google · Bing · Qwant"
+const viaText = via => [...new Set(via)].join(" · ");
 
 // "en.wikipedia.org" → "Wikipedia", "www.abc.net.au" → "Abc"; known sites by name.
 const SITE_NAMES = { "wikipedia.org": "Wikipedia", "reddit.com": "Reddit", "news.ycombinator.com": "Hacker News", "github.com": "GitHub", "stackoverflow.com": "Stack Overflow", "youtube.com": "YouTube", "abc.net.au": "ABC", "bbc.com": "BBC", "bbc.co.uk": "BBC", "theguardian.com": "The Guardian", "nytimes.com": "The New York Times",
@@ -619,7 +604,7 @@ function imageTile(i) {
   if (!url || !thumb) return null;
   return el("a", { className: "img-tile", href: url, rel: "noopener", title: i.title || "" },
     el("img", { src: thumb, alt: i.title || "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.closest(".img-tile").remove(); } }),
-    el("span", { className: "img-via" }, el("b", { textContent: imgSite(i) }), !isSelf(i.via, i.url, imgSite(i)) && el("small", { textContent: " · " + i.via.replace(/ \(through SearXNG\)$/, "") })));
+    el("span", { className: "img-via" }, el("b", { textContent: imgSite(i) }), !isSelf(i.via, i.url, imgSite(i)) && el("small", { textContent: " · " + i.via })));
 }
 
 function mediaCard(i, kind) {
@@ -641,7 +626,7 @@ function mediaCard(i, kind) {
 // returned. Untick one to leave it out. It's a dropdown in the tools row, and part of the filters
 // on Shopping, Jobs and the other card pages.
 let panelState = { settled: [], sources: {}, locked: [] };
-const ENGINE_KEYS = /^(helper_(google|bing|brave|mojeek|yandex|searxng)|searxng|qwant|mwmbl|stract|alexandria|wiby|marginalia|duckduckgo)$/;
+const ENGINE_KEYS = /^(helper_(google|bing|brave|mojeek|yandex)|qwant|mwmbl|stract|alexandria|wiby|marginalia|duckduckgo)$/;
 const WEBSITE_KEYS = /^(helper_(amazon|ebay|googleshop|bingshop|app_)|store_|jobsite_|jobs_|app_|listing_|site_)/;
 
 function sourceRows() {
@@ -825,7 +810,56 @@ async function wikiAnswer(q, id = runId) {
   renderAnswer({ title: s.title, text: s.extract, image: s.thumbnail?.source, url: s.content_urls?.desktop?.page, source: "Wikipedia" });
 }
 
+// A search for a place ("Brisbane", "Eiffel Tower", "Bondi Beach") gets a place panel like Google's and
+// Bing's: a map, what it is and where, its Wikipedia summary, facts, and Directions / map buttons.
+const PLACE_KIND = { city: ["City", 11], town: ["Town", 13], village: ["Village", 14], suburb: ["Suburb", 14], neighbourhood: ["Neighbourhood", 15], quarter: ["Neighbourhood", 15],
+  state: ["State", 6], country: ["Country", 4], island: ["Island", 11], beach: ["Beach", 15], national_park: ["National park", 11], attraction: ["Tourist attraction", 16], museum: ["Museum", 16],
+  monument: ["Monument", 16], castle: ["Castle", 16], stadium: ["Stadium", 16], park: ["Park", 15], zoo: ["Zoo", 15], theme_park: ["Theme park", 15], university: ["University", 15], aerodrome: ["Airport", 13],
+  administrative: ["Region", 9], peak: ["Mountain", 12], arts_centre: ["Arts centre", 16], theatre: ["Theatre", 16], library: ["Library", 16], hospital: ["Hospital", 16], gallery: ["Art gallery", 16], viewpoint: ["Lookout", 15], aquarium: ["Aquarium", 16], landmark: ["Landmark", 16], bay: ["Bay", 12], lake: ["Lake", 12], river: ["River", 11], bridge: ["Bridge", 16], tower: ["Tower", 16], cathedral: ["Cathedral", 16], place_of_worship: ["Place of worship", 16] };
+async function placeAnswer(q, id = runId) {
+  if (q.split(/\s+/).length > 5 || /\b(how|what|why|when|who|best|vs|buy|price|jobs?|recipe|review|weather|news|for sale|to rent)\b/i.test(q)) return;
+  const [p] = await getJson(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&addressdetails=1&extratags=1&namedetails=1&limit=1&accept-language=en`, 5000);
+  // What it is: its address type first ("suburb", "city"), then its map type ("tower", "beach"); any other well-known spot is a landmark.
+  const kind = p && (PLACE_KIND[p.addresstype] || PLACE_KIND[p.type] || (+p.importance > 0.5 && /^(tourism|amenity|historic|leisure|building|man_made)$/.test(p.category) ? PLACE_KIND.landmark : null));
+  const squash = s => String(s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+  const name = p?.namedetails?.["name:en"] || p?.name;
+  // Only a well-known place whose name is what was searched ("brisbane" is Brisbane, "london" is Greater London,
+  // "python" is not a village somewhere).
+  const names = [name, p?.name, p?.namedetails?.short_name, p?.namedetails?.alt_name, p?.namedetails?.official_name].filter(Boolean).map(squash), sq = squash(q);
+  const named = names.some(n => n === sq || n.startsWith(sq) || sq.includes(n) || (+p.importance > 0.6 && n.includes(sq)));
+  if (!kind || !name || +p.importance < 0.4 || !named) return;
+  if (id !== runId || q !== query) return;
+  const a = p.address || {}, x = p.extratags || {};
+  const where = [a.city && a.city !== name && a.city, a.state !== name && a.state, a.country !== name && a.country].filter(Boolean).join(", ");
+  const wiki = x.wikipedia?.match(/^en:(.+)$/)?.[1];
+  const s = wiki ? await getJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wiki.replace(/ /g, "_"))}`, 5000).catch(() => null) : null;
+  if (id !== runId || q !== query) return;
+  const lat = (+p.lat).toFixed(5), lon = (+p.lon).toFixed(5), z = kind[1];
+  const label = encodeURIComponent([name, where].filter(Boolean).join(", "));
+  const pop = x.population && (+x.population).toLocaleString();
+  const facts = [["Population", pop], ["Elevation", x.ele && `${Math.round(x.ele)} m`], ["Opening hours", x.opening_hours], ["Phone", x.phone || x["contact:phone"]],
+    ["Address", kind[1] >= 15 && [a.house_number && `${a.house_number} ${a.road || ""}`, a.road && !a.house_number && a.road, a.suburb || a.city, a.postcode].filter(Boolean).join(", ")]].filter(([, v]) => v);
+  const site = safeUrl(x.website || x["contact:website"] || "");
+  const btn = (text, href, primary) => el("a", { className: primary ? "btn-primary place-btn" : "chip place-btn", href, rel: "noopener", target: "_blank", textContent: text });
+  fill($("answer"),
+    el("iframe", { className: "place-map", title: `Map of ${name}`, loading: "lazy", referrerPolicy: "no-referrer-when-downgrade", src: `https://maps.google.com/maps?q=${label}&ll=${lat},${lon}&z=${z}&output=embed` }),
+    el("h2", { textContent: name }),
+    el("p", { className: "place-kind", textContent: [kind[0], where && `in ${where}`].filter(Boolean).join(" ") }),
+    el("div", { className: "place-btns" },
+      btn("Directions", `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`, true),
+      btn("Google Maps", `https://www.google.com/maps/search/?api=1&query=${label}`),
+      btn("Bing Maps", `https://www.bing.com/maps?cp=${lat}~${lon}&lvl=${z}&q=${label}`),
+      btn("OpenStreetMap", `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=${z}/${lat}/${lon}`),
+      site && btn("Website", site)),
+    s?.extract && el("p", { className: "place-about", textContent: short(s.extract, 360) }),
+    s?.content_urls && el("a", { href: s.content_urls.desktop.page, rel: "noopener", className: "answer-src" }, domainIcon("wikipedia.org"), "Wikipedia"),
+    facts.length > 0 && el("dl", { className: "place-facts" }, ...facts.flatMap(([k, v]) => [el("dt", { textContent: k }), el("dd", { textContent: v })])));
+  $("answer").classList.add("place");
+  $("answer").hidden = false;
+}
+
 function renderAnswer(a) {
+  $("answer").classList.remove("place");
   const url = safeUrl(a.url);
   fill($("answer"),
     a.image && el("img", { src: a.image, alt: "", className: "answer-img", onerror() { this.remove(); } }),
@@ -848,8 +882,10 @@ function runCached(n, s, q, page) {
   const hit = settleCache.get(key);
   if (hit && Date.now() - hit.t < 120000) return hit.p;
   // No ads, whatever the source: anything an ad server links to or that's marked sponsored is dropped.
-  // Every source gets 15 seconds, so "Show more" and the final results never wait on one slow server.
-  const p = withTimeout(Promise.resolve().then(() => s.run(q, { page })), 15000).then(r => { const out = (r || []).filter(x => !isAdResult(x)); out.spell = r?.spell; return { n, r: out }; }, err => ({ n, err }));
+  // Like a metasearch engine: the web engines get 5 seconds and the page goes on without a slow one;
+  // the shops, job and property sites (slower, but they are the results) get 15.
+  const limit = s.group === "main" && !n.startsWith("listing_") ? 5000 : 15000;
+  const p = withTimeout(Promise.resolve().then(() => s.run(q, { page })), limit).then(r => { const out = (r || []).filter(x => !isAdResult(x)); out.spell = r?.spell; return { n, r: out }; }, err => ({ n, err }));
   settleCache.set(key, { t: Date.now(), p });
   p.then(x => { if (x.err) settleCache.delete(key); });
   return p;
@@ -867,7 +903,7 @@ function throttled(fn) {
   return { now() { clearTimeout(t); t = null; }, soon() { if (!t) t = setTimeout(run, 150); } };
 }
 const MAIN_SOURCES = Object.fromEntries(Object.entries(SOURCES).filter(([, s]) => s.group === "main"));
-const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => ({ searxng: "SearXNG result pages" }[e.id] || e.name));
+const LOCKED_ENGINES = () => helperVersion() ? [] : HELPER_ENGINES.map(e => e.name);
 const skeletons = n => Array.from({ length: n }, () => el("li", { className: "skeleton result-skel" }));
 const empty = text => el("li", { className: "empty", textContent: text });
 
@@ -875,7 +911,7 @@ function mergeMain(settled) {
   const by = Object.fromEntries(settled.map(s => [s.n, s.r || []]));
   const directLists = Object.keys(LISTING_SITES).map(id => by["listing_" + id] || []);
   const engineLists = [...directLists, ...HELPER_ENGINES.map(e => by["helper_" + e.id] || [])];
-  const indexLists = ["searxng", "qwant", "mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
+  const indexLists = ["qwant", "mwmbl", "stract", "alexandria", "marginalia", "wiby"].map(n => by[n] || []);
   const otherLists = ["wikipedia", "duckduckgo", "reddit", "hackernews"].map(n => by[n] || []);
   // On a topic, the engines' site-restricted listings come first; other sources follow.
   const main = topicId !== "all"
@@ -1037,6 +1073,11 @@ async function go() {
   if (modeOn) { panelState = { settled: [], sources: { ...cardSourcesFor(topicId), ...MAIN_SOURCES }, locked: [] }; lastCards = []; drawCards(); }
   renderTopicSites();
   if (query) { rememberSearch(query); if (modeOn) rememberAreaSearch(topicId, query); }
+  // Maps and Books open on their own front: a map of where you are, a book shop's shelves.
+  document.body.classList.toggle("maps-start", !query && c.view === "maps");
+  document.body.classList.toggle("store-start", !query && (c.view === "maps" || c.view === "books"));
+  if (!query && c.view === "maps") { $("status").textContent = ""; $("results").replaceChildren(el("li", { className: "places-li" }, mapsHome())); return; }
+  if (!query && c.view === "books") { $("status").textContent = ""; $("results").replaceChildren(el("li", { className: "store-li" }, bookStore())); return; }
   if (!query) { $("status").textContent = modeOn ? "" : TOPIC_FORMS[topicId] && c.kind === "web" ? "Fill in the form above, or type a search." : c.shop ? "Type what you want to buy: Unitex searches every store at once." : "Type something to search."; return; }
   const id = ++runId;
 
@@ -1063,7 +1104,7 @@ async function go() {
     // Images, videos and books from the open collections must have a search word in the title
     // (big engines' own image and video sections are trusted to match by meaning).
     const relevantOnly = list => c.view === "news" ? list.map(s => ({ ...s, r: (s.r || []).filter(i => newsMatches(i, q)) }))
-      : ["images", "videos", "books", "papers"].includes(c.view) ? list.map(s => /^helper_|^searxng$/.test(s.n) ? s : { ...s, r: (s.r || []).filter(i => aboutSearch(i.title, query, 0.01)) }) : list;
+      : ["images", "videos", "books", "papers"].includes(c.view) ? list.map(s => /^helper_/.test(s.n) ? s : { ...s, r: (s.r || []).filter(i => aboutSearch(i.title, query, 0.01)) }) : list;
     // Engines' own sections first (they're the biggest indexes), then the open sources.
     const order = list => videosOnly(relevantOnly([...list.filter(s => s.n.startsWith("helper_")), ...list.filter(s => !s.n.startsWith("helper_"))])).map(s => s.r || []);
     const step = STEP[c.view] || 20;
@@ -1107,6 +1148,7 @@ async function go() {
 
   const cardSrc = cardSourcesFor(topicId);
   wikiAnswer(query, id).catch(() => {});
+  placeAnswer(query, id).catch(() => {});
   spellHint = "";
   // Draw results as each source answers, instead of waiting for the slowest one.
   let mainSoFar = [], cardsSoFar = [], aiStarted = false;

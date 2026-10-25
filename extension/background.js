@@ -6,8 +6,6 @@
 const api = globalThis.chrome || globalThis.browser;
 // Only engines with their own index (no resellers of Google's or Bing's results).
 const ALLOWED_HOSTS = ["www.google.com", "www.bing.com", "search.brave.com", "www.mojeek.com",
-  // Public SearXNG servers (open-source metasearch)
-  "priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io",
   // Yandex (its own index, for images)
   "yandex.com",
   // Stores, for the Shopping area
@@ -30,11 +28,26 @@ ALLOWED_HOSTS.push("cleantechnica.com", "electrek.co", "en.wikinews.org", "globa
 // news.google.com/rss/articles/… link into the real article address.
 const POST_URLS = ["https://news.google.com/_/DotsSplashUi/data/batchexecute", "https://flathub.org/api/v2/search"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
+// Shops' picture servers that browsers' tracking protection blocks on other sites: the helper loads
+// their pictures for the page (images only, nothing else from these hosts).
+const IMAGE_HOSTS = ["i.ebayimg.com", "m.media-amazon.com", "images-na.ssl-images-amazon.com", "i5.walmartimages.com", "pisces.bbystatic.com"];
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!ALLOWED_PAGES.some(p => (sender.url || "").startsWith(p))) return;
   let url;
   try { url = new URL(msg.url); } catch { reply({ error: "bad url" }); return; }
+  if (msg.image) {
+    if (url.protocol !== "https:" || !(IMAGE_HOSTS.includes(url.hostname) || ALLOWED_HOSTS.includes(url.hostname))) { reply({ error: "not allowed" }); return; }
+    fetch(url, { credentials: "omit", headers: { Accept: "image/avif,image/webp,image/*" } }).then(async r => {
+      const type = r.headers.get("content-type") || "";
+      if (!r.ok || !type.startsWith("image/")) return reply({ error: `HTTP ${r.status}` });
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (bytes.length > 4_000_000) return reply({ error: "too big" });
+      let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      reply({ status: r.status, url: r.url, image: `data:${type.split(";")[0]};base64,${btoa(bin)}` });
+    }).catch(err => reply({ error: String(err) }));
+    return true;
+  }
   if (url.protocol !== "https:" || !ALLOWED_HOSTS.includes(url.hostname)) { reply({ error: "not allowed" }); return; }
 
   const ctrl = new AbortController();

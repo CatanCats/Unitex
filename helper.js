@@ -37,6 +37,32 @@ function helperFetchNow(url, ms, post) {
   });
 }
 
+// Shop pictures that the browser's tracking protection blocks on other sites (eBay's i.ebayimg.com,
+// Amazon's): when one fails, the helper loads it and the picture is shown from what it got.
+const HELPER_IMAGE_HOSTS = /(^|\.)(ebayimg\.com|media-amazon\.com|ssl-images-amazon\.com|walmartimages\.com|bbystatic\.com)$/;
+const helperImages = new Map();
+function helperImage(url) {
+  if (!helperImages.has(url)) helperImages.set(url, new Promise((resolve, reject) => {
+    if (versionLess(helperVersion() || "0.0.0", "1.12.0")) return reject(new Error("needs Unitex Helper 1.12"));
+    const id = ++helperSeq;
+    const timer = setTimeout(() => { helperWaiting.delete(id); reject(new Error("timeout")); }, 15000);
+    helperWaiting.set(id, res => { clearTimeout(timer); res.image ? resolve(res.image) : reject(new Error(res.error || "no picture")); });
+    window.postMessage({ type: "unitex-helper-fetch", id, url, image: true }, location.origin);
+  }));
+  return helperImages.get(url);
+}
+// Caught before the picture's own onerror (which would remove it): "error" is caught on the way down.
+document.addEventListener("error", e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || img.dataset.viaHelper || !helperVersion()) return;
+  let h = ""; try { h = new URL(img.src).hostname; } catch { return; }
+  if (!HELPER_IMAGE_HOSTS.test(h)) return;
+  e.stopImmediatePropagation();
+  img.dataset.viaHelper = "1";
+  const src = img.src;
+  helperImage(src).then(data => { img.src = data; }, () => { img.onerror?.call(img, e); });
+}, true);
+
 // Clear reasons instead of "Failed to fetch" / "HTTP 429": cookie-consent pages and CAPTCHA pages.
 const CONSENT_HOSTS = /^(consent\.google\.[a-z.]+|consent\.youtube\.com|consent\.yahoo\.com|guce\.yahoo\.com|guce\.oath\.com)$/;
 function helperProblem(asked, res) {
@@ -63,33 +89,9 @@ const HELPER_ENGINES = [
   { id: "brave",      name: "Brave",      url: (q, P = 0) => `https://search.brave.com/search?q=${encodeURIComponent(q)}&source=web${P ? `&offset=${P}` : ""}` },
   { id: "mojeek",     name: "Mojeek",     url: (q, P = 0) => `https://www.mojeek.com/search?q=${encodeURIComponent(q)}${P ? `&s=${P * 10 + 1}` : ""}` },
   { id: "yandex",     name: "Yandex",     url: (q, P = 0) => `https://yandex.com/search/?text=${encodeURIComponent(q)}${P ? `&p=${P}` : ""}` },
-  { id: "searxng",    name: "SearXNG",    url: (q, P = 0, host = SEARX_HOSTS[0]) => `https://${host}/search?q=${encodeURIComponent(q)}&categories=general&language=all${P ? `&pageno=${P + 1}` : ""}` },
 ];
 
-// Public SearXNG servers, tried in order until one answers.
-const SEARX_HOSTS = ["priv.au", "searx.be", "baresearch.org", "search.inetol.net", "paulgo.io"];
 const engineName = e => ({ duckduckgo: "DuckDuckGo", bing: "Bing", google: "Google", brave: "Brave", qwant: "Qwant", startpage: "Startpage", yahoo: "Yahoo", mojeek: "Mojeek", wikipedia: "Wikipedia", presearch: "Presearch", yandex: "Yandex", youtube: "YouTube", vimeo: "Vimeo", dailymotion: "Dailymotion", flickr: "Flickr", unsplash: "Unsplash", pinterest: "Pinterest", openverse: "Openverse", wikicommons: "Wikimedia Commons", peertube: "PeerTube", sepiasearch: "PeerTube", invidious: "YouTube (Invidious)", piped: "YouTube (Piped)", deviantart: "DeviantArt", imgur: "Imgur", artic: "Art Institute of Chicago", "google videos": "Google", "bing videos": "Bing" }[e.toLowerCase()] || e.replace(/^./, c => c.toUpperCase()));
-
-// A SearXNG server that answered properly but found nothing (no engine errors listed): stop there.
-const searxAnsweredEmpty = doc => !!doc.querySelector("#results, #urls") && !doc.querySelector("#engines_msg, .engine-error, #engines_msg-table") && !doc.querySelector("article.result");
-
-// SearXNG lists which engines found each result; credit them: "Google (through SearXNG)".
-function parseSearx(html, base) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const out = [];
-  for (const art of doc.querySelectorAll("article.result")) {
-    const a = art.querySelector("h3 a[href]") || art.querySelector("a.url_header[href]");
-    const url = a && unwrapLink(a.getAttribute("href"), base);
-    if (!url) continue;
-    const title = (art.querySelector("h3")?.textContent || a.textContent).replace(/\s+/g, " ").trim();
-    const snippet = (art.querySelector(".content")?.textContent || "").replace(/\s+/g, " ").trim();
-    const engines = [...art.querySelectorAll(".engines span")].map(e => e.textContent.trim()).filter(Boolean);
-    const domain = new URL(url).hostname.replace(/^www\./, "");
-    for (const e of engines.length ? engines : ["SearXNG"]) out.push({ title, url, snippet: snippet.slice(0, 240), via: e === "SearXNG" ? e : `${engineName(e)} (through SearXNG)`, domain });
-  }
-  if (!out.length && /too many requests|rate limit|captcha|not allowed/i.test(doc.body?.textContent || "")) throw new Error("the SearXNG server is limiting searches right now");
-  return out;
-}
 
 // Engines wrap result links in their own redirect URLs; recover the real destination.
 function unwrapLink(href, base) {
@@ -314,17 +316,6 @@ function parseResultsPage(html, base, engineName, kind = "web") {
 }
 
 async function helperSearch(engine, q, P = 0) {
-  if (engine.id === "searxng") {
-    let last;
-    for (const host of SEARX_HOSTS) {
-      try {
-        const res = await helperFetch(engine.url(q, P, host));
-        const items = parseSearx(res.html, res.url);
-        if (items.length || searxAnsweredEmpty(new DOMParser().parseFromString(res.html, "text/html"))) return items;
-      } catch (e) { last = e; }
-    }
-    throw last || new Error("no SearXNG server returned results");
-  }
   const res = await helperFetch(engine.url(q, P));
   return parseResultsPage(res.html, res.url || engine.url(q, P), engine.name);
 }
@@ -341,22 +332,6 @@ async function helperDoc(url) {
   return { doc: adFreeDoc(res.html), base: res.url || url, html: res.html };
 }
 
-// SearXNG's images/videos pages: each result names the engines that found it.
-async function searxPages(q, category, P, parse) {
-  let last;
-  for (const host of SEARX_HOSTS) {
-    try {
-      const { doc, base } = await helperDoc(`https://${host}/search?q=${encodeURIComponent(q)}&categories=${category}&language=all&pageno=${P + 1}`);
-      const items = parse(doc, base);
-      if (items.length || searxAnsweredEmpty(doc)) return items;
-    } catch (e) { last = e; }
-  }
-  throw last || new Error("no SearXNG server returned results");
-}
-const searxVia = (art, kind) => {
-  const e = [...art.querySelectorAll(".engines span")].map(x => x.textContent.trim()).filter(Boolean)[0];
-  return e ? `${engineName(e.replace(/\s*(images?|videos?)$/i, ""))} ${kind} (through SearXNG)` : `SearXNG ${kind}`;
-};
 
 // ---------- stores: Amazon, eBay, Google Shopping, Bing Shopping ----------
 // Each returns product cards: { title, url, image, domain, via, card: { kind: "product", name, price, rating, reviews, condition, site } }.
@@ -619,17 +594,6 @@ const HELPER_VERTICALS = {
         return url && src && !/mojeek\.com/.test(new URL(url).hostname) && { thumb: src, full: full ? unwrapLink(full, base) || undefined : undefined, url, title: img.getAttribute("alt") || new URL(url).hostname, via: "Mojeek Images" };
       }).filter(Boolean).slice(0, 20);
     }},
-    searxng: { paged: true, name: "SearXNG Images (many engines)", async run(q, { page: P = 0 } = {}) {
-      return searxPages(q, "images", P, (doc, base) => [...doc.querySelectorAll("article.result")].map(art => {
-        const img = art.querySelector("img.thumbnail, img.image_thumbnail") || [...art.querySelectorAll("img")].find(i => !isIconImg(i));
-        const links = [...art.querySelectorAll("a[href]")].map(a => unwrapLink(a.getAttribute("href"), base)).filter(Boolean);
-        const thumb = img && bestImg(img, base);
-        const page = art.querySelector(".result-url a, a.result-url, .result-source a")?.getAttribute("href");
-        const url = (page && unwrapLink(page, base)) || links.find(l => !/\.(jpe?g|png|gif|webp)(\?|$)/i.test(l)) || links[0];
-        const full = links.find(l => /\.(jpe?g|png|gif|webp)(\?|$)/i.test(l));
-        return thumb && url && { thumb, full, url, title: (art.querySelector(".title, h3")?.textContent || img.alt || "").replace(/\s+/g, " ").trim(), via: searxVia(art, "Images") };
-      }).filter(Boolean));
-    }},
     yandex: { paged: true, name: "Yandex Images", async run(q, { page: P = 0 } = {}) {
       const { doc, base, html } = await helperDoc(`https://yandex.com/images/search?text=${encodeURIComponent(q)}&p=${P}`);
       if (/showcaptcha|smartcaptcha/i.test(base + html.slice(0, 5000))) throw new Error("asked for a CAPTCHA (open yandex.com/images once yourself to clear it)");
@@ -678,18 +642,6 @@ const HELPER_VERTICALS = {
     google: { paged: true, name: "Google Videos", async run(q, { page: P = 0 } = {}) {
       const res = await helperFetch(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=vid&start=${P * 10}&hl=en`);
       return parseResultsPage(res.html, res.url, "Google Videos", "videos").map(r => ({ title: r.title, url: r.url, thumb: ytThumb(r.url) || r.image, via: "Google Videos", by: r.by, secs: r.secs, ts: r.ts, embed: ytEmbed(r.url) || undefined }));
-    }},
-    searxng: { paged: true, name: "SearXNG Videos (many engines)", async run(q, { page: P = 0 } = {}) {
-      return searxPages(q, "videos", P, (doc, base) => [...doc.querySelectorAll("article.result")].map(art => {
-        const a = art.querySelector("h3 a[href], a.url_header[href], a[href]");
-        const url = a && unwrapLink(a.getAttribute("href"), base);
-        const img = art.querySelector("img.thumbnail, img.image_thumbnail") || [...art.querySelectorAll("img")].find(i => !isIconImg(i));
-        const iframe = art.querySelector("iframe[data-src], iframe[src]");
-        const ts = boxTs(art);
-        return url && { title: (art.querySelector("h3")?.textContent || a.textContent).replace(/\s+/g, " ").trim() || url, url, thumb: ytThumb(url) || (img && bestImg(img, base)), ts,
-          secs: durSecs(art.querySelector(".result_length, .length")?.textContent?.replace(/[^\d:]/g, "")), by: art.querySelector(".result_author, .author")?.textContent?.replace(/^\s*Author:?\s*/i, "").trim(),
-          via: searxVia(art, "Videos"), embed: ytEmbed(url) || iframe?.getAttribute("data-src") || iframe?.getAttribute("src") || undefined };
-      }).filter(Boolean));
     }},
     bing: { paged: true, name: "Bing Videos", async run(q, { page: P = 0 } = {}) {
       const { doc, base } = await helperDoc(`https://www.bing.com/videos/search?q=${encodeURIComponent(q)}&first=${P * 35 + 1}`);
