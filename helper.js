@@ -51,16 +51,19 @@ function helperImage(url) {
   }));
   return helperImages.get(url);
 }
+// Without the helper (or an older one), the picture comes through a public image relay (wsrv.nl),
+// which blockers don't treat as a tracker.
+const relayImage = u => `https://wsrv.nl/?url=${encodeURIComponent(u.replace(/^https?:\/\//, ""))}&w=600&we`;
 // Caught before the picture's own onerror (which would remove it): "error" is caught on the way down.
 document.addEventListener("error", e => {
   const img = e.target;
-  if (!(img instanceof HTMLImageElement) || img.dataset.viaHelper || !helperVersion()) return;
+  if (!(img instanceof HTMLImageElement) || img.dataset.rescued) return;
   let h = ""; try { h = new URL(img.src).hostname; } catch { return; }
   if (!HELPER_IMAGE_HOSTS.test(h)) return;
   e.stopImmediatePropagation();
-  img.dataset.viaHelper = "1";
+  img.dataset.rescued = "1"; // one rescue each: if the relay fails too, the picture's own onerror runs
   const src = img.src;
-  helperImage(src).then(data => { img.src = data; }, () => { img.onerror?.call(img, e); });
+  helperImage(src).then(data => { img.src = data; }, () => { img.src = relayImage(src); });
 }, true);
 
 // Clear reasons instead of "Failed to fetch" / "HTTP 429": cookie-consent pages and CAPTCHA pages.

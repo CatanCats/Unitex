@@ -1448,3 +1448,184 @@ body.store-start .rside { display: none; }
 /* A book banner: the cover on the right, the words beside it, like the book shops' featured cards. */
 .store-banner.book .store-banner-art { left: auto; right: 18px; top: 50%; transform: translateY(-50%); }
 .store-banner.book .store-banner-text { max-width: calc(100% - 130px); }
+
+/* ======================================================================
+   Area fronts built like the official sites (landing.js SITE_HEROES).
+   ====================================================================== */
+body.landing-on .mode-filters { display: none !important; }
+body.landing-on .mode-layout { margin-top: 4px; }
+.landing .hero-input { box-sizing: border-box; width: 100%; height: 48px; padding: 0 14px; border: 0; border-radius: 8px; background: #fff; color: #1c1c1c; font: inherit; font-size: 1rem; outline: none; }
+.landing .hero-input::placeholder { color: #6b6b75; }
+.hero-where-wrap { position: relative; display: block; min-width: 0; }
+.hero-where-wrap .place-pop { min-width: 280px; text-align: left; }
+
+/* realestate.com.au: a rounded photo, a heading, a white card with underlined tabs and a red Search. */
+.rea-hero { position: relative; display: grid; justify-items: center; gap: 14px; padding: 36px 20px 48px; border-radius: 16px; overflow: visible;
+  background: linear-gradient(180deg, #e9e4f3, #c9d6e8) center / cover; }
+.rea-hero[style*="background-image"] { background-size: cover; background-position: center; }
+.rea-hero::before { content: ""; position: absolute; inset: 0; border-radius: 16px; background: linear-gradient(180deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.05) 60%); pointer-events: none; }
+.rea-hero h2 { position: relative; margin: 0; font-size: 1.1rem; font-weight: 600; color: #333f48; }
+.rea-card { position: relative; width: min(740px, 100%); padding: 0 8px 12px; border-radius: 10px; background: #fff; box-shadow: 0 4px 18px rgb(0 0 0 / 0.14); }
+.rea-tabs { display: flex; border-bottom: 1px solid #e5e3e8; }
+.rea-tabs button { flex: 1; padding: 14px 8px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: #697684; font: inherit; font-size: 0.95rem; cursor: pointer; }
+.rea-tabs button.on { color: #333f48; font-weight: 600; border-bottom-color: #e4002b; }
+.rea-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-top: 12px; }
+.rea-icon { padding-left: 10px; color: #697684; font-size: 1.2rem; }
+.rea-row .hero-input { height: 46px; padding-left: 4px; }
+.rea-search { height: 46px; padding: 0 26px; border: 0; border-radius: 999px; background: #e4002b; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.rea-search:hover { background: #c4001f; }
+
+/* SEEK: a navy band with the two boxes and the pink button. */
+.seek-hero { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; gap: 14px; padding: 26px 24px 30px; border-radius: 0 0 16px 16px; margin: -14px -4px 0;
+  background: #051a49 radial-gradient(circle at 92% 30%, #0d3880 0 18%, transparent 19%); }
+.seek-field { display: grid; gap: 8px; color: #fff; font-weight: 700; font-size: 0.95rem; }
+.seek-btn { height: 48px; padding: 0 30px; border: 0; border-radius: 8px; background: #e60278; color: #fff; font: inherit; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; }
+.seek-btn:hover { background: #c80068; }
+
+/* carsales: a full-width car photo, then a white card overlapping it with the boxes and a blue button. */
+.cs-hero { position: relative; margin: -14px -4px 0; }
+.cs-photo { height: 260px; border-radius: 0 0 14px 14px; background: #0b2341 linear-gradient(120deg, #0b2341, #16467e) center / cover; }
+.cs-photo[style*="background-image"] { background-size: cover; background-position: center 60%; }
+.cs-card { position: relative; margin: -110px 24px 0; padding: 18px 20px 6px; border-radius: 12px; background: #fff; color: #1c1c1c; box-shadow: 0 6px 24px rgb(0 0 0 / 0.16); }
+.cs-head h2 { margin: 0 0 12px; font-size: 1.25rem; font-weight: 500; color: #1c1c1c; }
+.cs-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; gap: 12px; }
+.cs-row label { display: grid; gap: 6px; font-size: 0.85rem; color: #333; }
+.landing .cs-select, .cs-select { box-sizing: border-box; width: 100%; height: 46px; padding: 0 12px; border: 1px solid #9aa0a6; border-radius: 6px; background: #fff; color: #1c1c1c; font: inherit; font-size: 0.95rem; }
+.cs-btn { height: 46px; padding: 0 24px; border: 0; border-radius: 6px; background: #007cc2; color: #fff; font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.cs-btn:hover { background: #0068a3; }
+.cs-bodies { display: flex; justify-content: center; gap: 6px; margin-top: 16px; padding-top: 10px; border-top: 1px solid #e5e5e5; overflow-x: auto; }
+.cs-body { flex: none; display: grid; justify-items: center; gap: 4px; min-width: 96px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: #1c1c1c; font: inherit; font-size: 0.88rem; cursor: pointer; }
+.cs-body:hover { background: #f1f5fa; }
+.cs-body-icon { font-size: 2rem; line-height: 1; }
+
+/* Gumtree: the dark purple bar, the green button, the category links below. */
+.gt-hero { margin: -14px -4px 0; padding: 18px 24px 0; border-radius: 0 0 14px 14px; background: #3c3241; }
+.gt-search { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 10px; }
+.gt-search .hero-input { border: 2px solid #72ef36; border-radius: 999px; padding: 0 20px; }
+.gt-btn { height: 48px; padding: 0 26px; border: 0; border-radius: 999px; background: #27841d; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.gt-cats { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.gt-cats button { flex: none; padding: 12px 14px; border: 0; background: none; color: #fff; font: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+.gt-cats button:hover { text-decoration: underline; }
+
+/* taste.com.au: a pale blue band, a rounded blue panel, food photos at the sides. */
+.taste-hero { position: relative; display: grid; place-items: center; padding: 50px 20px; margin: -14px -4px 0; background: #eaf3fb; overflow: hidden; border-radius: 0 0 14px 14px; }
+.taste-panel { position: relative; z-index: 1; display: grid; justify-items: center; gap: 16px; width: min(760px, 100%); padding: 30px 28px 24px; border-radius: 10px; background: #a9cdee; box-sizing: border-box; }
+.taste-panel h2 { margin: 0; font-size: 1.8rem; color: #1c1c1c; }
+.taste-box { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; width: 100%; border-radius: 8px; background: #fff; }
+.taste-box > span { padding: 0 6px 0 18px; color: #1d4f91; font-size: 1.5rem; }
+.taste-box .hero-input { height: 58px; }
+.taste-trending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+.taste-trending b { margin-right: 6px; color: #1c1c1c; }
+.taste-trending button { padding: 6px 16px; border: 1px solid #555; border-radius: 999px; background: #f4f4f4; color: #1c1c1c; font: inherit; font-weight: 700; font-size: 0.88rem; cursor: pointer; }
+.taste-food { position: absolute; width: 230px; height: 230px; object-fit: cover; border-radius: 50%; box-shadow: 0 10px 30px rgb(0 0 0 / 0.2); }
+.taste-food.left { left: -60px; top: -40px; }
+.taste-food.right { right: -50px; bottom: -60px; }
+
+/* IMDb: black, a large featured picture with its poster and title, "Up next" on the right in yellow. */
+body[data-look="movies"] { --bg: #000; --card: #1a1a1a; --card-2: #232323; --fg: #fff; --muted: #a3a3a3; --border: #2b2b2b; background: #000; }
+body[data-look="movies"] .rnav, body[data-look="movies"] .rtabs button { color: #ddd; }
+.imdb-hero { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 12px; }
+.imdb-hero.skeleton { height: 420px; }
+.imdb-feature { position: relative; display: flex; align-items: flex-end; gap: 16px; min-height: 420px; padding: 18px; border-radius: 10px; overflow: hidden; color: #fff; text-decoration: none; background: #111 center / cover; isolation: isolate; }
+.imdb-feature::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, transparent 40%, rgb(0 0 0 / 0.85)); }
+.imdb-poster { width: 132px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.6); }
+.imdb-feature-text { display: grid; gap: 4px; padding-bottom: 6px; }
+.imdb-feature-text b { font-size: 1.7rem; font-weight: 400; }
+.imdb-feature-text small { color: #c0c0c0; font-size: 0.95rem; }
+.imdb-next { display: grid; align-content: start; gap: 10px; padding: 12px 14px; border-radius: 10px; background: #121212; }
+.imdb-next h3 { margin: 0 0 4px; color: #f5c518; font-size: 1.2rem; }
+.imdb-next-item { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; align-items: center; color: #fff; text-decoration: none; }
+.imdb-next-item img { width: 76px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 4px; }
+.imdb-next-item span { display: grid; gap: 2px; }
+.imdb-next-item small { color: #a3a3a3; }
+.imdb-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.imdb-chips button { display: inline-flex; gap: 8px; padding: 6px 14px; border: 1px solid #555; border-radius: 999px; background: none; color: #fff; font: inherit; font-size: 0.88rem; cursor: pointer; }
+body[data-look="movies"] .landing-row-head h3 { position: relative; padding-left: 14px; color: #f5c518; font-size: 1.5rem; }
+body[data-look="movies"] .landing-row-head h3::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 4px; border-radius: 2px; background: #f5c518; }
+
+/* Eventbrite: a big banner with highlighted stacked words, a search pill with an orange round button, circles. */
+.eb-hero { display: grid; gap: 14px; }
+.eb-banner { display: grid; justify-items: start; align-content: center; gap: 4px; min-height: 260px; padding: 30px 60px; border-radius: 14px; background: #1e0a3c linear-gradient(110deg, #3a1a10, #c3451d 60%, #f05537); color: #1e0a3c; }
+.eb-banner b, .eb-kicker { padding: 2px 12px; font-size: 2.6rem; font-weight: 900; line-height: 1.1; background: linear-gradient(90deg, #f9c8ef, #a9b8ff); }
+.eb-kicker { font-size: 1.1rem; background: #f9c8ef; }
+.eb-search { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: center; gap: 0; width: min(640px, 100%); padding: 4px; border: 1px solid #dbdae3; border-radius: 999px; background: #fff; }
+.eb-search .hero-input { height: 42px; border-radius: 999px; }
+.eb-search .hero-where-wrap { border-left: 1px solid #dbdae3; }
+.eb-btn { width: 42px; height: 42px; border: 0; border-radius: 50%; background: #d1410c; color: #fff; font-size: 1.2rem; cursor: pointer; }
+.site-circles { display: flex; gap: 18px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: thin; }
+.site-circles button { flex: none; display: grid; justify-items: center; gap: 8px; width: 108px; border: 0; background: none; color: var(--fg); font: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
+.site-circles .circle { display: grid; place-items: center; width: 92px; height: 92px; border: 1px solid var(--border); border-radius: 50%; background: var(--card); font-size: 2rem; }
+.site-circles button:hover .circle { border-color: var(--accent); }
+
+/* realestate.com.au's and SEEK's rounded outline pills for categories. */
+.site-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.site-pills button { padding: 9px 18px; border: 1px solid #697684; border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.site-pills button:hover { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+
+/* Amazon: white category cards with four pictures and "See more", on Amazon's grey page. */
+body[data-look="shopping"] { --bg: #e3e6e6; }
+body[data-look="shopping"] .mode-main { background: none; }
+.amz-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+.amz-card { display: grid; grid-template-rows: auto 1fr auto; gap: 10px; padding: 18px 18px 14px; background: #fff; color: #0f1111; }
+.amz-card h3 { margin: 0; font-size: 1.3rem; font-weight: 700; color: #0f1111; }
+.amz-quad { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.amz-quad-item { display: grid; gap: 4px; padding: 0; border: 0; background: none; color: #0f1111; font: inherit; text-align: left; cursor: pointer; min-height: 120px; }
+.amz-quad-item img { width: 100%; height: 100px; object-fit: contain; background: #f7f7f7; }
+.amz-quad-item small { font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amz-more { justify-self: start; padding: 0; border: 0; background: none; color: #007185; font: inherit; font-size: 0.86rem; cursor: pointer; }
+.amz-more:hover { color: #c7511f; text-decoration: underline; }
+.amz-ways-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.amz-ways-grid button { display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border: 0; background: #f7f7f7; color: #0f1111; font: inherit; font-size: 0.78rem; cursor: pointer; }
+.amz-ways-grid span { font-size: 1.8rem; }
+body[data-look="shopping"] .landing-row { padding: 16px 18px; background: #fff; }
+body[data-look="shopping"] .landing-row-head h3 { font-size: 1.3rem; color: #0f1111; }
+body[data-look="shopping"] .landing-all { color: #007185; font-weight: 400; }
+
+/* Booking.com for Travel: the blue band, white heading, a search bar edged in yellow, a blue Search button. */
+body.topic-travel #topic-form .tf { padding: 26px 26px 0; margin-bottom: 40px; border-radius: 14px; background: #003b95; color: #fff; }
+body.topic-travel #topic-form .tf-head h2 { font-size: 2.2rem; color: #fff; }
+body.topic-travel #topic-form .tf-toggle { color: #fff; }
+body.topic-travel #topic-form .tf-grid { position: relative; top: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: #ffb700; }
+body.topic-travel #topic-form .tf-field { gap: 2px; padding: 6px 10px; border-radius: 6px; background: #fff; color: #1a1a1a; font-size: 0.72rem; }
+body.topic-travel #topic-form .tf-field .f-input { border: 0; padding: 4px 0; background: none; font-weight: 600; }
+body.topic-travel #topic-form .tf-field .segmented-mini { background: none; border: 0; }
+body.topic-travel #topic-form .tf-actions { position: relative; top: 34px; justify-content: flex-end; }
+body.topic-travel #topic-form .btn-primary { background: #006ce4; border-radius: 6px; padding: 12px 28px; font-size: 1.05rem; }
+
+@media (max-width: 760px) {
+  .seek-hero, .gt-search, .eb-search { grid-template-columns: 1fr; }
+  .eb-search { border-radius: 14px; }
+  .eb-search .hero-where-wrap { border-left: 0; border-top: 1px solid #dbdae3; }
+  .cs-row { grid-template-columns: 1fr 1fr; }
+  .cs-card { margin: -80px 8px 0; }
+  .imdb-hero { grid-template-columns: 1fr; }
+  .eb-banner { padding: 24px; }
+  .eb-banner b { font-size: 1.6rem; }
+  .taste-food { display: none; }
+}
+/* realestate.com.au's photo, drawn: a pale sky, the sea, rows of rooftops. */
+.rea-hero { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 300' preserveAspectRatio='xMidYMax slice'%3E%3Cdefs%3E%3ClinearGradient id='s' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23e7e2f2'/%3E%3Cstop offset='1' stop-color='%23f6e9e4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='300' fill='url(%23s)'/%3E%3Crect y='150' width='1200' height='40' fill='%237fb3d5'/%3E%3Cg fill='%23d9c7b8'%3E%3Cpath d='M0 200h60l30-24 30 24h40l26-20 26 20h50l34-28 34 28h40l28-22 28 22h46l30-25 30 25h44l28-22 28 22h48l32-26 32 26h40l26-20 26 20h50l34-28 34 28h40l30-24 30 24h50l30-24 30 24h40v100H0z'/%3E%3C/g%3E%3Cg fill='%23c46f5c'%3E%3Cpath d='M0 236h50l36-30 36 30h44l30-24 30 24h56l40-32 40 32h44l32-26 32 26h52l36-30 36 30h48l30-24 30 24h52l38-30 38 30h46l30-24 30 24h50l36-28 36 28h50v64H0z'/%3E%3C/g%3E%3Cg fill='%23f2efe9'%3E%3Cpath d='M0 262h1200v38H0z'/%3E%3C/g%3E%3Cg fill='%2383a96a'%3E%3Ccircle cx='150' cy='262' r='16'/%3E%3Ccircle cx='420' cy='266' r='14'/%3E%3Ccircle cx='700' cy='262' r='18'/%3E%3Ccircle cx='980' cy='266' r='15'/%3E%3C/g%3E%3C/svg%3E") center bottom / cover no-repeat, #ece6f2; }
+/* realestate.com.au's backdrop, softened: sky and sea only. */
+.rea-hero { background: linear-gradient(180deg, #e8e2f3 0%, #f5e8e6 52%, #9cc3df 52%, #7fb3d5 64%, #efe9df 64%) !important; }
+/* IMDb: the chosen chip in yellow, readable on black. */
+body[data-look="movies"] .subtabs .chip.active { background: #f5c518; border-color: #f5c518; color: #000; }
+body[data-look="movies"] .subtabs .chip { background: #1a1a1a; border-color: #333; color: #ddd; }
+/* Amazon's "Best ways to shop": a full-width white strip of icon tiles. */
+.amz-ways { grid-column: 1 / -1; }
+.amz-ways .amz-ways-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+.amz-ways-grid button { padding: 14px 6px; background: #fff; border-radius: 8px; font-size: 0.86rem; }
+.amz-ways-grid button:hover { background: #f7f7f7; }
+/* Booking.com: the whole width, the kind of trip as white tabs on the blue, Search inside the yellow bar. */
+body.topic-travel .rmain { grid-template-columns: minmax(0, 1fr) !important; }
+body.topic-travel .rside { display: none; }
+body.topic-travel #topic-form { padding: 0; border: 0; background: none; box-shadow: none; }
+body.topic-travel #topic-form .tf-grid > .tf-field:first-child { grid-column: 1 / -1; padding: 0; background: none; color: #fff; }
+body.topic-travel #topic-form .tf-grid > .tf-field:first-child > span { display: none; }
+body.topic-travel #topic-form .tf-grid { margin-top: 8px; }
+body.topic-travel #topic-form .tf-grid > .tf-field:first-child .segmented-mini { display: flex; gap: 8px; padding: 0 0 10px; }
+body.topic-travel #topic-form .tf-grid > .tf-field:first-child .segmented-mini button { padding: 9px 16px; border: 1px solid transparent; border-radius: 999px; background: none; color: #fff; font-size: 0.92rem; }
+body.topic-travel #topic-form .tf-grid > .tf-field:first-child .segmented-mini button.on { border-color: #fff; background: rgb(255 255 255 / 0.12); box-shadow: none; }
+body.topic-travel #topic-form .tf-grid { background: none; padding: 0; gap: 0; }
+body.topic-travel #topic-form .tf-grid > .tf-field:not(:first-child) { border: 2px solid #ffb700; border-radius: 0; }
+body.topic-travel #topic-form .tf-actions { position: static; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 18px; }
+body.topic-travel .rmain, body.topic-travel .rnav { max-width: 1180px; }

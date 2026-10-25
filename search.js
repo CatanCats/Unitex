@@ -1058,6 +1058,7 @@ async function go() {
   document.body.classList.toggle("mode-on", modeOn);
   // Each area looks like the company people know it from: Shopping like Amazon, Houses like realestate.com.au, Jobs like SEEK… (style.css).
   document.body.dataset.look = modeOn ? topicId : "";
+  document.body.classList.toggle("topic-travel", topicId === "travel");
   document.body.classList.toggle("shop-area", !!c.shop);
   document.body.classList.toggle("web-tab", c.kind === "web");
   $("results").replaceChildren();

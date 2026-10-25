@@ -110,14 +110,24 @@ function cardsFromPage(html, base, kind, site) {
     }
   }
   if (!out.length && typeof botCheck === "function" && botCheck(html)) throw new Error(`asked for a bot check (open ${site} once yourself to clear it)`);
-  // A home whose data has no price or rooms: what's printed on the page next to it ("$1,800 pw", "3 bed 2 bath 1 car", "House").
-  if (kind === "house") for (const c of out) {
-    if (c.card.price && c.card.beds != null) continue;
+  // A home or car whose data lacks a price, rooms or photo: what's on the page in its own card
+  // ("$1,800 pw", "3 bed 2 bath 1 car", "House", the first photo).
+  if (kind === "house" || kind === "car") for (const c of out) {
+    if (c.card.price && c.image && (kind === "car" || c.card.beds != null)) continue;
     let path = ""; try { path = new URL(c.url).pathname; } catch {}
-    const at = [c.title, path].map(s => s && html.indexOf(s.slice(0, 40))).find(i => i > 0);
+    const at = [path, c.title].map(s => s && html.indexOf(s.slice(0, 40))).find(i => i > 0); // its link sits in its card; its title may be in the page data
     // Up to the next listing's link (photo carousels make one card thousands of characters long).
-    const folder = path.split("/").slice(0, 2).join("/") + "/", next = folder.length > 2 ? html.indexOf(`"${folder}`, at + 60) : -1;
+    // (A card often links to its own listing twice, from the photo and the title: those aren't the next one.)
+    const folder = path.split("/").slice(0, 2).join("/") + "/";
+    let next = folder.length > 2 ? html.indexOf(`"${folder}`, at + 60) : -1;
+    while (next > 0 && html.startsWith(`"${path}`, next)) next = html.indexOf(`"${folder}`, next + 60);
     if (!(at > 0)) continue;
+    const card = html.slice(Math.max(0, at - 3000), next > at ? Math.min(next, at + 40000) : at + 15000);
+    if (!c.image) {
+      const src = card.match(/<img[^>]+(?:src|data-src)="(https:\/\/[^"]+\.(?:jpe?g|png|webp)[^"]*)"/i)?.[1];
+      if (src && !/logo|icon|avatar|agent|badge/i.test(src)) c.image = src.replace(/&amp;/g, "&");
+    }
+    if (kind === "car") { if (!c.card.price) c.card.price = card.replace(/<[^>]+>/g, " ").match(/\$\s?\d[\d,]{3,}/)?.[0]; continue; }
     // Its card's text, with the attribute labels sites put on their room icons ("aria-label="3 bedrooms"").
     const text = html.slice(at, next > at ? Math.min(next, at + 40000) : at + 15000).replace(/<[^>]*\baria-label="([^"]*)"[^>]*>/g, " $1 ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|\s+/g, " ");
     const price = text.match(/\$\s?\d[\d,]*(?:\.\d+)?(?:\s*(?:-|–|to)\s*\$?\s?\d[\d,]*)?\s*(?:pw|p\.w\.|per week|\/\s?w(?:ee)?k|pcm|per month|k|m)?\b/i)?.[0];

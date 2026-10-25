@@ -184,13 +184,14 @@ const ago = t => {
 let feedId = NEWS_SECTIONS.some(s => s.id === store.get("unitex.feed")) ? store.get("unitex.feed") : "top";
 const PAGE = 24;
 let shown = PAGE;
+let onScreen = []; // the stories on screen, in the order they were shown
 let current = { stories: [], report: [], pending: 0, at: 0 };
 
 function renderTabs() {
   $("news-tabs").replaceChildren(...NEWS_SECTIONS.map(t => {
     const b = el("button", { type: "button", role: "tab", textContent: t.name });
     b.setAttribute("aria-selected", t.id === feedId);
-    b.onclick = () => { if (feedId === t.id) return; feedId = t.id; shown = PAGE; store.set("unitex.feed", t.id); renderTabs(); loadNews(); };
+    b.onclick = () => { if (feedId === t.id) return; feedId = t.id; shown = PAGE; onScreen = []; store.set("unitex.feed", t.id); renderTabs(); loadNews(); };
     b.onpointerenter = () => preloadSection(t); // start reading a section as soon as the pointer is on its tab
     return b;
   }));
@@ -210,7 +211,9 @@ function card(i, featured) {
   const actions = el("div", { className: "card-actions" },
     el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
     el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }));
-  return el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
+  const li = el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
+  li.dataset.url = i.url; // which story it is, so "Show more" can leave it where it is
+  return li;
 }
 
 function renderNews() {
@@ -221,9 +224,23 @@ function renderNews() {
   } else {
     // Lead with the first story that has a picture.
     const lead = items.slice(0, 6).findIndex(i => i.image); // only a top story leads, not an old one further down
-    const order = lead > 0 ? [items[lead], ...items.filter((_, n) => n !== lead)] : items;
-    list.replaceChildren(...order.slice(0, shown).map((i, n) => card(i, n === 0)));
+    let order = lead > 0 ? [items[lead], ...items.filter((_, n) => n !== lead)] : items;
+    // Stories already on screen keep their places (the news keeps updating in the background);
+    // newer ones go after them, so nothing jumps while you read or press "Show more".
+    if (onScreen.length) {
+      const byUrl = new Map(order.map(i => [i.url, i]));
+      const kept = onScreen.map(u => byUrl.get(u)).filter(Boolean), keptSet = new Set(kept);
+      order = [...kept, ...order.filter(i => !keptSet.has(i))];
+    }
+    const now = order.slice(0, shown), had = [...list.querySelectorAll(":scope > li[data-url]")].map(li => li.dataset.url);
+    if (had.length && now.slice(0, had.length).every((i, n) => i.url === had[n])) {
+      // Only more stories: add them below, leaving the ones on screen (and their pictures) as they are.
+      list.querySelector(":scope > .more-row")?.remove();
+      list.append(...now.slice(had.length).map(i => card(i, false)));
+    } else list.replaceChildren(...now.map((i, n) => card(i, n === 0)));
+    onScreen = now.map(i => i.url);
     fixGoogleNewsLinks(list); // straight to the article, not through news.google.com
+    list.querySelector(":scope > .more-row")?.remove();
     if (order.length > shown) list.append(el("li", { className: "more-row" }, el("button", { type: "button", className: "show-more", textContent: "Show more news", onclick() { shown += PAGE; renderNews(); } })));
   }
   renderNewsStatus();

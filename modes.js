@@ -725,6 +725,8 @@ function sortSelect(kind) {
 function drawCards() {
   const topic = topicById(topicId);
   const box = $("cards");
+  // A front page has the site's own search panel; the filter pills come with the results, as on the sites.
+  document.body.classList.toggle("landing-on", modeOn && !query);
   if (filters.bedsSel) filters.beds = parseInt(filters.bedsSel); else delete filters.beds;
   if (filters.ratingSel) filters.ratingMin = parseInt(filters.ratingSel); else delete filters.ratingMin;
   const shop = cur().shop;
@@ -922,7 +924,7 @@ const TOPIC_FORMS = {
       watch: { type: "checks", label: "", options: opt(["Where to watch"]) } },
     build: v => words(v.genre?.toLowerCase(), v.what, v.kind, (v.watch || []).length && "where to watch") },
 
-  travel: { title: "✈️ Plan a trip", fields: {
+  travel: { title: "Find your next stay", fields: {
       kind: { type: "seg", label: "Looking for", options: opt([["flights", "Flights"], ["hotels", "Stays"], ["things to do", "Things to do"]]) },
       from: { label: "From", placeholder: "City or airport" },
       to: { label: "To", placeholder: "Where to?" },

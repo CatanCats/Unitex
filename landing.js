@@ -104,7 +104,7 @@ async function tvmazeToday(kind) {
   for (const ep of d) { const s = ep.show || ep._embedded?.show; if (s && !shows.has(s.id)) shows.set(s.id, s); }
   // The most-watched first (TVmaze's weight), English-language shows before others.
   return [...shows.values()].filter(s => s.image?.medium).sort((a, b) => (b.language === "English") - (a.language === "English") || (b.weight || 0) - (a.weight || 0)).slice(0, 16).map(s => ({ title: s.name, url: s.officialSite || s.url, image: s.image.medium, domain: host(s.officialSite || s.url), via: "TVmaze",
-    card: { kind: "show", type: "tv", name: s.name, years: [s.premiered?.slice(0, 4), s.ended?.slice(0, 4) || (s.status === "Running" ? "now" : "")].filter(Boolean).join("–"), rating: s.rating?.average,
+    card: { kind: "show", type: "tv", name: s.name, big: s.image.original, years: [s.premiered?.slice(0, 4), s.ended?.slice(0, 4) || (s.status === "Running" ? "now" : "")].filter(Boolean).join("–"), rating: s.rating?.average,
       genres: s.genres, network: s.network?.name || s.webChannel?.name, summary: strip(s.summary || ""), site: "tvmaze.com", info: s.url } }));
 }
 function loadRow(topic, q, use) {
@@ -148,12 +148,11 @@ function renderLanding(topic) {
   const mine = areaSearches(topic.id);
   const savedHere = saved.all().filter(s => s.topic === topic.id), viewedHere = viewedItems().filter(s => s.topic === topic.id);
   const rows = [...(mine[0] ? [[`Because you searched “${mine[0]}”`, mine[0], null]] : []), ...L.rows().map(([t, q, use]) => [t, q, use || L.use])];
-  return el("div", { className: "landing" },
-    // One line, not a banner: the page is for the items (the sites' own home pages lead with them too).
-    el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() })),
-    // A row of category chips that scrolls sideways, like Amazon's and Google Play's category bars.
-    el("nav", { className: "landing-cats", ariaLabel: "Categories" }, ...cats.map(([emoji, label, q]) =>
-      el("button", { type: "button", className: "landing-cat", onclick: () => searchFor(q) }, el("span", { className: "landing-cat-icon", textContent: emoji, ariaHidden: "true" }), el("span", { textContent: label })))),
+  const hero = SITE_HEROES[topic.id]?.(topic, L, cats);
+  return el("div", { className: `landing site-${topic.id}` },
+    // The site's own search panel, or (Amazon) its picture cards; a plain title only where the site has neither.
+    hero || el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() })),
+    siteCats(topic, L, cats),
     mine.length > 0 && el("div", { className: "landing-recent" }, el("span", { className: "row-label", textContent: "Your searches" }),
       ...mine.slice(0, 6).map(q => el("button", { type: "button", className: "chip", textContent: q, onclick: () => searchFor(q) }))),
     // Your own things first, like Amazon's "Keep shopping for" and "Your browsing history".
@@ -291,4 +290,131 @@ function bookStore() {
       storeShelf("Popular in mystery & thriller", subject("mystery_and_detective_stories"), "book", pick("mystery_and_detective_stories")),
       storeChart("books", helper ? ["Trending today", "Apple top paid", "Apple top free"] : ["Trending today", "This week"], helper ? [daily, paid, free] : [daily, trending], "book", redraw),
       storeShelf("Popular in romance", subject("romance"), "book", pick("romance"))]));
+}
+
+// ---------- each area's front, built like the official site's own home page ----------
+// The site's search panel first (realestate.com.au's Buy/Rent tabs over a photo, SEEK's What/Where band,
+// carsales' Make/Model/Body type card, Gumtree's "I'm looking for…", taste.com.au's "Find recipes, fast",
+// IMDb's featured trailer and "Up next", Eventbrite's banner and category circles), then the site's own kind
+// of category row, then the rows of real items. The filter pills only appear once you search, as on the sites.
+
+// Fills the area's filters from the panel and searches, like submitting the site's own search box.
+function heroSubmit(topicId, values) {
+  const form = TOPIC_FORMS[topicId];
+  const v = { ...values };
+  const q = form.build(v);
+  store.set("unitex.form." + topicId, { ...v, _q: q });
+  if (v.where) rememberPlace(v.where);
+  searchFor(q);
+}
+const heroInput = (name, placeholder, cls = "") => el("input", { name, placeholder, className: "hero-input " + cls, type: "search", autocomplete: "off", ariaLabel: placeholder });
+const heroWhere = (placeholder, value = "") => { const i = heroInput("where", placeholder, "hero-where"); i.value = value; placeSuggest(i, p => { i.value = p; }); return el("span", { className: "hero-where-wrap" }, i); };
+const formValues = f => Object.fromEntries([...new FormData(f)].map(([k, x]) => [k, String(x).trim()]).filter(([, x]) => x));
+// The first picture from one of the area's rows (a home, a car, a show), for the panel's background.
+const rowPicture = (topic, q, use, n = 0) => loadRow(topic, q, use).items.filter(c => c.image)[n]?.image;
+const bg = url => url ? `background-image:url("${String(url).replace(/"/g, "%22")}")` : "";
+
+let heroDeal = "buy"; // realestate.com.au's Buy / Rent / Share tab
+const CAR_MAKES_TOP = ["Toyota", "Mazda", "Ford", "Hyundai", "Kia", "Mitsubishi", "Volkswagen", "Nissan", "Subaru", "Holden", "Honda", "Tesla", "BMW", "Mercedes-Benz", "Audi", "MG", "BYD", "Isuzu", "Suzuki", "Lexus", "Jeep", "Volvo", "Land Rover", "Porsche"];
+const AU_STATE_NAMES = [["NSW", "New South Wales"], ["VIC", "Victoria"], ["QLD", "Queensland"], ["WA", "Western Australia"], ["SA", "South Australia"], ["TAS", "Tasmania"], ["ACT", "ACT"], ["NT", "Northern Territory"]];
+
+const SITE_HEROES = {
+  // realestate.com.au: a rounded photo with "Properties to call home" and a white card: tabs, a suburb box, Search.
+  houses(topic, L) {
+    const tabs = [["buy", "Buy"], ["rent", "Rent"], ["share", "Share"]];
+    const f = el("form", { className: "rea-card", onsubmit(e) { e.preventDefault(); heroSubmit("houses", { deal: heroDeal, ...formValues(this) }); } },
+      el("div", { className: "rea-tabs", role: "tablist" }, ...tabs.map(([d, t]) => el("button", { type: "button", role: "tab", className: d === heroDeal ? "on" : "", ariaSelected: String(d === heroDeal), textContent: t, onclick() { heroDeal = d; for (const b of this.parentElement.children) { b.classList.toggle("on", b === this); b.ariaSelected = String(b === this); } } }))),
+      el("div", { className: "rea-row" }, el("span", { className: "rea-icon", textContent: "⌕", ariaHidden: "true" }), heroWhere("Search suburb, postcode or state", recentPlaces()[0] || ""),
+        el("button", { type: "submit", className: "rea-search", textContent: "Search" })));
+    // A drawn sky and rooftops (realestate.com.au uses a suburb photo; a listing's own photo is often an empty kitchen).
+    return el("section", { className: "rea-hero" }, el("h2", { textContent: "Properties to call home" }), f);
+  },
+  // SEEK: a navy band, "What" and "Where" boxes and the pink SEEK button.
+  jobs() {
+    return el("form", { className: "seek-hero", onsubmit(e) { e.preventDefault(); heroSubmit("jobs", formValues(this)); } },
+      el("label", { className: "seek-field" }, el("span", { textContent: "What" }), heroInput("what", "Enter keywords, e.g. barista or registered nurse")),
+      el("label", { className: "seek-field" }, el("span", { textContent: "Where" }), heroWhere("Enter suburb, city, or region", recentPlaces()[0] || "")),
+      el("button", { type: "submit", className: "seek-btn", textContent: "SEEK" }));
+  },
+  // carsales: a car photo with a white "Find your next car" card: Make, Model, Body type, Location, and a blue button.
+  cars(topic, L) {
+    const photo = rowPicture(topic, L.rows()[0][1]);
+    const sel = (name, first, opts) => el("select", { name, className: "cs-select", ariaLabel: first }, el("option", { value: "", textContent: first }), ...opts.map(o => Array.isArray(o) ? el("option", { value: o[0], textContent: o[1] }) : el("option", { value: o, textContent: o })));
+    const card = el("form", { className: "cs-card", onsubmit(e) { e.preventDefault(); const v = formValues(this); heroSubmit("cars", { deal: "used", ...v, where: v.state ? AU_STATE_NAMES.find(s => s[0] === v.state)?.[1] : undefined }); } },
+      el("div", { className: "cs-head" }, el("h2", { textContent: "Find your next car" })),
+      el("div", { className: "cs-row" },
+        el("label", {}, el("span", { textContent: "Make" }), sel("make", "All makes", CAR_MAKES_TOP)),
+        el("label", {}, el("span", { textContent: "Model" }), heroInput("model", "All models", "cs-select")),
+        el("label", {}, el("span", { textContent: "Body type" }), sel("body", "All body types", ["Sedan", "Hatchback", "SUV", "Ute", "Wagon", "Van", "Coupe", "Convertible"])),
+        el("label", {}, el("span", { textContent: "Location" }), sel("state", "All states", AU_STATE_NAMES)),
+        el("button", { type: "submit", className: "cs-btn", textContent: "Show cars" })),
+      // carsales' row of car shapes under the boxes.
+      el("div", { className: "cs-bodies" }, ...[["🚗", "New cars", "new car for sale"], ["⚡", "EV", "used electric car for sale"], ["🔋", "Hybrid", "used hybrid car for sale"], ["🚙", "SUV", "used suv for sale"],
+        ["🛻", "Ute", "used ute for sale"], ["🚘", "Hatch", "used hatchback for sale"], ["🏔️", "Offroad 4x4", "used 4x4 for sale"]].map(([e, t, q]) =>
+        el("button", { type: "button", className: "cs-body", onclick: () => searchFor(q) }, el("span", { className: "cs-body-icon", textContent: e, ariaHidden: "true" }), t))));
+    return el("section", { className: "cs-hero" }, el("div", { className: "cs-photo", style: bg(photo) }), card);
+  },
+  // Gumtree: a dark purple bar with "I'm looking for…" and a green button, then its category links.
+  marketplace(topic, L, cats) {
+    return el("section", { className: "gt-hero" },
+      el("form", { className: "gt-search", onsubmit(e) { e.preventDefault(); heroSubmit("marketplace", formValues(this)); } },
+        heroInput("what", "I'm looking for…"), heroWhere("Where", recentPlaces()[0] || ""), el("button", { type: "submit", className: "gt-btn", textContent: "Search" })),
+      el("nav", { className: "gt-cats" }, ...cats.map(([, label, q]) => el("button", { type: "button", textContent: label, onclick: () => searchFor(q) }))));
+  },
+  // taste.com.au: a light blue panel, "Find recipes, fast", a search box and Trending chips, food on either side.
+  recipes(topic, L, cats) {
+    const food = [rowPicture(topic, L.rows()[0][1]), rowPicture(topic, L.rows()[1][1])];
+    return el("section", { className: "taste-hero" },
+      food[0] && el("img", { className: "taste-food left", src: food[0], alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
+      food[1] && el("img", { className: "taste-food right", src: food[1], alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
+      el("form", { className: "taste-panel", onsubmit(e) { e.preventDefault(); heroSubmit("recipes", formValues(this)); } },
+        el("h2", { textContent: "Find recipes, fast" }),
+        el("div", { className: "taste-box" }, el("span", { textContent: "⌕", ariaHidden: "true" }), heroInput("what", "Search by recipe, ingredient or keyword")),
+        el("div", { className: "taste-trending" }, el("b", { textContent: "Trending" }), ...cats.slice(0, 4).map(([, t, q]) => el("button", { type: "button", textContent: t, onclick: () => searchFor(q) })))));
+  },
+  // IMDb: black, a big featured picture with its title, and "Up next" beside it.
+  movies(topic, L) {
+    const shows = loadRow(topic, L.rows()[0][1]).items;
+    const [top, ...next] = shows;
+    if (!top) return el("section", { className: "imdb-hero skeleton" });
+    const poster = c => c.card.poster || c.image;
+    return el("section", { className: "imdb-hero" },
+      el("a", { className: "imdb-feature", href: top.url, style: bg(top.card.big || top.image), rel: "noopener" },
+        el("img", { className: "imdb-poster", src: poster(top), alt: "", referrerPolicy: "no-referrer" }),
+        el("span", { className: "imdb-feature-text" }, el("b", { textContent: top.card.name }), el("small", { textContent: [top.card.network, top.card.rating && `★ ${top.card.rating}`].filter(Boolean).join(" · ") }))),
+      el("div", { className: "imdb-next" }, el("h3", { textContent: "Up next" }),
+        ...next.slice(0, 3).map(c => el("a", { className: "imdb-next-item", href: c.url, rel: "noopener" },
+          el("img", { src: poster(c), alt: "", loading: "lazy", referrerPolicy: "no-referrer" }),
+          el("span", {}, el("b", { textContent: c.card.name }), el("small", { textContent: [c.card.network, (c.card.genres || []).slice(0, 2).join(", ")].filter(Boolean).join(" · ") }))))));
+  },
+  // Eventbrite: a big banner with stacked highlighted words, a search for what and where, then category circles.
+  events() {
+    return el("section", { className: "eb-hero" },
+      el("div", { className: "eb-banner" }, el("span", { className: "eb-kicker", textContent: "GET INTO IT" }), el("b", { textContent: "FROM LIVE MUSIC" }), el("b", { textContent: "TO WEEKEND MARKETS" })),
+      el("form", { className: "eb-search", onsubmit(e) { e.preventDefault(); heroSubmit("events", formValues(this)); } },
+        heroInput("what", "Search events"), heroWhere(recentPlaces()[0] || "Choose a location", recentPlaces()[0] || ""), el("button", { type: "submit", className: "eb-btn", ariaLabel: "Search", textContent: "⌕" })));
+  },
+};
+// How each site shows its categories: Amazon's picture cards, Eventbrite's circles, IMDb's chips…
+const SITE_CATS = {
+  shopping: "amazon", marketplace: null, houses: "pills", cars: null, jobs: "pills", recipes: "circles", movies: "imdb", events: "circles",
+};
+function siteCats(topic, L, cats) {
+  const style = SITE_CATS[topic.id];
+  if (!style) return null;
+  if (style === "amazon") {
+    // Amazon's category cards: a title, four pictures from that category, "See more".
+    const rows = L.rows();
+    return el("div", { className: "amz-cards" }, ...rows.slice(0, 4).map(([t, q, use]) => {
+      const items = loadRow(topic, q, use || L.use).items.filter(c => c.image).slice(0, 4);
+      return el("section", { className: "amz-card" }, el("h3", { textContent: t.replace(/^Popular in /, "Shop ") }),
+        el("div", { className: "amz-quad" }, ...(items.length ? items : Array.from({ length: 4 }, () => null)).map(c => c ? el("button", { type: "button", className: "amz-quad-item", onclick: () => window.open(c.url, "_blank", "noopener") },
+          el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer" }), el("small", { textContent: cardTitle(c).split(/[,|(-]/)[0].slice(0, 24) })) : el("span", { className: "skeleton amz-quad-item" }))),
+        el("button", { type: "button", className: "amz-more", textContent: "See more", onclick: () => searchFor(q) }));
+    }), el("section", { className: "amz-card amz-ways" }, el("h3", { textContent: "Shop by category" }),
+      el("div", { className: "amz-ways-grid" }, ...cats.slice(0, 8).map(([e, label, q]) => el("button", { type: "button", onclick: () => searchFor(q) }, el("span", { textContent: e, ariaHidden: "true" }), label)))));
+  }
+  const cls = { pills: "site-pills", circles: "site-circles", imdb: "imdb-chips" }[style];
+  return el("nav", { className: cls, ariaLabel: "Categories" }, ...cats.map(([e, label, q]) =>
+    el("button", { type: "button", onclick: () => searchFor(q) }, style === "circles" && el("span", { className: "circle", textContent: e, ariaHidden: "true" }), el("span", { textContent: label }), style === "imdb" && el("span", { textContent: "›", ariaHidden: "true" }))));
 }
