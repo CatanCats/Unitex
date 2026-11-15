@@ -26,7 +26,9 @@ ALLOWED_HOSTS.push("flatmates.com.au", "v3.sg.media-imdb.com", "view.com.au", "w
 ALLOWED_HOSTS.push("cleantechnica.com", "electrek.co", "en.wikinews.org", "globalvoices.org", "insideevs.com", "lemmy.ml", "lemmy.world", "mander.xyz", "mastodon.social", "restofworld.org", "tildes.net", "www.democracynow.org", "www.teslarati.com");
 // The only address the helper may send a form to: Google News's own link decoder, which turns a
 // news.google.com/rss/articles/… link into the real article address.
-const POST_URLS = ["https://news.google.com/_/DotsSplashUi/data/batchexecute", "https://flathub.org/api/v2/search"];
+// Small independent search engines whose answers websites aren't allowed to read: Qwant, Stract, Alexandria, Wiby, Marginalia.
+ALLOWED_HOSTS.push("api.qwant.com", "stract.com", "api.alexandria.org", "wiby.me", "api.marginalia.nu", "marginalia-search.com");
+const POST_URLS = ["https://news.google.com/_/DotsSplashUi/data/batchexecute", "https://flathub.org/api/v2/search", "https://stract.com/beta/api/search"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
 // Shops' picture servers that browsers' tracking protection blocks on other sites: the helper loads
 // their pictures for the page (images only, nothing else from these hosts).
@@ -75,7 +77,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   const timer = setTimeout(() => ctrl.abort(), 10000);
   if (msg.post != null && !POST_URLS.some(p => url.href.startsWith(p))) { reply({ error: "not allowed" }); clearTimeout(timer); return; }
   const init = msg.post != null
-    ? { method: "POST", credentials: "include", signal: ctrl.signal, headers: { "Content-Type": url.hostname === "flathub.org" ? "application/json" : "application/x-www-form-urlencoded;charset=UTF-8" }, body: String(msg.post) }
+    ? { method: "POST", credentials: "include", signal: ctrl.signal, headers: { "Content-Type": /^(flathub\.org|stract\.com)$/.test(url.hostname) ? "application/json" : "application/x-www-form-urlencoded;charset=UTF-8" }, body: String(msg.post) }
     : { credentials: msg.anon ? "omit" : "include", signal: ctrl.signal, headers: { Accept: "text/html,application/xhtml+xml" } };
   fetch(url, init)
     .then(async r => reply({ status: r.status, url: r.url, html: (await r.text()).slice(0, 3_000_000) }))

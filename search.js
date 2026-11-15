@@ -35,8 +35,17 @@ const urlKey = u => {
   } catch { return u; }
 };
 
+// Engines whose answers other websites aren't allowed to read: with Unitex Helper 1.16+ they're read through it.
+const VIA_HELPER = /^(api\.qwant\.com|stract\.com|api\.alexandria\.org|wiby\.me|api\.marginalia\.nu)$/;
+async function helperJson(url, ms, init) {
+  const res = init.method === "POST" ? await helperFetchNow(url, ms, init.body) : await helperFetch(url, ms);
+  if (res.status === 429) throw new Error("too many searches right now (HTTP 429)");
+  if (res.status >= 400) throw new Error(`answered with an error (HTTP ${res.status})`);
+  try { return JSON.parse(res.html); } catch { throw new Error(/captcha|robot|datadome/i.test(res.html.slice(0, 5000)) ? "asked for a CAPTCHA" : "answered with something that isn't search results"); }
+}
 // Fetches JSON and turns failures into reasons people can understand.
 async function getJson(url, ms = 8000, init = {}) {
+  if (helperVersion() && !versionLess(helperVersion(), "1.16.0") && VIA_HELPER.test(new URL(url).hostname)) return helperJson(url, ms, init);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   let r;
@@ -639,6 +648,7 @@ function sourceRows() {
     const locked = src && src.enabled && !src.enabled() && /^(helper|store|jobsite|site)_/.test(key);
     if (isOff) return { st: "off", note: "left out" };
     if (locked) return { st: "locked", note: "needs Unitex Helper" };
+    if ((!r || r.err) && restingUntil(key)) return { st: "wait", note: `not answering lately: resting until ${new Date(restingUntil(key)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, wake: key };
     if (!r) return { st: "wait", note: query ? "searching…" : "" };
     if (r.err && r.err.solveUrl && needsPerson(r.err)) return { st: "bad", note: r.err.message.replace(/\s*\(open .*\)$|\s*—.*$/, ""), solve: r.err.solveUrl };
     return r.err ? { st: "bad", note: r.err.message } : { st: "ok", note: `${r.r.length} found` };
@@ -696,6 +706,7 @@ function sourcesList() {
       r.domain ? domainIcon(r.domain) : el("span", { className: "sp-dot" }),
       el("span", { className: "sp-name", textContent: r.label }),
       el("small", { textContent: r.note }),
+      r.wake && el("button", { type: "button", className: "sp-solve", textContent: "Try now", onclick: e => { e.preventDefault(); e.stopPropagation(); wakeSource(r.wake); go(); } }),
       r.solve && el("button", { type: "button", className: "sp-solve", textContent: "Solve", title: "Opens the page so you can do its check; Unitex tries again when you come back",
         onclick: e => { e.preventDefault(); e.stopPropagation(); solveCheck(r.solve); } }))))),
     rows.some(r => r.st === "locked") && el("a", { className: "sp-helper", href: "install.html", textContent: "Get Unitex Helper to search the locked ones" }),
@@ -922,13 +933,25 @@ function runCached(n, s, q, page) {
   const limit = s.group === "main" && !n.startsWith("listing_") ? 5000 : 15000;
   const p = withTimeout(Promise.resolve().then(() => s.run(q, { page })), limit).then(r => { const out = (r || []).filter(x => !isAdResult(x)); out.spell = r?.spell; return { n, r: out }; }, err => ({ n, err }));
   settleCache.set(key, { t: Date.now(), p });
-  p.then(x => { if (x.err) settleCache.delete(key); });
+  p.then(x => { if (x.err) settleCache.delete(key); if (!page) noteHealth(n, x); });
   return p;
 }
+// A source that fails 3 searches in a row rests for 6 hours instead of failing on every search; its row in
+// "Search engines and sources" says so and has Try now. A CAPTCHA isn't counted: that one waits for Solve.
+const REST_AFTER = 3, REST_FOR = 6 * 3600000;
+function noteHealth(n, x) {
+  const h = store.get("unitex.health", {});
+  if (x.err && needsPerson(x.err)) return;
+  if (x.err) { const f = h[n] || { fails: 0 }; f.fails++; if (f.fails >= REST_AFTER) f.until = Date.now() + REST_FOR; h[n] = f; }
+  else if (h[n]) delete h[n]; else return;
+  store.set("unitex.health", h);
+}
+const restingUntil = n => { const u = store.get("unitex.health", {})[n]?.until || 0; return u > Date.now() ? u : 0; };
+function wakeSource(n) { const h = store.get("unitex.health", {}); delete h[n]; store.set("unitex.health", h); }
 const settle = (sources, q, page = 0, onEach) => {
   const done = [];
   return Promise.all(Object.entries(sources)
-    .filter(([n, s]) => (!s.enabled || s.enabled()) && !srcOff(n) && (!page || s.paged))
+    .filter(([n, s]) => (!s.enabled || s.enabled()) && !srcOff(n) && !restingUntil(n) && (!page || s.paged))
     .map(([n, s]) => runCached(n, s, q, page).then(x => { done.push(x); onEach?.(done.slice()); return x; })));
 };
 // Runs fn at most every 150 ms while answers keep coming in.
@@ -1188,7 +1211,7 @@ async function go() {
   spellHint = "";
   // Draw results as each source answers, instead of waiting for the slowest one.
   let mainSoFar = [], cardsSoFar = [], aiStarted = false;
-  const total = Object.entries({ ...MAIN_SOURCES, ...cardSrc }).filter(([n, s]) => (!s.enabled || s.enabled()) && !srcOff(n)).length;
+  const total = Object.entries({ ...MAIN_SOURCES, ...cardSrc }).filter(([n, s]) => (!s.enabled || s.enabled()) && !srcOff(n) && !restingUntil(n)).length;
   const paint = throttled(() => {
     if (id !== runId) return;
     const { main } = mergeMain(mainSoFar);

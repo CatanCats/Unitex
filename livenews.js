@@ -78,16 +78,37 @@ const withTimeout = (p, ms = SOURCE_TIMEOUT_MS) => Promise.race([p, new Promise(
 
 // Feeds are read through Unitex Helper. If it isn't installed, is too old for news, or the read fails,
 // public feed relays that let websites read RSS are tried instead (they only ever see the feed address).
-const RELAYS = [u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`];
+// Feeds are read through Unitex Helper when it's installed. Without it (or if that fails): the feed itself, for news
+// sites that let other websites read them, and public feed relays, all at once; the first good answer wins.
+// The relays turn away sites that ask too often, so only a few reads go through them at a time.
+const isFeed = t => /<(rss|feed|rdf)[\s>:]/i.test(t.slice(0, 3000));
+const escXml = s => String(s || "").replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+const RELAYS = [
+  async u => { const r = await fetchT(u); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }, // the site itself
+  async u => { const r = await fetchT(`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); },
+  async u => { const r = await fetchT(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); },
+  async u => { const r = await fetchT(`https://corsproxy.io/?url=${encodeURIComponent(u)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); },
+  // rss2json answers in JSON: turned back into a small feed for the same reader.
+  async u => {
+    const r = await fetchT(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(u)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json(); if (d.status !== "ok") throw new Error(d.message || "not a feed");
+    return `<rss><channel>${(d.items || []).map(i => `<item><title>${escXml(i.title)}</title><link>${escXml(i.link)}</link><pubDate>${escXml(i.pubDate && new Date(i.pubDate.replace(" ", "T") + "Z").toUTCString())}</pubDate><description>${escXml(i.description)}</description>${i.thumbnail || i.enclosure?.link ? `<enclosure type="image/jpeg" url="${escXml(i.thumbnail || i.enclosure.link)}"/>` : ""}</item>`).join("")}</channel></rss>`;
+  },
+];
+let relayBusy = 0;
+const relayQueue = [];
+const relaySlot = () => relayBusy < 6 ? (relayBusy++, Promise.resolve()) : new Promise(r => relayQueue.push(r));
+const relayDone = () => { const next = relayQueue.shift(); if (next) next(); else relayBusy--; };
 async function readFeed(url) {
   let last;
   if (helperVersion()) {
     try { return (await withTimeout(helperFetch(url, SOURCE_TIMEOUT_MS))).html; } catch (e) { last = e; }
   }
-  for (const relay of RELAYS) {
-    try { const r = await fetchT(relay(url)); if (r.ok) { const t = await r.text(); if (/<(rss|feed|rdf)/i.test(t.slice(0, 2000))) return t; } } catch (e) { last = e; }
-  }
-  throw last || new Error("couldn't be read");
+  await relaySlot();
+  try {
+    return await Promise.any(RELAYS.map(read => read(url).then(t => { if (!isFeed(t)) throw new Error("not a feed"); return t; })));
+  } catch { throw last || new Error("couldn't be read without Unitex Helper"); }
+  finally { relayDone(); }
 }
 const viaHelper = (url, via, source) => readFeed(url).then(xml => parseFeed(xml, via, source));
 
@@ -98,8 +119,9 @@ async function outletFeeds(section) {
   }
   const pick = cid => (feedConfig[cid]?.feeds || []).filter(f => !f.aggregator);
   // Top takes a few websites from every section.
-  if (section.feeds === "top") return Object.keys(feedConfig).flatMap(cid => pick(cid).slice(0, cid === "world" ? 8 : 2));
-  return pick(section.feeds);
+  const cap = helperVersion() ? Infinity : 14; // without the helper every read goes through the relays
+  if (section.feeds === "top") return Object.keys(feedConfig).flatMap(cid => pick(cid).slice(0, cid === "world" ? 8 : 2)).slice(0, cap);
+  return pick(section.feeds).slice(0, cap);
 }
 
 let gdeltNext = 0;

@@ -299,6 +299,8 @@ function parseResultsPage(html, base, engineName, kind = "web") {
   }
   for (const a of doc.querySelectorAll("a.result__a, a.result-title, a.result__link, a.WlydOe")) found.add(a);
   if (mojeek) for (const a of doc.querySelectorAll(".results-standard a.title, .results-standard h2 a")) found.add(a);
+  // Yandex: each organic result's title link.
+  if (/(^|\.)(yandex\.[a-z.]+|ya\.ru)$/.test(baseHost)) for (const a of doc.querySelectorAll(".serp-item a.OrganicTitle-Link, .serp-item a.organic__url, .Organic a.Link_theme_outer[href^='http']")) found.add(a);
   if (brave) {
     const sel = /^\/(news|videos)/.test(new URL(base).pathname) ? ".snippet .title, .snippet .snippet-title" : ".snippet[data-type=web] .title, .snippet[data-type=web] .snippet-title";
     for (const t of doc.querySelectorAll(sel)) { const a = t.closest("a[href]"); if (a) found.add(a); }
@@ -364,8 +366,13 @@ function parseResultsPage(html, base, engineName, kind = "web") {
   }
 
   if (!out.length) {
-    const text = doc.body?.textContent?.toLowerCase() || "";
-    if (/captcha|unusual traffic|are you a robot|not a robot|verify you are human|challenge/.test(text) || /showcaptcha|\/sorry\//.test(base)) throw blocked("asked for a CAPTCHA (open it once yourself to clear it)", base);
+    // Only what's shown on the page counts (the page's own code mentions "captcha" on ordinary pages, which made
+    // Yandex look like it wanted one when it didn't), or a real CAPTCHA box, or the CAPTCHA address.
+    const shown = doc.body?.cloneNode(true);
+    shown?.querySelectorAll("script, style, noscript, template").forEach(n => n.remove());
+    const text = (shown?.textContent || "").toLowerCase();
+    const box = doc.querySelector("form[action*='captcha' i], .CheckboxCaptcha, .AdvancedCaptcha, #checkbox-captcha-form, iframe[src*='captcha'], .g-recaptcha, [data-sitekey], #captcha-form");
+    if (box || /unusual traffic|are you a robot|are you not a robot|not a robot|verify you are human|complete the captcha|enter the characters/.test(text) || /showcaptcha|smartcaptcha|\/sorry\//.test(base)) throw blocked("asked for a CAPTCHA (open it once yourself to clear it)", base);
     if (doc.querySelector("form[action*='consent.'], iframe[src*='consent.']") || /before you continue to (google|youtube)/.test(text)) throw blocked("asked for a cookie consent — open the site once yourself and accept", base);
     if (/enable javascript|turn on javascript|javascript is disabled|noscript/.test(text) || doc.querySelector("noscript meta[http-equiv=refresh]")) throw new Error("needs JavaScript, can't be read in the background");
   }
@@ -653,7 +660,7 @@ const HELPER_VERTICALS = {
     }},
     yandex: { paged: true, name: "Yandex Images", async run(q, { page: P = 0 } = {}) {
       const { doc, base, html } = await helperDoc(`https://yandex.com/images/search?text=${encodeURIComponent(q)}&p=${P}`);
-      if (/showcaptcha|smartcaptcha/i.test(base + html.slice(0, 5000))) throw blocked("asked for a CAPTCHA (open yandex.com/images once yourself to clear it)", base);
+      if (/showcaptcha|smartcaptcha/i.test(base) || doc.querySelector("form[action*='captcha' i], .CheckboxCaptcha, .AdvancedCaptcha, #checkbox-captcha-form")) throw blocked("asked for a CAPTCHA (open yandex.com/images once yourself to clear it)", base);
       // Only real image tiles: links carrying img_url (the picture); the page it is on comes from the tile's data.
       const out = [], seen = new Set();
       const pageIn = (o, full, depth = 0) => {
