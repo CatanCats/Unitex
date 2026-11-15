@@ -337,7 +337,7 @@ function openSettings() {
       el("p", { className: "hint" }, "Off: Unitex's Bing reads don't use up your Microsoft Rewards searches."),
       el("label", { className: "f-check set-check" }, el("input", { type: "checkbox", checked: !!draft.bingRewards, onchange() { draft.bingRewards = this.checked; } }),
         " Earn Microsoft Rewards points"),
-      el("p", { className: "hint" }, "Each search you make also opens on bing.com in a background tab for a few seconds (once per search), so Bing counts it as your search. Be signed in to Bing in this browser. Needs Unitex Helper 1.14.0; Microsoft decides what earns points and how many a day."),
+      el("p", { className: "hint" }, "Each search you make also opens on bing.com in front for a few seconds, then you're back on Unitex (once per search), so Bing counts it as your search. Be signed in to Bing in this browser. Needs Unitex Helper 1.15.0; Microsoft decides what earns points and how many a day."),
       el("button", { type: "button", className: "chip", textContent: "Switch all sources back on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All sources are on ✓"; } }),
       el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed. ` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ",
         el("a", { href: "install.html", textContent: document.documentElement.dataset.unitexHelper ? "Update or reinstall" : "Install Unitex Helper" }))),

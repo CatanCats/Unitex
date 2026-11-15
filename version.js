@@ -1,6 +1,7 @@
 // The newest Unitex Helper version, and what changed. Bump this together with extension/manifest.json.
-const HELPER_LATEST = "1.14.0";
+const HELPER_LATEST = "1.15.0";
 const HELPER_CHANGES = {
+  "1.15.0": "Microsoft Rewards: Bing's page now comes to the front for a few seconds (Bing only counts a search it can see), then you're back on Unitex.",
   "1.14.0": "Microsoft Rewards (switch it on in ⚙ Settings): each search you make also opens on bing.com in a background tab for a few seconds, so Bing counts it as your search.",
   "1.13.0": "Reads Bing without your Microsoft account (unless you switch it on in ⚙ Settings), so Unitex no longer uses up your Microsoft Rewards searches.",
   "1.12.0": "Shows eBay and Amazon pictures that your browser's tracking protection blocks, takes SearXNG out, and reads Bing Maps' places (ratings, hours, phone) for Maps and Apple Books' charts for the new book shop.",

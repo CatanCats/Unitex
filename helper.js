@@ -28,14 +28,38 @@ const anonFor = url => { try { return /(^|\.)bing\.com$/.test(new URL(url).hostn
 // Microsoft Rewards, when switched on in Settings: each search you make (not paging, tabs or refreshes) also opens
 // on bing.com in a background tab via the helper, once per search, so Bing's own page counts it as yours.
 function bingRewardsSearch(q) {
-  if (!q || typeof settings !== "object" || !settings.bingRewards || !helperVersion() || versionLess(helperVersion(), "1.14.0")) return;
+  if (!q || typeof settings !== "object" || !settings.bingRewards) return;
+  if (!helperVersion()) return rewardsNote("Microsoft Rewards needs Unitex Helper.", "install.html", "Install it");
+  if (versionLess(helperVersion(), "1.15.0")) return rewardsNote(`Microsoft Rewards needs Unitex Helper 1.15.0 (you have ${helperVersion()}).`, "install.html", "Update it");
   const key = q.trim().toLowerCase();
   let done = {};
   try { done = JSON.parse(sessionStorage.getItem("unitex.bingdone") || "{}"); } catch {}
   if (done[key] && Date.now() - done[key] < 30 * 60000) return; // the same search again: Bing wouldn't count it twice
   done[key] = Date.now();
   try { sessionStorage.setItem("unitex.bingdone", JSON.stringify(done)); } catch {}
-  window.postMessage({ type: "unitex-helper-fetch", id: ++helperSeq, url: `https://www.bing.com/search?q=${encodeURIComponent(q.trim())}&form=QBLH`, bingTab: true }, location.origin);
+  const id = ++helperSeq;
+  const timer = setTimeout(() => { helperWaiting.delete(id); rewardsNote("Bing didn't answer. Check Unitex Helper is switched on, then search again."); }, 35000);
+  helperWaiting.set(id, res => {
+    clearTimeout(timer);
+    if (res.error) return rewardsNote(`Couldn't open Bing: ${res.error}`);
+    if (/^chrome-error:|^about:neterror/.test(res.url || "")) return rewardsNote("Couldn't reach Bing (offline or blocked). Search again once Bing opens normally.");
+    const at = (() => { try { return new URL(res.url); } catch { return null; } })();
+    if (at && !/(^|\.)bing\.com$/.test(at.hostname)) return rewardsNote(`Bing sent the search to ${at.hostname} (a sign-in or consent page). Open bing.com once, sign in and accept, then search again.`, "https://www.bing.com/", "Open Bing");
+    // Bing's results page is titled with the search ("dogs - Search"); anything else is an error or check page.
+    if (res.title && !res.title.toLowerCase().includes(q.trim().toLowerCase().split(/\s+/)[0])) return rewardsNote(`Bing opened but didn't show your search (it showed “${res.title}”). Open bing.com, sign in and accept anything it asks, then search again.`, "https://www.bing.com/", "Open Bing");
+    rewardsNote(`Searched “${q.trim()}” on Bing for Microsoft Rewards ✓`);
+  });
+  window.postMessage({ type: "unitex-helper-fetch", id, url: `https://www.bing.com/search?q=${encodeURIComponent(q.trim())}&form=QBLH`, bingTab: true }, location.origin);
+}
+// A small note at the bottom of the page that goes away by itself.
+function rewardsNote(text, href, linkText) {
+  document.querySelector(".rewards-note")?.remove();
+  const box = document.createElement("div");
+  box.className = "rewards-note";
+  box.textContent = text + " ";
+  if (href) { const a = document.createElement("a"); a.href = href; a.textContent = linkText; if (/^https?:/.test(href)) { a.target = "_blank"; a.rel = "noopener"; } box.append(a); }
+  document.body.append(box);
+  setTimeout(() => box.remove(), href ? 15000 : 5000);
 }
 function helperFetchNow(url, ms, post) {
   return new Promise((resolve, reject) => {

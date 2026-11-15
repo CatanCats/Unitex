@@ -36,18 +36,24 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!ALLOWED_PAGES.some(p => (sender.url || "").startsWith(p))) return;
   let url;
   try { url = new URL(msg.url); } catch { reply({ error: "bad url" }); return; }
-  // Microsoft Rewards: the search you just made, opened on bing.com in a background tab so Bing's own page runs
-  // in your browser (as if you'd searched there), then closed once it has finished loading. Only Bing searches.
+  // Microsoft Rewards: the search you just made, opened on bing.com in a tab of its own, in front for a few
+  // seconds so Bing's page is really seen (its counting only runs on a visible page), then back to Unitex and
+  // closed. Only Bing searches. Replies once Bing's page has loaded, with the address it ended on.
   if (msg.bingTab) {
     if (url.origin !== "https://www.bing.com" || url.pathname !== "/search") { reply({ error: "not allowed" }); return; }
-    api.tabs.create({ url: url.href, active: false }, tab => {
-      if (!tab) { reply({ error: api.runtime.lastError?.message || "couldn't open" }); return; }
-      let done = false;
+    const back = sender.tab?.id;
+    api.tabs.create({ url: url.href, active: true, ...(back != null ? { openerTabId: back } : {}) }, tab => {
+      if (!tab) { reply({ error: api.runtime.lastError?.message || "couldn't open a tab" }); return; }
+      let done = false, answered = false;
+      const answer = r => { if (!answered) { answered = true; reply(r); } };
       const close = () => { if (done) return; done = true; api.tabs.onUpdated.removeListener(watch); api.tabs.remove(tab.id, () => void api.runtime.lastError); };
-      const watch = (id, info) => { if (id === tab.id && info.status === "complete") setTimeout(close, 8000); };
+      const watch = (id, info, t) => {
+        if (id !== tab.id || info.status !== "complete") return;
+        answer({ status: 200, url: t?.url || "", title: t?.title || "" });
+        setTimeout(() => { if (back != null) api.tabs.update(back, { active: true }, () => void api.runtime.lastError); setTimeout(close, 4000); }, 4000);
+      };
       api.tabs.onUpdated.addListener(watch);
-      setTimeout(close, 30000);
-      reply({ status: 200 });
+      setTimeout(() => { answer({ error: "Bing didn't finish loading" }); close(); }, 30000);
     });
     return true;
   }
