@@ -686,7 +686,7 @@ function sourcesList() {
   const rows = sourceRows();
   for (const [id, on] of pendingSrc) { const r = rows.find(x => rowId(x) === id); if (!r || on === !r.off) pendingSrc.delete(id); }
   const save = el("button", { type: "button", className: "sp-save", hidden: !pendingSrc.size, onclick: e => { e.stopPropagation(); saveSources(); } });
-  const label = () => { save.textContent = `Save ${pendingSrc.size} change${pendingSrc.size === 1 ? "" : "s"}`; save.hidden = !pendingSrc.size; };
+  const label = () => { save.textContent = "Save"; save.hidden = !pendingSrc.size; };
   label();
   const groups = [...new Set(rows.map(r => r.group))];
   return el("div", { className: "sp-list" }, ...groups.map(g => el("div", { className: "sp-group" }, el("h4", { textContent: g }),
