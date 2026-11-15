@@ -50,8 +50,8 @@ const AREAS = [
   ["all", "movies", "Movies & TV", "🎬", "IMDb, TVmaze", "#121212", "#fff", "#f5c518"],
   ["all", "events", "Events", "🎟️", "Eventbrite, Ticketmaster", "#fff", "#1e0a3c", "#d1410c"],
   ["travel", "", "Travel", "✈️", "Flights, stays, things to do", "#003580", "#fff", "#febb02"],
-  ["", "", "Games", "🎮", "Coming soon", "#1b1464", "#fff", "#7c4dff"],
-  ["", "", "Alternatives", "🧩", "Coming soon", "#0f3d2e", "#fff", "#2ea043"],
+  ["games", "", "Games", "🎮", "Steam, GOG, Epic, Humble", "#1b1464", "#fff", "#7c4dff"],
+  ["alternatives", "", "Alternatives", "🧩", "Free & open-source alternatives", "#0f3d2e", "#fff", "#2ea043"],
 ];
 // Chips in the same row, each with its icon on its site's colour, the sites it reads on hover.
 function areaChips() {

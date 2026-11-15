@@ -86,6 +86,11 @@ const TOPICS = [
     "*": [["eventbrite.com"], ["meetup.com", "Meetup", "https://www.meetup.com/find/?keywords={q}"], ["ticketmaster.com"]],
   }},
 
+  { id: "games", name: "Games", hint: "e.g. co-op survival game, or Hades", sites: {
+    "*": [["store.steampowered.com", "Steam", "https://store.steampowered.com/search/?term={q}"], ["gog.com", "GOG", "https://www.gog.com/en/games?query={q}"], ["store.epicgames.com", "Epic Games Store", "https://store.epicgames.com/en-US/browse?q={q}"], ["itch.io", "itch.io", "https://itch.io/search?q={q}"],
+      ["humblebundle.com", "Humble Store", "https://www.humblebundle.com/store/search?search={q}"], ["metacritic.com", "Metacritic", "https://www.metacritic.com/search/{q}/?category=13"], ["howlongtobeat.com", "HowLongToBeat", "https://howlongtobeat.com/?q={q}"], ["ign.com", "IGN", "https://www.ign.com/search?q={q}"]],
+  }},
+
   { id: "learn", name: "Learn", hint: "e.g. learn Python for beginners", sites: {
     "*": [["coursera.org", "Coursera", "https://www.coursera.org/search?query={q}"], ["edx.org"], ["khanacademy.org"], ["youtube.com", "YouTube", "https://www.youtube.com/results?search_query={q}"], ["freecodecamp.org"]],
   }},
@@ -99,7 +104,7 @@ const TOPICS = [
       ["apps.microsoft.com", "Microsoft Store", "https://apps.microsoft.com/search?query={q}"], ["f-droid.org", "F-Droid", "https://search.f-droid.org/?q={q}"], ["flathub.org", "Flathub", "https://flathub.org/apps/search?q={q}"]],
   }},
 
-  { id: "opensource", name: "Open source", hint: "e.g. self-hosted photo backup", sites: {
-    "*": [["github.com", "GitHub", "https://github.com/search?q={q}&type=repositories"], ["gitlab.com"], ["codeberg.org"], ["alternativeto.net", "AlternativeTo", "https://alternativeto.net/browse/search/?q={q}"], ["sourceforge.net"], ["f-droid.org"], ["flathub.org", "Flathub", "https://flathub.org/apps/search?q={q}"]],
+  { id: "opensource", name: "Alternatives", hint: "e.g. alternative to Photoshop, or self-hosted photo backup", sites: {
+    "*": [["github.com", "GitHub", "https://github.com/search?q={q}&type=repositories"], ["gitlab.com"], ["codeberg.org"], ["alternativeto.net", "AlternativeTo", "https://alternativeto.net/browse/search/?q={q}"], ["opensourcealternative.to", "OpenSourceAlternative.to"], ["selfh.st", "selfh.st"], ["sourceforge.net"], ["f-droid.org"], ["flathub.org", "Flathub", "https://flathub.org/apps/search?q={q}"]],
   }},
 ];

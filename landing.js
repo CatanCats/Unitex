@@ -28,7 +28,7 @@ const LANDINGS = {
   cars: {
     title: "Find a car", sub: () => "carsales, Drive, Gumtree and the dealers, all at once.",
     cats: [["🚙", "Toyota", "used Toyota for sale"], ["🚗", "Mazda", "used Mazda for sale"], ["🚘", "Hyundai", "used Hyundai for sale"], ["🛻", "Ford Ranger", "used Ford Ranger for sale"], ["🚐", "Kia", "used Kia for sale"],
-      ["⚡", "Electric", "used electric car for sale"], ["🚙", "SUVs", "used suv for sale"], ["🛻", "Utes", "used ute for sale"], ["💰", "Under $10k", "used car for sale under $10000"]],
+      ["⚡", "Electric", "used electric car for sale"], ["🚙", "SUVs", "used suv for sale"], ["🛻", "Utes", "used ute for sale"], ["💰", "Under $10k", "used car for sale under $10000"], ["🔋", "Hybrid", "used hybrid car for sale"], ["🏕️", "Caravans & 4x4", "used 4x4 for sale"], ["🚌", "Vans", "used van for sale"], ["🆕", "New cars", "new car for sale"]],
     rows: () => [["Popular: Toyota Corolla", "used Toyota Corolla for sale"], ["Electric cars", "used electric car for sale"]] },
   jobs: {
     title: "Find your next job", sub: () => `SEEK, Indeed, LinkedIn and Jora at once${homePlace() ? `, near ${homePlace()}` : ""}.`,
@@ -40,17 +40,27 @@ const LANDINGS = {
   apps: {
     title: "Apps and games", sub: () => "Google Play, the App Store, Steam, the Microsoft Store, F-Droid and Flathub in one place.",
     cats: [["📷", "Photo editors", "photo editor"], ["🎵", "Music", "music player"], ["💬", "Messaging", "messaging"], ["✅", "Productivity", "to do list"], ["🎓", "Learning", "learn language"],
-      ["💪", "Fitness", "workout"], ["🗺️", "Maps", "offline maps"], ["🔒", "Privacy", "password manager"], ["🎮", "Games", "games"], ["🧩", "Open source", "open source apps"]],
+      ["💪", "Fitness", "workout"], ["🗺️", "Maps", "offline maps"], ["🔒", "Privacy", "password manager"], ["🎮", "Games", "games"], ["🧩", "Open source", "open source apps"], ["🤖", "AI tools", "ai assistant"], ["💳", "Finance", "budget"], ["🧘", "Wellbeing", "meditation"], ["🚗", "Driving", "navigation"]],
     rows: () => helperVersion() ? [["Top free iPhone apps", "@apple:top-free"], ["Top sellers on Steam", "@steam"], ["Top paid iPhone apps", "@apple:top-paid"]]
       : [["Popular photo apps", "photo editor"], ["Popular music apps", "music player"]], use: /^(app_appstore|helper_app_googleplay)$/ },
+  games: {
+    title: "Games", sub: () => "Steam, GOG, Epic, Humble and the app stores: prices, sales and what's popular.",
+    cats: [["⚔️", "Action", "action games"], ["🗺️", "Adventure", "adventure games"], ["🧙", "RPG", "rpg games"], ["♟️", "Strategy", "strategy games"], ["🚜", "Simulation", "cosy simulation games"], ["🔫", "Shooter", "shooter games"],
+      ["🧩", "Puzzle", "puzzle games"], ["🧟", "Horror", "horror games"], ["🤝", "Co-op", "co-op games"], ["🎲", "Roguelike", "roguelike games"], ["🏎️", "Racing", "racing games"], ["🆓", "Free to play", "free games"]],
+    rows: () => [["On sale now", "games on sale"], ["Co-op with friends", "co-op games"]] },
+  opensource: {
+    title: "Alternatives", sub: () => "Free and open-source replacements for the apps you pay for.",
+    cats: [["🎨", "Photo & design", "open source photo editor"], ["🎬", "Video & audio", "open source video editor"], ["📄", "Office & notes", "open source office suite"], ["💬", "Chat & meetings", "open source chat"],
+      ["🔒", "Passwords & privacy", "open source password manager"], ["🛠️", "Developer tools", "open source code editor"], ["🏠", "Self-hosted", "self-hosted"], ["📱", "Android", "open source android apps"]],
+    rows: () => [["Popular alternatives", "open source alternatives"]] },
   recipes: {
     title: "What's for dinner?", sub: () => "Recipes from taste.com.au, RecipeTin Eats, BBC Good Food and more.",
     cats: [["🍗", "Chicken", "chicken recipe"], ["🍝", "Pasta", "pasta recipe"], ["🥗", "Vegetarian", "vegetarian recipe"], ["🍰", "Desserts", "dessert recipe"], ["🥩", "Beef", "beef recipe"],
-      ["🐟", "Seafood", "seafood recipe"], ["🍲", "Soups", "soup recipe"], ["🥞", "Breakfast", "breakfast recipe"]],
+      ["🐟", "Seafood", "seafood recipe"], ["🍲", "Soups", "soup recipe"], ["🥞", "Breakfast", "breakfast recipe"], ["🥘", "Slow cooker", "slow cooker recipe"], ["⏱️", "Under 30 min", "quick 30 minute dinner recipe"], ["🌱", "Vegan", "vegan recipe"], ["🍪", "Baking", "baking recipe"]],
     rows: () => [["Chicken dinners", "chicken recipe"], ["Pasta night", "pasta recipe"], ["Something sweet", "cake recipe"]] },
   movies: {
     title: "Find something to watch", sub: () => "What's on, with ratings from IMDb and TVmaze.",
-    cats: [["😂", "Comedy", "comedy"], ["🎭", "Drama", "drama"], ["🔪", "Crime", "crime"], ["🚀", "Sci-fi", "sci-fi"], ["👻", "Horror", "horror"], ["❤️", "Romance", "romance"], ["🎞️", "Documentary", "documentary"], ["🧸", "Animation", "animation"]],
+    cats: [["😂", "Comedy", "comedy"], ["🎭", "Drama", "drama"], ["🔪", "Crime", "crime"], ["🚀", "Sci-fi", "sci-fi"], ["👻", "Horror", "horror"], ["❤️", "Romance", "romance"], ["🎞️", "Documentary", "documentary"], ["🧸", "Animation", "animation"], ["🕵️", "Mystery", "mystery"], ["🌍", "World cinema", "foreign language"], ["🏆", "Award winners", "award winning"], ["👨‍👩‍👧", "Family", "family"]],
     rows: () => [["Streaming today", "@tvmaze:web"], ["On TV today", "@tvmaze:tv"]] },
   events: {
     title: "What's on", sub: () => `Eventbrite, Ticketmaster and more${homePlace() ? ` in ${homePlace()}` : ""}.`,
@@ -142,6 +152,8 @@ function landingRowEl(topic, title, q, row, opts = {}) {
 }
 function renderLanding(topic) {
   if (topic.id === "apps") return appStore();
+  if (topic.id === "games") return gameStore();
+  if (topic.id === "opensource") return altStore();
   const L = LANDINGS[topic.id];
   if (!L) return el("p", { className: "hint mode-empty", textContent: "Set the filters, or type a search above." });
   const cats = typeof L.cats === "function" ? L.cats() : L.cats;
@@ -189,12 +201,12 @@ const storeTile = (i, kind) => el("a", { className: `store-tile ${kind}`, href: 
   el("span", { className: "store-art" }, i.image ? el("img", { src: i.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }) : el("span", { textContent: (i.title || "?").charAt(0) })),
   el("b", { textContent: i.title }), i.sub && el("small", { textContent: i.sub }),
   (i.rating || i.price) && el("small", { className: "store-meta" }, i.rating && el("span", { textContent: `${i.rating} ★` }), i.price && el("span", { textContent: i.price })));
-function storeShelf(title, row, kind, more) {
+function storeShelf(title, row, kind, more, needsHelper = true) {
   return el("section", { className: "store-shelf" },
     el("div", { className: "landing-row-head" }, el("h3", { textContent: title }), more && el("button", { type: "button", className: "landing-all", textContent: "See all ›", onclick: more })),
     row.state === "wait" ? el("div", { className: "landing-strip" }, ...Array.from({ length: 6 }, () => el("div", { className: `skeleton store-skel ${kind}` })))
       : row.items.length ? el("div", { className: `landing-strip store-strip ${kind}` }, ...row.items.slice(0, 16).map(i => storeTile(i, kind)))
-      : el("p", { className: "hint landing-none", textContent: helperVersion() ? "Nothing could be read for this right now." : "Install Unitex Helper to see this shelf." }));
+      : el("p", { className: "hint landing-none", textContent: !needsHelper || helperVersion() ? "Nothing could be read for this right now. Try again in a moment." : "Install Unitex Helper to see this shelf." }));
 }
 // Big banners at the top, like the stores' featured stories.
 function storeHero(row, kind) {
@@ -241,7 +253,7 @@ function appStore() {
   const oss = shelfData("apps:oss", () => helper ? APP_SOURCES.flathub.run("productivity").then(l => l.map(appTile)) : [], redraw);
   const go = q => () => searchFor(q);
   return storeLayout([
-    ["🏠 Discover", scrollToId("apps-top"), true], ["🏆 Top charts", scrollToId("apps-chart")], ["🎮 Games", go("games")], ["🧩 Open source", go("open source apps")],
+    ["🏠 Discover", scrollToId("apps-top"), true], ["🏆 Top charts", scrollToId("apps-chart")], ["🎮 Games", () => { location.href = "search.html?tab=games"; }], ["🧩 Alternatives", () => { location.href = "search.html?tab=alternatives"; }],
     "Categories", ...APP_CATEGORIES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
     el("div", { className: "store-head", id: "apps-top" }, el("h2", { textContent: "Apps and games" }), el("span", { textContent: "Google Play, the App Store, Steam, the Microsoft Store, F-Droid and Flathub" })),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "apps")),
@@ -256,6 +268,66 @@ async function steamTop() {
   return (d.top_sellers?.items || []).filter(a => a.name && !/^steam (deck|frame|machine|controller)/i.test(a.name)).map(a => appCard({ name: a.name, url: `https://store.steampowered.com/app/${a.id}/`, icon: a.small_capsule_image, banner: a.large_capsule_image,
     price: a.final_price ? `$${(a.final_price / 100).toFixed(2)}` : "Free to play", free: !a.final_price, game: true, developer: "Steam",
     platforms: Object.entries({ Windows: a.windows_available, Mac: a.mac_available, Linux: a.linux_available }).filter(([, on]) => on).map(([p]) => p) }, "Steam")).filter(Boolean);
+}
+
+// The game store, laid out like Steam's front page: featured banners, "On sale", "Top sellers", "New & trending", genres.
+// Steam's own lists need Unitex Helper; CheapShark's deals across Steam, GOG, Epic and Humble work from any website.
+const GAME_GENRES = [["⚔️", "Action", "action games"], ["🗺️", "Adventure", "adventure games"], ["🧙", "RPG", "rpg games"], ["♟️", "Strategy", "strategy games"], ["🚜", "Simulation", "cosy simulation games"], ["🔫", "Shooter", "shooter games"],
+  ["🧩", "Puzzle", "puzzle games"], ["🧟", "Horror", "horror games"], ["🤝", "Co-op", "co-op games"], ["🎲", "Roguelike", "roguelike games"], ["🏎️", "Racing", "racing games"], ["🌱", "Indie", "indie games"]];
+const gameTile = c => c && { title: c.card.name, sub: [c.card.discount, c.card.summary].filter(Boolean).join(" · "), image: c.card.banner || c.card.icon, url: c.url, rating: c.card.rating, price: c.card.price, banner: c.card.banner };
+async function steamList(key) {
+  const d = await helperJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
+  const cur = n => n ? `$${(n / 100).toFixed(2)}` : "Free to play";
+  return (d[key]?.items || []).filter(a => a.name && !/^steam (deck|frame|machine|controller)/i.test(a.name)).map(a => ({ title: a.name, url: `https://store.steampowered.com/app/${a.id}/`, image: a.header_image || a.small_capsule_image, banner: a.large_capsule_image || a.header_image,
+    sub: a.discount_percent ? `-${a.discount_percent}% · was ${cur(a.original_price)}` : (a.release_date ? new Date(a.release_date * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""), price: cur(a.final_price) }));
+}
+function gameStore() {
+  const redraw = () => { if (!query && topicId === "games" && modeOn) drawCards(); };
+  const helper = !!helperVersion(), go = q => () => searchFor(q);
+  const shark = k => shelfData("games:shark:" + k, () => sharkDeals(k).then(l => l.map(gameTile)), redraw);
+  const steam = k => shelfData("games:steam:" + k + regionId, () => steamList(k), redraw);
+  const sale = helper ? steam("specials") : shark("sale"), best = helper ? steam("top_sellers") : shark("rating");
+  const fresh = helper ? steam("new_releases") : shark("new"), soon = helper ? steam("coming_soon") : null, free = shark("free");
+  return storeLayout([
+    ["🏠 Discover", scrollToId("games-top"), true], ["🏆 Top charts", scrollToId("games-chart")], ["🏷️ On sale", go("games on sale")], ["🆓 Free to play", go("free games")], ["🤝 Co-op", go("co-op games")],
+    "Genres", ...GAME_GENRES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
+    el("div", { className: "store-head", id: "games-top" }, el("h2", { textContent: "Games" }), el("span", { textContent: helper ? "Steam, GOG, Epic, Humble, Google Play and the App Store" : "Prices across Steam, GOG, Epic and Humble" })),
+    tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "games")),
+    storeHero(best.items.length ? best : sale, "app game"),
+    storeShelf(helper ? "Special offers on Steam" : "On sale now", sale, "app game", go("games on sale"), false),
+    storeShelf(helper ? "Top sellers" : "Best deals right now", best, "app game", go("games"), false),
+    storeShelf(helper ? "New & trending" : "New & well reviewed on sale", fresh, "app game", go("new games"), false),
+    soon && storeShelf("Coming soon", soon, "app game"),
+    storeShelf("Free right now", free, "app game", go("free games"), false),
+    storeChart("games", ["Best deals", "Biggest savings", "New"], [best, sale, fresh], "app game", redraw));
+}
+
+// The alternatives site, laid out like AlternativeTo: one big "what do you want to replace?" box, the apps people replace most,
+// categories, and shelves of open-source apps from Unitex's own list (Flathub's through the helper).
+const ALT_POPULAR = ["Photoshop", "Microsoft Office", "Chrome", "Windows", "Notion", "Spotify", "Slack", "Zoom", "Dropbox", "1Password", "Premiere", "Figma", "Netflix", "ChatGPT"];
+const altTile = ([name, url, desc, license]) => ({ title: name, sub: desc, image: bigIcon(url), url, price: license });
+function altShelfFor(product) {
+  const e = ALTERNATIVES.find(x => x.names.some(n => n.toLowerCase() === product.toLowerCase()));
+  return e ? { state: "done", items: e.alts.map(altTile) } : null;
+}
+function altStore() {
+  const redraw = () => { if (!query && topicId === "opensource" && modeOn) drawCards(); };
+  const helper = !!helperVersion(), go = q => () => searchFor(q);
+  const hero = el("form", { className: "alt-hero", onsubmit(e) { e.preventDefault(); const v = formValues(this); if (v.replaces) heroSubmit("opensource", v); } },
+    el("h2", { textContent: "Find a free alternative to any app" }),
+    el("p", { textContent: "Open-source replacements for the software you pay for, with licences and where they run." }),
+    el("div", { className: "alt-box" }, heroInput("replaces", "Which app do you want to replace? e.g. Photoshop, Notion, Spotify"), el("button", { type: "submit", className: "alt-btn", textContent: "Find alternatives" })),
+    el("div", { className: "alt-popular" }, el("b", { textContent: "Popular:" }), ...ALT_POPULAR.map(n => el("button", { type: "button", textContent: n, onclick: go(`open source alternative to ${n}`) }))));
+  const seenAlt = new Set(), popular = { state: "done", items: ALTERNATIVES.map(e => e.alts[0]).filter(a => !seenAlt.has(a[0]) && seenAlt.add(a[0])).slice(0, 18).map(altTile) };
+  const oss = helper ? shelfData("alts:flathub", () => APP_SOURCES.flathub.run("productivity").then(l => l.map(appTile)), redraw) : null;
+  const shelves = [["Instead of Photoshop", "Photoshop"], ["Instead of Microsoft Office", "Microsoft Office"], ["Instead of Slack", "Slack"], ["Instead of Notion", "Notion"], ["Instead of Spotify", "Spotify"]]
+    .map(([t, p]) => { const row = altShelfFor(p); return row && storeShelf(t, row, "app", go(`open source alternative to ${p}`)); });
+  return el("div", { className: "alt-page" }, hero,
+    el("nav", { className: "site-circles", ariaLabel: "Categories" }, ...LANDINGS.opensource.cats.map(([e, label, q]) => el("button", { type: "button", onclick: go(q) }, el("span", { className: "circle", textContent: e, ariaHidden: "true" }), el("span", { textContent: label })))),
+    tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "opensource")),
+    storeShelf("Popular open-source apps", popular, "app", go("open source apps")),
+    ...shelves,
+    oss && storeShelf("Popular on Flathub", oss, "app", go("open source linux apps")));
 }
 
 // The book shop: Open Library's trending and subject shelves (any website may read them) and Apple Books' charts (helper).

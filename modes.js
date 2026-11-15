@@ -35,7 +35,7 @@ const cleanTitle = (t, ...names) => {
   return (parts.length > 1 && last.length <= 30 && (own || STORE_WORDS.test(last)) ? parts.slice(0, -1).join(" - ") : String(t || "")).trim() || t;
 };
 
-const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event", apps: "app" };
+const CARD_KINDS = { houses: "house", shopping: "product", marketplace: "product", reviews: "product", cars: "car", jobs: "job", recipes: "recipe", movies: "show", events: "event", apps: "app", games: "app", opensource: "app" };
 
 // Turns an ordinary result from one of the topic's sites into a card.
 // What one listing's address looks like on each kind of site (eBay /itm/123, Gumtree /s-ad/…, Amazon /dp/…).
@@ -138,6 +138,8 @@ const MODES = {
   reviews:     { name: "Reviews",            icon: "★", noun: "rated products" },
   events:      { name: "Events",             icon: "🎟️", noun: "events" },
   apps:        { name: "Apps",               icon: "📱", noun: "apps" },
+  games:       { name: "Games",              icon: "🎮", noun: "games" },
+  opensource:  { name: "Alternatives",       icon: "🧩", noun: "alternatives" },
 };
 
 let modeOn = false; // set by search.js: on for every topic with cards
@@ -263,8 +265,12 @@ function formMatches(c) {
       if (v.kind === "movie" && (k.type ? k.type !== "movie" : /\b(series|tv|season)\b/.test(t))) return false;
       if (v.kind === "tv show" && (k.type ? k.type !== "tv" : !/\b(series|tv|season|show)\b/.test(t) && !k.network)) return false;
       return true;
-    case "apps":
-      if (v.platform && !(k.platforms || []).includes(v.platform)) return false;
+    case "apps": case "games": case "opensource":
+      if (topicId === "games" && !k.game) return false;
+      if (topicId === "opensource" && !k.openSource && !openSourceNames().has(lc(k.name).replace(/[^a-z0-9]/g, ""))) return false;
+      if (v.platform && (k.platforms || []).length && !k.platforms.includes(v.platform)) return false;
+      if (v.lic && !has(lc(k.license || ""), lc(v.lic))) return false;
+      if (topicId === "games" && (v.extras || []).includes("sale") && !k.discount) return false;
       if (v.kind === "games" && !k.game) return false;
       if (v.kind === "apps" && k.game) return false;
       if (v.license === "free" && !k.free) return false;
@@ -320,7 +326,7 @@ function applyFilters(cards) {
   if (by) out = [...out].sort(by);
   // Apps come from seven stores at once: with no sort picked, the ones named like the search come first
   // ("vlc" → VLC, VLC for Android… before a game that only matched a word in its description).
-  else if (topicId === "apps") {
+  else if (["apps", "games", "opensource"].includes(topicId)) {
     const want = lc(appWords(query)).replace(/[^a-z0-9 ]/g, "").trim(), squash = s => lc(s).replace(/[^a-z0-9]/g, "");
     const score = c => { const n = lc(c.card.name).replace(/[^a-z0-9 ]/g, ""); return !want ? 0 : squash(n) === squash(want) ? 3 : n.startsWith(want) ? 2 : has(n, want) ? 1 : 0; };
     out = out.map((c, i) => [c, score(c), i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]).map(x => x[0]);
@@ -560,6 +566,18 @@ function guessForm(topicIdNow, q) {
     return { what: q.replace(/\b(in|near)\s+.*$|\b(today|tonight|this weekend|this week|this month|events?|free|family friendly|all ages)\b/gi, " ").replace(/\s+/g, " ").trim(), where: where?.replace(EVENT_WHEN, "").trim(),
       when: cap(when), extras: pick(["Free", "Family friendly", "All ages"]) };
   }
+  if (topicIdNow === "games") {
+    const platform = /\bandroid\b/i.test(q) ? "Android" : /\b(iphone|ipad|ios)\b/i.test(q) ? "iPhone & iPad" : /\b(windows|pc)\b/i.test(q) ? "Windows" : /\b(mac|macos)\b/i.test(q) ? "Mac" : /\blinux\b/i.test(q) ? "Linux" : "";
+    const genre = ["Action", "Adventure", "RPG", "Strategy", "Simulation", "Shooter", "Platformer", "Roguelike", "Survival", "Puzzle", "Horror", "Racing", "Sports", "Indie"].find(g => new RegExp(`\\b${g}\\b`, "i").test(q)) || "";
+    const players = /\bco-?op\b/i.test(q) ? "Co-op" : /\bmultiplayer\b/i.test(q) ? "Multiplayer" : /\bsingle[- ]player\b/i.test(q) ? "Single-player" : "";
+    const what = appWords(q).replace(new RegExp(`\\b(${genre || "$^"}|co-?op|multiplayer|single[- ]player)\\b`, "gi"), " ").replace(/\s+/g, " ").trim();
+    return { what: /^(games?)?$/i.test(what) ? "" : what, platform, genre, players, license: /\bfree\b/i.test(q) ? "free" : "" };
+  }
+  if (topicIdNow === "opensource") {
+    const alt = detectAlternatives(q);
+    const platform = /\bandroid\b/i.test(q) ? "Android" : /\b(iphone|ipad|ios)\b/i.test(q) ? "iPhone & iPad" : /\b(windows)\b/i.test(q) ? "Windows" : /\b(mac|macos)\b/i.test(q) ? "Mac" : /\blinux\b/i.test(q) ? "Linux" : "";
+    return alt?.explicit ? { replaces: alt.product.replace(/\s+for\s+(android|iphone|ipad|ios|windows|mac|macos|linux)$/i, ""), platform } : { what: q.replace(/\b(open[- ]source|free|foss|for\s+(android|iphone|ipad|ios|windows|mac|macos|linux))\b/gi, " ").replace(/\s+/g, " ").trim(), platform };
+  }
   if (topicIdNow === "apps") {
     const platform = /\bandroid\b/i.test(q) ? "Android" : /\b(iphone|ipad|ios)\b/i.test(q) ? "iPhone & iPad" : /\b(windows|pc)\b/i.test(q) ? "Windows" : /\b(mac|macos)\b/i.test(q) ? "Mac" : /\blinux\b/i.test(q) ? "Linux" : "";
     return { what: appWords(q) === q && /^(apps?|games?)$/i.test(q.trim()) ? "" : appWords(q), platform, license: /\bopen[- ]source\b/i.test(q) ? "open" : /\bpaid\b/i.test(q) ? "paid" : /\bfree\b/i.test(q) ? "free" : "",
@@ -759,7 +777,8 @@ function drawCards() {
   const main = el("section", { className: "mode-main" }, (query || listOpen) && top,
     modeOn && listPanel(topic),
     ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
-    topic.id === "apps" && !helperVersion() && el("p", { className: "shop-note" }, "Google Play, Steam, F-Droid, Flathub and the Microsoft Store need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, apps only come from Apple's App Store and Mac App Store."),
+    ["apps", "games", "opensource"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, topic.id === "opensource" ? "Flathub and F-Droid need " : "Google Play, Steam, F-Droid, Flathub and the Microsoft Store need ", el("a", { href: "install.html", textContent: "Unitex Helper" }),
+      topic.id === "games" ? ". Without it, games come from CheapShark's store deals (Steam, GOG, Epic, Humble…) and Apple's App Store." : topic.id === "opensource" ? ". Without it, alternatives come from Unitex's own list of open-source apps." : ". Without it, apps only come from Apple's App Store and Mac App Store."),
     !query ? renderLanding(topic)
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
@@ -895,6 +914,17 @@ const TOPIC_FORMS = {
     build: v => words(v.license === "open" && "open source", v.license === "free" && "free", v.what || (v.kind === "games" ? "games" : "apps"), v.kind === "games" && v.what && "game", v.platform && `for ${v.platform}`),
     filters: v => ({ ratingSel: v.rating || undefined }) },
 
+  games: { title: "🎮 Find a game", fields: {
+      what: { label: "Game or what it's like", placeholder: "e.g. Hades, or cosy farming sim", wide: true },
+      platform: { type: "seg", label: "Platform", options: opt([["", "All platforms"], ["Windows", "PC"], ["Mac", "Mac"], ["Linux", "Linux"], ["Android", "Android"], ["iPhone & iPad", "iPhone & iPad"]]) },
+      genre: anyOf("Genre", ["Action", "Adventure", "RPG", "Strategy", "Simulation", "Shooter", "Platformer", "Roguelike", "Survival", "Puzzle", "Horror", "Racing", "Sports", "Indie"]),
+      players: anyOf("Players", ["Single-player", "Co-op", "Multiplayer"]),
+      license: { type: "select", label: "Price", options: opt([["", "Any price"], ["free", "Free to play"], ["paid", "Paid"]]) },
+      rating: anyOf("Rating", ["4★ & up", "3★ & up"]),
+      extras: { type: "checks", label: "Options", options: opt([["sale", "On sale"]]) } },
+    build: v => words(v.license === "free" && "free", v.genre?.toLowerCase(), v.players?.toLowerCase(), v.what || "games", v.what && "game", v.platform && `for ${v.platform}`),
+    filters: v => ({ ratingSel: v.rating || undefined }) },
+
   marketplace: { title: "♻️ Find it second-hand", fields: {
       what: { label: "What", placeholder: "e.g. road bike", wide: true },
       where: { label: "Near", placeholder: "Suburb or city" },
@@ -949,11 +979,13 @@ const TOPIC_FORMS = {
       extras: { type: "checks", label: "Options", options: opt(["Free", "Certificate"]) } },
     build: v => words("learn", v.what, v.level && `for ${v.level.toLowerCase()}s`, v.format?.toLowerCase(), (v.extras || []).map(e => e.toLowerCase())) },
 
-  opensource: { title: "🧩 Find open-source software", fields: {
-      replaces: { label: "Replace this app", placeholder: "e.g. Photoshop, Notion" },
-      what: { label: "Or: what it should do", placeholder: "e.g. photo backup" },
-      platform: anyOf("Runs on", ["Linux", "Windows", "Mac", "Android", "iPhone", "Self-hosted", "Web"]) },
-    build: v => v.replaces ? words("open source alternative to", v.replaces, v.platform && `for ${v.platform}`) : words("open source", v.what, v.platform && `for ${v.platform}`) },
+  opensource: { title: "🧩 Find an alternative", fields: {
+      replaces: { label: "Replace this app", placeholder: "e.g. Photoshop, Notion, Spotify", wide: true },
+      what: { label: "Or: what it should do", placeholder: "e.g. photo backup, video editor" },
+      platform: anyOf("Runs on", ["Linux", "Windows", "Mac", "Android", "iPhone & iPad"]),
+      lic: anyOf("Licence", ["GPL", "MIT", "Apache", "AGPL", "MPL"]),
+      extras: { type: "checks", label: "Options", options: opt([["self-hosted", "Self-hosted"], ["no ads or tracking", "No tracking"]]) } },
+    build: v => v.replaces ? words("open source alternative to", v.replaces, v.platform && `for ${v.platform}`) : words("open source", (v.extras || []), v.what, v.platform && `for ${v.platform}`) },
 };
 
 function renderTopicForm(topicIdNow, onSearch) {

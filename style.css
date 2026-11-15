@@ -1659,3 +1659,19 @@ body.topic-travel .rmain, body.topic-travel .rnav { max-width: 1180px; }
 .area-card.empty { cursor: default; opacity: .55; }
 .area-card.empty:hover .area-art { transform: none; }
 .area-card.empty:hover .area-emoji { transform: none; }
+
+/* Games (Steam-like) and Alternatives (AlternativeTo-like) */
+body[data-look="games"] .store-head h2 { background: linear-gradient(90deg, #66c0f4, #7c4dff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+body[data-look="games"] .store-nav-item.on { background: #1b2838; color: #c7d5e0; }
+.alt-hero { margin: 4px 0 18px; padding: 34px 26px; border-radius: 22px; text-align: center; color: #fff;
+  background: radial-gradient(120% 140% at 15% 0%, #2ea043, #0f3d2e 70%); box-shadow: 0 14px 34px -16px #0f3d2e; }
+.alt-hero h2 { margin: 0 0 6px; font-size: clamp(1.5rem, 4vw, 2.2rem); }
+.alt-hero p { margin: 0 0 18px; opacity: .85; }
+.alt-box { display: flex; gap: 8px; max-width: 680px; margin: 0 auto; padding: 6px; border-radius: 999px; background: #fff; }
+.alt-box .hero-input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; padding: 10px 16px; font-size: 1rem; color: #1a1a1a; }
+.alt-btn { border: 0; border-radius: 999px; padding: 10px 22px; background: #2ea043; color: #fff; font-weight: 700; cursor: pointer; }
+.alt-popular { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+.alt-popular b { opacity: .8; align-self: center; font-size: .85rem; }
+.alt-popular button { border: 1px solid rgb(255 255 255 / .35); border-radius: 999px; padding: 5px 12px; background: rgb(255 255 255 / .1); color: #fff; font-size: .85rem; cursor: pointer; }
+.alt-popular button:hover { background: rgb(255 255 255 / .25); }
+.alt-page .site-circles { margin: 6px 0 14px; }

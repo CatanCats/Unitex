@@ -9,7 +9,7 @@ let sub = params.get("sub") || "";
 let topicId = "all"; // set from the tab and sub-filter in go()
 // Old links: ?topic=houses → Shopping › Houses, ?tab=places → Maps, ?tab=papers → Books › Research papers.
 const OLD_TOPICS = { houses: ["shopping", "houses"], cars: ["shopping", "cars"], marketplace: ["shopping", "secondhand"], shopping: ["shopping", "products"], reviews: ["shopping", "reviews"],
-  jobs: ["jobs", ""], apps: ["apps", ""], travel: ["travel", ""], recipes: ["all", "recipes"], events: ["all", "events"], movies: ["all", "movies"], learn: ["all", "learn"], opensource: ["all", "opensource"], academic: ["books", "research"] };
+  jobs: ["jobs", ""], apps: ["apps", ""], travel: ["travel", ""], recipes: ["all", "recipes"], events: ["all", "events"], movies: ["all", "movies"], learn: ["all", "learn"], opensource: ["alternatives", ""], games: ["games", ""], academic: ["books", "research"] };
 if (params.get("topic") && OLD_TOPICS[params.get("topic")] && !params.get("tab")) [tab, sub] = OLD_TOPICS[params.get("topic")];
 if (tab === "places") tab = "maps";
 if (tab === "papers") [tab, sub] = ["books", "research"];
@@ -486,6 +486,8 @@ function cardSourcesFor(topic) {
   if (CARD_SOURCES[topic]) out[topic] = CARD_SOURCES[topic];
   if (topic === "jobs") Object.assign(out, jobSourcesFor());
   if (topic === "apps") Object.assign(out, appSourcesFor());
+  if (topic === "games") Object.assign(out, gameSourcesFor());
+  if (topic === "opensource") Object.assign(out, altSourcesFor());
   Object.assign(out, sectionSourcesFor(topic));
   const used = topic === "marketplace";
   for (const id of SHOP_FOR[topic] || []) {
@@ -520,6 +522,8 @@ const TABS = [
     { id: "research", name: "Research papers", kind: "list", sources: PAPER_SOURCES, view: "papers", noun: "papers" }] },
   { id: "jobs",     name: "Jobs",     kind: "web", topic: "jobs", more: true },
   { id: "apps",     name: "Apps",     kind: "web", topic: "apps" },
+  { id: "games",    name: "Games",    kind: "web", topic: "games", more: true },
+  { id: "alternatives", name: "Alternatives", kind: "web", topic: "opensource", more: true },
   { id: "travel",   name: "Travel",   kind: "web", topic: "travel", more: true },
   { id: "code",     name: "Code",     kind: "list", sources: CODE_SOURCES, noun: "results", more: true, subs: [
     { id: "all", name: "Code" }, { id: "opensource", name: "Open source", kind: "web", topic: "opensource" }] },
@@ -809,7 +813,7 @@ function renderNotice() {
 
 // What the sites row is called on each topic.
 const SITES_LABEL = { houses: "Property sites", jobs: "Job sites", cars: "Car sites", marketplace: "Marketplaces", shopping: "Stores", travel: "Travel sites", reviews: "Review sites",
-  recipes: "Recipe sites", movies: "Film & TV sites", events: "Ticket sites", learn: "Learning sites", academic: "Research sites", opensource: "Open-source sites" };
+  recipes: "Recipe sites", movies: "Film & TV sites", events: "Ticket sites", learn: "Learning sites", academic: "Research sites", opensource: "Alternative sites", games: "Game stores & reviews" };
 // Sites Unitex reads itself (not only through the engines): their own result shows next to the site.
 const SITE_READERS = { "realestate.com.au": "listing_realestate", "domain.com.au": "listing_domain", "seek.com.au": "jobsite_seek", "seek.co.nz": "jobsite_seek",
   "linkedin.com/jobs": "jobsite_linkedin", "au.indeed.com": "jobsite_indeed", "uk.indeed.com": "jobsite_indeed", "indeed.com": "jobsite_indeed", "ca.indeed.com": "jobsite_indeed", "nz.indeed.com": "jobsite_indeed", "jora.com": "jobsite_jora", "remoteok.com": "jobs_remoteok" };
@@ -1109,7 +1113,7 @@ function drawResults(rest, c) {
 // verticals; "Search the whole web instead" turns it off for that search.
 let userPicked = new URLSearchParams(location.search).has("tab"), wholeWebFor = "", autoMode = null, autoFor = "";
 const DEPARTMENTS = [["all", "", "All"], ["shopping", "products", "Shopping"], ["shopping", "houses", "Houses"], ["shopping", "cars", "Cars"], ["shopping", "secondhand", "Second-hand"],
-  ["jobs", "", "Jobs"], ["travel", "", "Travel"], ["all", "events", "Events"], ["all", "recipes", "Recipes"], ["all", "movies", "Movies & TV"], ["images", "", "Images"], ["videos", "", "Videos"], ["news", "", "News"], ["maps", "", "Maps"], ["books", "", "Books"]];
+  ["jobs", "", "Jobs"], ["travel", "", "Travel"], ["all", "events", "Events"], ["all", "recipes", "Recipes"], ["all", "movies", "Movies & TV"], ["games", "", "Games"], ["alternatives", "", "Alternatives"], ["images", "", "Images"], ["videos", "", "Videos"], ["news", "", "News"], ["maps", "", "Maps"], ["books", "", "Books"]];
 function renderDepartment() {
   const d = $("dept");
   if (!d) return;
@@ -1147,7 +1151,7 @@ async function go() {
   if (autoMode) fill(note, `Showing ${autoMode} for “${query}” · `, el("a", { href: "#", textContent: "Search the whole web instead", onclick: e => { e.preventDefault(); wholeWebFor = query; tab = "all"; sub = ""; go(); } }));
   note.hidden = !autoMode;
   renderNotice();
-  renderAlternatives($("alts"), query);
+  if (topicId === "opensource") $("alts").hidden = true; else renderAlternatives($("alts"), query);
   for (const id of ["did-you-mean", "related", "answer", "image-strip", "image-grid", "media-grid", "topic-sites", "cards", "shortlist", "ai-overview", "tab-bar", "ai-chat"]) $(id).hidden = true;
   if (topicId !== lastTopic) { filters = {}; lastTopic = topicId; }
   document.body.classList.toggle("mode-on", modeOn);
