@@ -50,16 +50,19 @@ const AREAS = [
   ["all", "movies", "Movies & TV", "🎬", "IMDb, TVmaze", "#121212", "#fff", "#f5c518"],
   ["all", "events", "Events", "🎟️", "Eventbrite, Ticketmaster", "#fff", "#1e0a3c", "#d1410c"],
   ["travel", "", "Travel", "✈️", "Flights, stays, things to do", "#003580", "#fff", "#febb02"],
+  ["", "", "Games", "🎮", "Coming soon", "#1b1464", "#fff", "#7c4dff"],
+  ["", "", "Alternatives", "🧩", "Coming soon", "#0f3d2e", "#fff", "#2ea043"],
 ];
 // Chips in the same row, each with its icon on its site's colour, the sites it reads on hover.
 function areaChips() {
   return AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
-    const a = el("a", { className: "area-card", title: from, href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
+    const empty = !tab; // placeholder tile: nothing behind it yet
+    const a = el(empty ? "span" : "a", { className: "area-card" + (empty ? " empty" : ""), title: from, ...(empty ? {} : { href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) }) },
       el("span", { className: "area-art", ariaHidden: "true" }, el("span", { className: "area-emoji", textContent: emoji })),
       el("span", { className: "area-name", textContent: name }));
     a.style.cssText = `--area-bg:${bg};--area-fg:${fg};--area-accent:${accent}`;
     // Whatever is typed in the search box goes along: "headphones" → Shopping for headphones.
-    a.onclick = () => { const q = $("q").value.trim(); if (q) a.href += "&" + new URLSearchParams({ q }); };
+    if (!empty) a.onclick = () => { const q = $("q").value.trim(); if (q) a.href += "&" + new URLSearchParams({ q }); };
     return a;
   });
 }

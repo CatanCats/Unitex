@@ -1656,3 +1656,6 @@ body.topic-travel .rmain, body.topic-travel .rnav { max-width: 1180px; }
 .area-card:hover .area-emoji { transform: scale(1.12) rotate(-4deg); }
 .area-name { font-size: 0.8rem; font-weight: 600; letter-spacing: .01em; color: var(--muted); }
 .area-card:hover .area-name { color: var(--fg); }
+.area-card.empty { cursor: default; opacity: .55; }
+.area-card.empty:hover .area-art { transform: none; }
+.area-card.empty:hover .area-emoji { transform: none; }
