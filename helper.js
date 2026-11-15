@@ -25,6 +25,18 @@ function helperFetch(url, ms = 12000) {
 // Bing is read without your Microsoft account unless you choose otherwise in Settings: Bing counts searches
 // made with your account toward Microsoft Rewards' daily limit, but only gives points for searches you do yourself.
 const anonFor = url => { try { return /(^|\.)bing\.com$/.test(new URL(url).hostname) && !(typeof settings === "object" && settings.bingAccount); } catch { return false; } };
+// Microsoft Rewards, when switched on in Settings: each search you make (not paging, tabs or refreshes) also opens
+// on bing.com in a background tab via the helper, once per search, so Bing's own page counts it as yours.
+function bingRewardsSearch(q) {
+  if (!q || typeof settings !== "object" || !settings.bingRewards || !helperVersion() || versionLess(helperVersion(), "1.14.0")) return;
+  const key = q.trim().toLowerCase();
+  let done = {};
+  try { done = JSON.parse(sessionStorage.getItem("unitex.bingdone") || "{}"); } catch {}
+  if (done[key] && Date.now() - done[key] < 30 * 60000) return; // the same search again: Bing wouldn't count it twice
+  done[key] = Date.now();
+  try { sessionStorage.setItem("unitex.bingdone", JSON.stringify(done)); } catch {}
+  window.postMessage({ type: "unitex-helper-fetch", id: ++helperSeq, url: `https://www.bing.com/search?q=${encodeURIComponent(q.trim())}&form=QBLH`, bingTab: true }, location.origin);
+}
 function helperFetchNow(url, ms, post) {
   return new Promise((resolve, reject) => {
     if (!helperVersion()) return reject(new Error("Unitex Helper not installed"));

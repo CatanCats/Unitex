@@ -36,6 +36,21 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!ALLOWED_PAGES.some(p => (sender.url || "").startsWith(p))) return;
   let url;
   try { url = new URL(msg.url); } catch { reply({ error: "bad url" }); return; }
+  // Microsoft Rewards: the search you just made, opened on bing.com in a background tab so Bing's own page runs
+  // in your browser (as if you'd searched there), then closed once it has finished loading. Only Bing searches.
+  if (msg.bingTab) {
+    if (url.origin !== "https://www.bing.com" || url.pathname !== "/search") { reply({ error: "not allowed" }); return; }
+    api.tabs.create({ url: url.href, active: false }, tab => {
+      if (!tab) { reply({ error: api.runtime.lastError?.message || "couldn't open" }); return; }
+      let done = false;
+      const close = () => { if (done) return; done = true; api.tabs.onUpdated.removeListener(watch); api.tabs.remove(tab.id, () => void api.runtime.lastError); };
+      const watch = (id, info) => { if (id === tab.id && info.status === "complete") setTimeout(close, 8000); };
+      api.tabs.onUpdated.addListener(watch);
+      setTimeout(close, 30000);
+      reply({ status: 200 });
+    });
+    return true;
+  }
   if (msg.image) {
     if (url.protocol !== "https:" || !(IMAGE_HOSTS.includes(url.hostname) || ALLOWED_HOSTS.includes(url.hostname))) { reply({ error: "not allowed" }); return; }
     fetch(url, { credentials: "omit", headers: { Accept: "image/avif,image/webp,image/*" } }).then(async r => {

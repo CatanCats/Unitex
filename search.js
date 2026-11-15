@@ -1265,7 +1265,11 @@ $("search").addEventListener("submit", e => {
   if (tab === "all" || autoMode) { userPicked = false; if (autoMode) { tab = "all"; sub = ""; } }
   query = $("q").value.replace(/(?:^|\s)!\w+(?=\s|$)/g, " ").trim();
   go();
+  bingRewardsSearch(query);
 });
+// A search typed on the home page (or the browser's address bar) arrives here as ?q=: it counts too, but a
+// reload or Back doesn't. The helper marks the page shortly after it loads.
+if (query && performance.getEntriesByType("navigation")[0]?.type === "navigate") setTimeout(() => bingRewardsSearch(query), 1500);
 $("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));
 attachSuggestions($("q"), text => { $("q").value = text; $("search").requestSubmit(); });
 
