@@ -1633,3 +1633,7 @@ body.topic-travel .rmain, body.topic-travel .rnav { max-width: 1180px; }
 .more-menu .more-sep{width:100%;margin:4px 0;border:0;border-top:1px solid var(--border)}
 .sp-solve{grid-column:3;justify-self:start;margin-top:2px;padding:3px 10px;border:0;border-radius:999px;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:12px;font-weight:600;cursor:pointer;flex:none}
 .sp-solve:hover{filter:brightness(1.1)}
+/* Save floats over the list of websites, only once something changed */
+.sp-save{position:sticky;bottom:4px;display:block;margin:8px auto 0;padding:10px 22px;border:0;border-radius:999px;background:var(--accent);color:var(--accent-fg);font:inherit;font-weight:700;font-size:.9rem;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28);z-index:2}
+.sp-save[hidden]{display:none}
+.sp-save:hover{filter:brightness(1.08)}

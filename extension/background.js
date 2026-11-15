@@ -55,7 +55,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.post != null && !POST_URLS.some(p => url.href.startsWith(p))) { reply({ error: "not allowed" }); clearTimeout(timer); return; }
   const init = msg.post != null
     ? { method: "POST", credentials: "include", signal: ctrl.signal, headers: { "Content-Type": url.hostname === "flathub.org" ? "application/json" : "application/x-www-form-urlencoded;charset=UTF-8" }, body: String(msg.post) }
-    : { credentials: "include", signal: ctrl.signal, headers: { Accept: "text/html,application/xhtml+xml" } };
+    : { credentials: msg.anon ? "omit" : "include", signal: ctrl.signal, headers: { Accept: "text/html,application/xhtml+xml" } };
   fetch(url, init)
     .then(async r => reply({ status: r.status, url: r.url, html: (await r.text()).slice(0, 3_000_000) }))
     .catch(err => reply({ error: String(err) }))

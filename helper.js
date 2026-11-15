@@ -22,6 +22,9 @@ function helperFetch(url, ms = 12000) {
   return p;
 }
 
+// Bing is read without your Microsoft account unless you choose otherwise in Settings: Bing counts searches
+// made with your account toward Microsoft Rewards' daily limit, but only gives points for searches you do yourself.
+const anonFor = url => { try { return /(^|\.)bing\.com$/.test(new URL(url).hostname) && !(typeof settings === "object" && settings.bingAccount); } catch { return false; } };
 function helperFetchNow(url, ms, post) {
   return new Promise((resolve, reject) => {
     if (!helperVersion()) return reject(new Error("Unitex Helper not installed"));
@@ -33,7 +36,7 @@ function helperFetchNow(url, ms, post) {
       if (why) reject(blocked(why, url));
       else resolve(res);
     });
-    window.postMessage({ type: "unitex-helper-fetch", id, url, ...(post != null ? { post } : {}) }, location.origin);
+    window.postMessage({ type: "unitex-helper-fetch", id, url, ...(post != null ? { post } : {}), ...(anonFor(url) ? { anon: true } : {}) }, location.origin);
   });
 }
 

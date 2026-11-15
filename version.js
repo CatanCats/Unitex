@@ -1,6 +1,7 @@
 // The newest Unitex Helper version, and what changed. Bump this together with extension/manifest.json.
-const HELPER_LATEST = "1.12.0";
+const HELPER_LATEST = "1.13.0";
 const HELPER_CHANGES = {
+  "1.13.0": "Reads Bing without your Microsoft account (unless you switch it on in ⚙ Settings), so Unitex no longer uses up your Microsoft Rewards searches.",
   "1.12.0": "Shows eBay and Amazon pictures that your browser's tracking protection blocks, takes SearXNG out, and reads Bing Maps' places (ratings, hours, phone) for Maps and Apple Books' charts for the new book shop.",
   "1.11.0": "Each area now opens on a front page with live items: Apple's top app charts and Steam's top sellers on Apps, and products, jobs and homes on the others.",
   "1.10.2": "SEEK jobs load again: SEEK moved to au.seek.com and nz.seek.com.",

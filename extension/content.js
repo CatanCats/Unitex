@@ -7,8 +7,8 @@ document.documentElement.dataset.unitexHelper = api.runtime.getManifest().versio
 
 window.addEventListener("message", e => {
   if (e.source !== window || e.data?.type !== "unitex-helper-fetch") return;
-  const { id, url, post, image } = e.data;
-  api.runtime.sendMessage(image ? { url, image: true } : post != null ? { url, post } : { url }, res => {
+  const { id, url, post, image, anon } = e.data;
+  api.runtime.sendMessage(image ? { url, image: true } : post != null ? { url, post } : anon ? { url, anon: true } : { url }, res => {
     const error = api.runtime.lastError?.message;
     window.postMessage({ type: "unitex-helper-result", id, ...(res || { error: error || "no response" }) }, location.origin);
   });

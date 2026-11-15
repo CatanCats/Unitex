@@ -658,33 +658,49 @@ function sourceRows() {
     const isOff = offSites.has(st.domain) || (key && srcOff(key));
     const s0 = key ? state(key, sources[key], isOff) : isOff ? { st: "off", note: "left out" } : on ? { st: settled.length ? "ok" : "wait", note: settled.length ? `${found(st.domain)} found through the engines` : query ? "searching…" : "" } : { st: "locked", note: "needs Unitex Helper" };
     rows.push({ group: SITES_LABEL[topic.id] || "Websites", label: st.name, domain: st.domain, ...s0, off: isOff,
-      toggle: () => { const off = !isOff; for (const [set, k, sk] of [[offSites, st.domain, "unitex.offsites"], ]) { off ? set.add(k) : set.delete(k); store.set(sk, [...set]); } if (key) toggleSrc(key, off); go(); } });
+      toggle: () => { const off = !isOff; for (const [set, k, sk] of [[offSites, st.domain, "unitex.offsites"], ]) { off ? set.add(k) : set.delete(k); store.set(sk, [...set]); } if (key) toggleSrc(key, off); } });
   }
   for (const [n, src] of Object.entries(sources)) {
     if (listed.has(n)) continue;
     if (src.enabled && !src.enabled() && !/^(helper|store|jobsite|site)_/.test(n)) continue; // doesn't apply to this search
     const isOff = srcOff(n);
     rows.push({ group: ENGINE_KEYS.test(n) ? "Search engines" : WEBSITE_KEYS.test(n) ? (SITES_LABEL[topic.id] || "Websites") : "Sources", label: src.name.replace(/ \((through|via) .*\)$/, ""), key: n, ...state(n, src, isOff), off: isOff,
-      toggle: () => { toggleSrc(n, !isOff); go(); } });
+      toggle: () => { toggleSrc(n, !isOff); } });
   }
   // The businesses (property sites, stores, job sites…) first, then the engines.
   const order = [SITES_LABEL[topic.id] || "Websites", "Websites", "Search engines", "Sources"];
   return rows.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
 }
 
+// Ticks wait for Save: nothing searches again until you press it. Kept outside the list, so a redraw while
+// results come in doesn't lose them.
+const pendingSrc = new Map(); // row id → wanted on/off
+const rowId = r => r.key || "site:" + r.domain || r.label;
+function saveSources() {
+  for (const r of sourceRows()) if (pendingSrc.has(rowId(r)) && pendingSrc.get(rowId(r)) === r.off) r.toggle();
+  pendingSrc.clear();
+  pickerOpen = false;
+  go();
+}
 function sourcesList() {
   const rows = sourceRows();
+  for (const [id, on] of pendingSrc) { const r = rows.find(x => rowId(x) === id); if (!r || on === !r.off) pendingSrc.delete(id); }
+  const save = el("button", { type: "button", className: "sp-save", hidden: !pendingSrc.size, onclick: e => { e.stopPropagation(); saveSources(); } });
+  const label = () => { save.textContent = `Save ${pendingSrc.size} change${pendingSrc.size === 1 ? "" : "s"}`; save.hidden = !pendingSrc.size; };
+  label();
   const groups = [...new Set(rows.map(r => r.group))];
   return el("div", { className: "sp-list" }, ...groups.map(g => el("div", { className: "sp-group" }, el("h4", { textContent: g }),
     ...rows.filter(r => r.group === g).map(r => el("label", { className: "sp-row " + r.st, title: r.note },
-      el("input", { type: "checkbox", checked: !r.off, disabled: r.st === "locked", onchange: r.toggle }),
+      el("input", { type: "checkbox", checked: pendingSrc.has(rowId(r)) ? pendingSrc.get(rowId(r)) : !r.off, disabled: r.st === "locked",
+        onchange() { this.checked === !r.off ? pendingSrc.delete(rowId(r)) : pendingSrc.set(rowId(r), this.checked); label(); } }),
       r.domain ? domainIcon(r.domain) : el("span", { className: "sp-dot" }),
       el("span", { className: "sp-name", textContent: r.label }),
       el("small", { textContent: r.note }),
       r.solve && el("button", { type: "button", className: "sp-solve", textContent: "Solve", title: "Opens the page so you can do its check; Unitex tries again when you come back",
         onclick: e => { e.preventDefault(); e.stopPropagation(); solveCheck(r.solve); } }))))),
     rows.some(r => r.st === "locked") && el("a", { className: "sp-helper", href: "install.html", textContent: "Get Unitex Helper to search the locked ones" }),
-    (offSources.size || offSites.size) ? el("button", { type: "button", className: "chip", textContent: "Turn everything back on", onclick: () => { offSources.clear(); offSites.clear(); store.set("unitex.off", []); store.set("unitex.offsites", []); go(); } }) : null);
+    (offSources.size || offSites.size) ? el("button", { type: "button", className: "chip", textContent: "Turn everything back on", onclick: () => { pendingSrc.clear(); offSources.clear(); offSites.clear(); store.set("unitex.off", []); store.set("unitex.offsites", []); go(); } }) : null,
+    save);
 }
 
 const countrySelect = () => {
