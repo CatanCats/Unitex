@@ -24,13 +24,21 @@ function helperFetch(url, ms = 12000) {
 
 // Bing is read without your Microsoft account unless you choose otherwise in Settings: Bing counts searches
 // made with your account toward Microsoft Rewards' daily limit, but only gives points for searches you do yourself.
-const anonFor = url => { try { return /(^|\.)bing\.com$/.test(new URL(url).hostname) && !(typeof settings === "object" && settings.bingAccount); } catch { return false; } };
+const anonFor = url => { try { return /(^|\.)bing\.com$/.test(new URL(url).hostname) && !(typeof settings === "object" && settings.bingRewards); } catch { return false; } };
+// Searches that earn points each day by Rewards level; after that Bing's page stops opening until tomorrow.
+const REWARDS_PER_DAY = { member: 10, gold: 30 };
+const rewardsToday = () => { const day = new Date().toDateString(); let c = {}; try { c = JSON.parse(localStorage.getItem("unitex.bingcount") || "{}"); } catch {} return c.day === day ? c : { day, n: 0 }; };
 // Microsoft Rewards, when switched on in Settings: each search you make (not paging, tabs or refreshes) also opens
 // on bing.com in a background tab via the helper, once per search, so Bing's own page counts it as yours.
 function bingRewardsSearch(q) {
   if (!q || typeof settings !== "object" || !settings.bingRewards) return;
   if (!helperVersion()) return rewardsNote("Microsoft Rewards needs Unitex Helper.", "install.html", "Install it");
   if (versionLess(helperVersion(), "1.15.0")) return rewardsNote(`Microsoft Rewards needs Unitex Helper 1.15.0 (you have ${helperVersion()}).`, "install.html", "Update it");
+  const limit = REWARDS_PER_DAY[settings.rewardsLevel] || REWARDS_PER_DAY.member, today = rewardsToday();
+  if (today.n >= limit) {
+    if (!today.told) { today.told = true; try { localStorage.setItem("unitex.bingcount", JSON.stringify(today)); } catch {} rewardsNote(`Today's ${limit} Rewards searches are done, so Bing won't open again until tomorrow.`); }
+    return;
+  }
   const key = q.trim().toLowerCase();
   let done = {};
   try { done = JSON.parse(sessionStorage.getItem("unitex.bingdone") || "{}"); } catch {}
@@ -47,7 +55,9 @@ function bingRewardsSearch(q) {
     if (at && !/(^|\.)bing\.com$/.test(at.hostname)) return rewardsNote(`Bing sent the search to ${at.hostname} (a sign-in or consent page). Open bing.com once, sign in and accept, then search again.`, "https://www.bing.com/", "Open Bing");
     // Bing's results page is titled with the search ("dogs - Search"); anything else is an error or check page.
     if (res.title && !res.title.toLowerCase().includes(q.trim().toLowerCase().split(/\s+/)[0])) return rewardsNote(`Bing opened but didn't show your search (it showed “${res.title}”). Open bing.com, sign in and accept anything it asks, then search again.`, "https://www.bing.com/", "Open Bing");
-    rewardsNote(`Searched “${q.trim()}” on Bing for Microsoft Rewards ✓`);
+    const t = rewardsToday(); t.n++;
+    try { localStorage.setItem("unitex.bingcount", JSON.stringify(t)); } catch {}
+    rewardsNote(`Searched “${q.trim()}” on Bing for Microsoft Rewards ✓ (${t.n} of ${limit} today)`);
   });
   window.postMessage({ type: "unitex-helper-fetch", id, url: `https://www.bing.com/search?q=${encodeURIComponent(q.trim())}&form=QBLH`, bingTab: true }, location.origin);
 }

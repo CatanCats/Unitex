@@ -332,12 +332,18 @@ function openSettings() {
       el("label", { className: "set-field" }, el("span", { textContent: "Country (for local stores and sites)" }), region),
       el("label", { className: "set-field" }, el("span", { textContent: "Theme" }), theme),
       el("label", { className: "set-field" }, el("span", { textContent: "Cards (Shopping, Houses, Jobs…)" }), cardSize),
-      el("label", { className: "f-check set-check" }, el("input", { type: "checkbox", checked: !!draft.bingAccount, onchange() { draft.bingAccount = this.checked; } }),
-        " Read Bing with my Microsoft account"),
-      el("p", { className: "hint" }, "Off: Unitex's Bing reads don't use up your Microsoft Rewards searches."),
-      el("label", { className: "f-check set-check" }, el("input", { type: "checkbox", checked: !!draft.bingRewards, onchange() { draft.bingRewards = this.checked; } }),
-        " Earn Microsoft Rewards points"),
-      el("p", { className: "hint" }, "Each search you make also opens on bing.com in front for a few seconds, then you're back on Unitex (once per search), so Bing counts it as your search. Be signed in to Bing in this browser. Needs Unitex Helper 1.15.0; Microsoft decides what earns points and how many a day."),
+      // One switch: off, Bing is read signed out; on, Bing is read with your account and your searches earn Rewards.
+      (() => {
+        const level = el("select", { className: "f-input", ariaLabel: "Microsoft Rewards level" },
+          ...[["member", "Member: stop after 10 searches a day"], ["gold", "Silver or Gold: stop after 30 searches a day"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (draft.rewardsLevel || "member") === v })));
+        level.onchange = () => { draft.rewardsLevel = level.value; };
+        const levelField = el("label", { className: "set-field", hidden: !draft.bingRewards }, el("span", { textContent: "Rewards level" }), level);
+        return el("div", { className: "set-group" },
+          el("label", { className: "f-check set-check" }, el("input", { type: "checkbox", checked: !!draft.bingRewards, onchange() { draft.bingRewards = this.checked; levelField.hidden = !this.checked; } }),
+            " Use my Microsoft account on Bing and earn Rewards points"),
+          el("p", { className: "hint" }, "Off: Bing is read signed out, so it doesn't use up your Rewards searches. On: Bing is read with your account, and each search you make opens on bing.com in front for a few seconds so it earns points, until your level's daily searches are done. Be signed in to Bing in this browser; needs Unitex Helper 1.15.0. Microsoft decides what earns points."),
+          levelField);
+      })(),
       el("button", { type: "button", className: "chip", textContent: "Switch all sources back on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All sources are on ✓"; } }),
       el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed. ` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ",
         el("a", { href: "install.html", textContent: document.documentElement.dataset.unitexHelper ? "Update or reinstall" : "Install Unitex Helper" }))),
