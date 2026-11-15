@@ -5,6 +5,7 @@
 let tabItems = [];
 let tabFilters = {};
 let tabFiltersFor = "";
+let shownFor = "", shownIds = []; // the items on screen, in order, and the search/filters they were shown for
 let tabLimit = 40;
 let tabFiltered = [];
 const filteredCount = () => tabFiltered.length;
@@ -318,6 +319,17 @@ function drawTab() {
     bar.push(tabSelect("time", "Any time", [["3600", "Past hour"], ["86400", "Past 24 hours"], ["604800", "Past week"], ["2592000", "Past month"]]), tabSelect("sort", "Sort: newest", [["match", "Best match"]]), tabSelect("outlet", "All outlets", outletOptions(tabItems)), tabSelect("region", "All countries", opts(tabItems.map(n => n.region))));
   }
 
+  // Show more only adds below: what's already on screen keeps its order, even when newer items arrive.
+  // A new search, tab, filter or sort starts fresh.
+  const ctx = tabFiltersFor + "\n" + JSON.stringify(tabFilters);
+  const idOf = i => (t.view === "news" ? storyKey(i.title || "") : "") || i.url || i.thumb;
+  if (ctx === shownFor && shownIds.length) {
+    const byId = new Map(list.map(i => [idOf(i), i]));
+    const kept = shownIds.map(k => byId.get(k)).filter(Boolean), keptSet = new Set(kept);
+    list = [...kept, ...list.filter(i => !keptSet.has(i))];
+  }
+  shownFor = ctx;
+  shownIds = list.slice(0, tabLimit).map(idOf);
   tabFiltered = list;
   const total = list.length;
   list = list.slice(0, tabLimit);

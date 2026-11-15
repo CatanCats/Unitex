@@ -185,6 +185,8 @@ let feedId = NEWS_SECTIONS.some(s => s.id === store.get("unitex.feed")) ? store.
 const PAGE = 24;
 let shown = PAGE;
 let onScreen = []; // the stories on screen, in the order they were shown
+// A story stays the same story when its link changes (Google News → the article) or another source merges in.
+const storyId = i => storyKey(i.title || "") || i.url;
 let current = { stories: [], report: [], pending: 0, at: 0 };
 
 function renderTabs() {
@@ -212,7 +214,7 @@ function card(i, featured) {
     el("a", { href: buildUrl(i.title.slice(0, 140), { engine: "unitex" }), textContent: "What people think" }),
     el("a", { href: "search.html?" + new URLSearchParams({ q: i.title.slice(0, 140), tab: "news" }), textContent: "Other coverage" }));
   const li = el("li", { className: "card" + (featured && img ? " featured" : "") + (img ? " has-img" : "") }, main, actions);
-  li.dataset.url = i.url; // which story it is, so "Show more" can leave it where it is
+  li.dataset.url = storyId(i); // which story it is, so "Show more" can leave it where it is
   return li;
 }
 
@@ -228,17 +230,17 @@ function renderNews() {
     // Stories already on screen keep their places (the news keeps updating in the background);
     // newer ones go after them, so nothing jumps while you read or press "Show more".
     if (onScreen.length) {
-      const byUrl = new Map(order.map(i => [i.url, i]));
-      const kept = onScreen.map(u => byUrl.get(u)).filter(Boolean), keptSet = new Set(kept);
+      const byId = new Map(order.map(i => [storyId(i), i]));
+      const kept = onScreen.map(u => byId.get(u)).filter(Boolean), keptSet = new Set(kept);
       order = [...kept, ...order.filter(i => !keptSet.has(i))];
     }
     const now = order.slice(0, shown), had = [...list.querySelectorAll(":scope > li[data-url]")].map(li => li.dataset.url);
-    if (had.length && now.slice(0, had.length).every((i, n) => i.url === had[n])) {
+    if (had.length && now.slice(0, had.length).every((i, n) => storyId(i) === had[n])) {
       // Only more stories: add them below, leaving the ones on screen (and their pictures) as they are.
       list.querySelector(":scope > .more-row")?.remove();
       list.append(...now.slice(had.length).map(i => card(i, false)));
     } else list.replaceChildren(...now.map((i, n) => card(i, n === 0)));
-    onScreen = now.map(i => i.url);
+    onScreen = now.map(storyId);
     fixGoogleNewsLinks(list); // straight to the article, not through news.google.com
     list.querySelector(":scope > .more-row")?.remove();
     if (order.length > shown) list.append(el("li", { className: "more-row" }, el("button", { type: "button", className: "show-more", textContent: "Show more news", onclick() { shown += PAGE; renderNews(); } })));
