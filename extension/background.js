@@ -28,6 +28,8 @@ ALLOWED_HOSTS.push("cleantechnica.com", "electrek.co", "en.wikinews.org", "globa
 // news.google.com/rss/articles/… link into the real article address.
 // Small independent search engines whose answers websites aren't allowed to read: Qwant, Stract, Alexandria, Wiby, Marginalia.
 ALLOWED_HOSTS.push("api.qwant.com", "stract.com", "api.alexandria.org", "wiby.me", "api.marginalia.nu", "marginalia-search.com");
+// DuckDuckGo: its results page and its instant answers.
+ALLOWED_HOSTS.push("html.duckduckgo.com", "api.duckduckgo.com");
 const POST_URLS = ["https://news.google.com/_/DotsSplashUi/data/batchexecute", "https://flathub.org/api/v2/search", "https://stract.com/beta/api/search"];
 const ALLOWED_PAGES = ["https://catancats.github.io/Unitex/", "http://localhost/", "http://localhost:"];
 // Shops' picture servers that browsers' tracking protection blocks on other sites: the helper loads

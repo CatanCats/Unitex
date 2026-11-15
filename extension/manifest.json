@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Unitex Helper",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Lets Unitex show results from Google, Bing, Brave, Mojeek and Yandex, live news from Google News, Bing News, Yahoo News and news websites, products from stores, and apps from Google Play, Steam, F-Droid, Flathub and the Microsoft Store, by loading their pages in your own browser.",
   "host_permissions": [
     "https://www.google.com/*",
@@ -224,7 +224,9 @@
     "https://api.alexandria.org/*",
     "https://wiby.me/*",
     "https://api.marginalia.nu/*",
-    "https://marginalia-search.com/*"
+    "https://marginalia-search.com/*",
+    "https://html.duckduckgo.com/*",
+    "https://api.duckduckgo.com/*"
   ],
   "background": {
     "service_worker": "background.js",

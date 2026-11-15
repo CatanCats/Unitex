@@ -35,8 +35,26 @@ const urlKey = u => {
   } catch { return u; }
 };
 
-// Engines whose answers other websites aren't allowed to read: with Unitex Helper 1.16+ they're read through it.
-const VIA_HELPER = /^(api\.qwant\.com|stract\.com|api\.alexandria\.org|wiby\.me|api\.marginalia\.nu)$/;
+// Engines whose answers other websites aren't allowed to read. They're read through Unitex Helper when it's
+// installed (1.16+; DuckDuckGo 1.17+); without it, directly if the browser allows, else through public relays.
+const VIA_HELPER = /^(api\.qwant\.com|stract\.com|api\.alexandria\.org|wiby\.me|api\.marginalia\.nu|marginalia-search\.com|api\.duckduckgo\.com|html\.duckduckgo\.com)$/;
+const helperReads = h => helperVersion() && !versionLess(helperVersion(), /duckduckgo/.test(h) ? "1.17.0" : "1.16.0");
+const TEXT_RELAYS = [u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`, u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`];
+async function fetchText(url, ms = 8000, check = () => true) {
+  const h = new URL(url).hostname;
+  if (VIA_HELPER.test(h) && helperReads(h)) {
+    const res = await helperFetch(url, ms);
+    if (res.status === 429) throw new Error("too many searches right now (HTTP 429)");
+    if (res.status >= 400) throw new Error(`answered with an error (HTTP ${res.status})`);
+    return res.html;
+  }
+  const get = async u => { const r = await fetchT(u, {}, ms); if (!r.ok) throw new Error(`HTTP ${r.status}`); const t = await r.text(); if (!check(t)) throw new Error("not the answer"); return t; };
+  try { return await Promise.any([get(url), ...TEXT_RELAYS.map(relay => get(relay(url)))]); }
+  catch (e) { throw new Error(e.errors?.some(x => /429/.test(x.message)) ? "too many searches right now (HTTP 429)" : "couldn't be read without Unitex Helper"); }
+}
+const looksJson = t => /^\s*[[{]/.test(t);
+// An engine's ordinary search page, read like the big engines' pages.
+const pageResults = async (url, name) => parseResultsPage(await fetchText(url, 9000, t => /<html|<body|<a /i.test(t.slice(0, 20000))), url, name);
 async function helperJson(url, ms, init) {
   const res = init.method === "POST" ? await helperFetchNow(url, ms, init.body) : await helperFetch(url, ms);
   if (res.status === 429) throw new Error("too many searches right now (HTTP 429)");
@@ -45,7 +63,12 @@ async function helperJson(url, ms, init) {
 }
 // Fetches JSON and turns failures into reasons people can understand.
 async function getJson(url, ms = 8000, init = {}) {
-  if (helperVersion() && !versionLess(helperVersion(), "1.16.0") && VIA_HELPER.test(new URL(url).hostname)) return helperJson(url, ms, init);
+  const h = new URL(url).hostname;
+  if (VIA_HELPER.test(h)) {
+    if (init.method === "POST") { if (helperReads(h)) return helperJson(url, ms, init); throw new Error("couldn't be read without Unitex Helper"); }
+    const t = await fetchText(url, ms, looksJson);
+    try { return JSON.parse(t); } catch { throw new Error(/captcha|robot|datadome/i.test(t.slice(0, 5000)) ? "asked for a CAPTCHA" : "answered with something that isn't search results"); }
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   let r;
@@ -123,7 +146,9 @@ const SOURCES = {
     return (Array.isArray(d) ? d : d.results || []).map(r => ({ title: strip(flatText(r.title)) || host(r.url), url: r.url, snippet: short(strip(flatText(r.extract))), via: "Mwmbl", domain: host(r.url) }));
   }},
   stract: { name: "Stract", group: "main", async run(q) {
-    const d = await getJson("https://stract.com/beta/api/search", 9000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) });
+    const d = await getJson("https://stract.com/beta/api/search", 9000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: q }) })
+      .catch(async e => ({ webpages: await pageResults(`https://stract.com/search?q=${encodeURIComponent(q)}`, "Stract").catch(() => { throw e; }) }));
+    if (d.webpages?.[0]?.via === "Stract") return d.webpages;
     return (d.webpages || d.results || []).map(r => ({ title: strip(flatText(r.title)) || host(r.url), url: r.url, snippet: short(strip(flatText(r.snippet?.text ?? r.snippet ?? r.body))), via: "Stract", domain: host(r.url) }));
   }},
   alexandria: { name: "Alexandria", group: "main", async run(q) {
@@ -135,12 +160,24 @@ const SOURCES = {
     return (Array.isArray(d) ? d : []).map(r => ({ title: strip(r.Title) || host(r.URL), url: r.URL, snippet: short(strip(r.Snippet)), via: "Wiby", domain: host(r.URL) }));
   }},
   marginalia: { name: "Marginalia", group: "main", async run(q) {
-    const d = await getJson(`https://api.marginalia.nu/public/search/${encodeURIComponent(q)}?count=10`);
-    return (d.results || []).map(r => ({ title: r.title || host(r.url), url: r.url, snippet: short(r.description), via: "Marginalia", domain: host(r.url) }));
+    try {
+      const d = await getJson(`https://api.marginalia.nu/public/search/${encodeURIComponent(q)}?count=10`, 6000);
+      return (d.results || []).map(r => ({ title: r.title || host(r.url), url: r.url, snippet: short(r.description), via: "Marginalia", domain: host(r.url) }));
+    } catch (e) {
+      return (await pageResults(`https://marginalia-search.com/search?query=${encodeURIComponent(q)}`, "Marginalia").catch(() => { throw e; }))
+        .filter(r => !/marginalia/.test(host(r.url)));
+    }
   }},
   duckduckgo: { name: "DuckDuckGo", group: "main", async run(q) {
-    const d = await jsonp(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1&t=unitex`);
-    if (q === query) showDuckAnswer(d);
+    // DuckDuckGo's own results page (html.duckduckgo.com) and its instant answer, side by side.
+    const web = pageResults(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, "DuckDuckGo").catch(e => ({ err: e }));
+    const ia = getJson(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1&t=unitex`)
+      .catch(() => jsonp(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1&t=unitex`)).catch(e => ({ err: e }));
+    const [w, d] = await Promise.all([web, ia]);
+    if (w.err && d.err) throw w.err;
+    if (!d.err && q === query) showDuckAnswer(d);
+    const pages = Array.isArray(w) ? w : [];
+    if (d.err) return pages;
     // Real websites only: the official site, the page the summary came from, and any websites in the
     // infobox. ("Related topics" link back to DuckDuckGo's own pages, so they're left out.)
     const out = (d.Results || []).map(r => ({ title: `${d.Heading || strip(r.Text) || host(r.FirstURL)} – official website`, url: r.FirstURL, snippet: short(strip(d.AbstractText)) || "Official website", via: "DuckDuckGo", domain: host(r.FirstURL) }));
@@ -149,7 +186,7 @@ const SOURCES = {
       const v = String(c.value || "");
       if (c.data_type === "official_website" || /^https?:\/\//.test(v)) out.push({ title: `${d.Heading || q} – ${c.label || "website"}`, url: /^https?:/.test(v) ? v : "https://" + v, snippet: c.label || "", via: "DuckDuckGo", domain: host(/^https?:/.test(v) ? v : "https://" + v) });
     }
-    return out.filter(r => !/(^|\.)duckduckgo\.com$/.test(host(r.url)));
+    return [...pages, ...out].filter(r => !/(^|\.)duckduckgo\.com$/.test(host(r.url)));
   }},
   reddit: { name: "Reddit", group: "main", async run(q) {
     const d = await getJson(`https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&limit=8&raw_json=1`);
@@ -185,7 +222,7 @@ const SOURCES = {
 for (const e of HELPER_ENGINES) {
   SOURCES["helper_" + e.id] = { name: e.name, group: "main", paged: true, enabled: () => !!helperVersion(), run: (q, o = {}) => helperSearch(e, withSites(q, topicDomains()), o.page || 0) };
 }
-SOURCES.duckduckgo.name = "DuckDuckGo (summaries & official sites)";
+SOURCES.duckduckgo.name = "DuckDuckGo";
 
 // Property sites that let other websites read them: searched directly on Houses searches in Australia.
 const directSites = () => topicId === "houses" && regionId === "AU" ? Object.keys(LISTING_SITES) : [];
