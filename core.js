@@ -335,7 +335,7 @@ function openSettings() {
       // One switch: off, Bing is read signed out; on, Bing is read with your account and your searches earn Rewards.
       (() => {
         const level = el("select", { className: "f-input", ariaLabel: "Microsoft Rewards level" },
-          ...[["member", "Member: stop after 10 searches a day"], ["gold", "Silver or Gold: stop after 30 searches a day"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (draft.rewardsLevel || "member") === v })));
+          ...[["member", "Member: stop after 10 searches a day"], ["gold", "Silver or Gold: stop after 30 searches a day"], ["off", "Off: never stop"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (draft.rewardsLevel || "member") === v })));
         level.onchange = () => { draft.rewardsLevel = level.value; };
         const levelField = el("label", { className: "set-field", hidden: !draft.bingRewards }, el("span", { textContent: "Rewards level" }), level);
         return el("div", { className: "set-group" },

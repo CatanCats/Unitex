@@ -26,7 +26,7 @@ function helperFetch(url, ms = 12000) {
 // made with your account toward Microsoft Rewards' daily limit, but only gives points for searches you do yourself.
 const anonFor = url => { try { return /(^|\.)bing\.com$/.test(new URL(url).hostname) && !(typeof settings === "object" && settings.bingRewards); } catch { return false; } };
 // Searches that earn points each day by Rewards level; after that Bing's page stops opening until tomorrow.
-const REWARDS_PER_DAY = { member: 10, gold: 30 };
+const REWARDS_PER_DAY = { member: 10, gold: 30, off: Infinity };
 const rewardsToday = () => { const day = new Date().toDateString(); let c = {}; try { c = JSON.parse(localStorage.getItem("unitex.bingcount") || "{}"); } catch {} return c.day === day ? c : { day, n: 0 }; };
 // Microsoft Rewards, when switched on in Settings: each search you make (not paging, tabs or refreshes) also opens
 // on bing.com in a background tab via the helper, once per search, so Bing's own page counts it as yours.
@@ -57,7 +57,7 @@ function bingRewardsSearch(q) {
     if (res.title && !res.title.toLowerCase().includes(q.trim().toLowerCase().split(/\s+/)[0])) return rewardsNote(`Bing opened but didn't show your search (it showed “${res.title}”). Open bing.com, sign in and accept anything it asks, then search again.`, "https://www.bing.com/", "Open Bing");
     const t = rewardsToday(); t.n++;
     try { localStorage.setItem("unitex.bingcount", JSON.stringify(t)); } catch {}
-    rewardsNote(`Searched “${q.trim()}” on Bing for Microsoft Rewards ✓ (${t.n} of ${limit} today)`);
+    rewardsNote(`Searched “${q.trim()}” on Bing for Microsoft Rewards ✓ (${limit === Infinity ? `${t.n} today` : `${t.n} of ${limit} today`})`);
   });
   window.postMessage({ type: "unitex-helper-fetch", id, url: `https://www.bing.com/search?q=${encodeURIComponent(q.trim())}&form=QBLH`, bingTab: true }, location.origin);
 }
