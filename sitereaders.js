@@ -109,7 +109,7 @@ function cardsFromPage(html, base, kind, site) {
       if (out.length >= 30) break;
     }
   }
-  if (!out.length && typeof botCheck === "function" && botCheck(html)) throw new Error(`asked for a bot check (open ${site} once yourself to clear it)`);
+  if (!out.length && typeof botCheck === "function" && botCheck(html)) throw blocked(`asked for a bot check (open ${site} once yourself to clear it)`, base);
   // A home or car whose data lacks a price, rooms or photo: what's on the page in its own card
   // ("$1,800 pw", "3 bed 2 bath 1 car", "House", the first photo).
   if (kind === "house" || kind === "car") for (const c of out) {

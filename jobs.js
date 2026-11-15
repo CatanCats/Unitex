@@ -137,7 +137,7 @@ const JOB_SITES = {
           location: textOfSel(a, "[data-automation='jobLocation']"), salary: textOfSel(a, "[data-automation='jobSalary']"), posted: textOfSel(a, "[data-automation='jobListingDate']") }, "SEEK", "SEEK");
       }).filter(Boolean);
     }
-    if (!jobs.length && botCheck(res.html)) throw new Error("asked for a bot check (open SEEK once yourself to clear it)");
+    if (!jobs.length && botCheck(res.html)) throw blocked("asked for a bot check (open SEEK once yourself to clear it)", res.url || url);
     return jobs;
   }},
   linkedin: { name: "LinkedIn Jobs", domain: "linkedin.com/jobs", async run(q, { page: P = 0 } = {}) {
@@ -160,7 +160,7 @@ const JOB_SITES = {
       + (f.remote ? "&remotejob=032b3046-06a3-4876-8dfd-474eb5e7ed11" : "") + (f.salary ? `&salaryType=${encodeURIComponent("$" + f.salary.toLocaleString("en"))}` : "");
     const res = await helperFetch(`https://${h}/jobs?q=${encodeURIComponent(what)}&l=${encodeURIComponent(where)}${jt}${P ? `&start=${P * 10}` : ""}`);
     const jobs = jobsFromData(res.html, res.url, "Indeed", "Indeed", o => o.jobkey && `https://${h}/viewjob?jk=${o.jobkey}`);
-    if (!jobs.length && botCheck(res.html)) throw new Error("asked for a bot check (open Indeed once yourself to clear it)");
+    if (!jobs.length && botCheck(res.html)) throw blocked("asked for a bot check (open Indeed once yourself to clear it)", res.url);
     return jobs;
   }},
   jora: { name: "Jora", domain: "jora.com", regions: ["AU", "NZ"], async run(q, { page: P = 0 } = {}) {

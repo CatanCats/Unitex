@@ -640,6 +640,7 @@ function sourceRows() {
     if (isOff) return { st: "off", note: "left out" };
     if (locked) return { st: "locked", note: "needs Unitex Helper" };
     if (!r) return { st: "wait", note: query ? "searching…" : "" };
+    if (r.err && r.err.solveUrl && needsPerson(r.err)) return { st: "bad", note: r.err.message.replace(/\s*\(open .*\)$|\s*—.*$/, ""), solve: r.err.solveUrl };
     return r.err ? { st: "bad", note: r.err.message } : { st: "ok", note: `${r.r.length} found` };
   };
   // The topic's websites (realestate.com.au, SEEK, JB Hi-Fi…), with their own reader when Unitex has one.
@@ -679,7 +680,9 @@ function sourcesList() {
       el("input", { type: "checkbox", checked: !r.off, disabled: r.st === "locked", onchange: r.toggle }),
       r.domain ? domainIcon(r.domain) : el("span", { className: "sp-dot" }),
       el("span", { className: "sp-name", textContent: r.label }),
-      el("small", { textContent: r.note }))))),
+      el("small", { textContent: r.note }),
+      r.solve && el("button", { type: "button", className: "sp-solve", textContent: "Solve", title: "Opens the page so you can do its check; Unitex tries again when you come back",
+        onclick: e => { e.preventDefault(); e.stopPropagation(); solveCheck(r.solve); } }))))),
     rows.some(r => r.st === "locked") && el("a", { className: "sp-helper", href: "install.html", textContent: "Get Unitex Helper to search the locked ones" }),
     (offSources.size || offSites.size) ? el("button", { type: "button", className: "chip", textContent: "Turn everything back on", onclick: () => { offSources.clear(); offSites.clear(); store.set("unitex.off", []); store.set("unitex.offsites", []); go(); } }) : null);
 }
@@ -690,13 +693,21 @@ const countrySelect = () => {
   return s;
 };
 
+// Solve: the site's check opens in a new tab (with your cookies, like the helper uses). When you come back
+// to Unitex, that site is asked again.
+function solveCheck(url) {
+  open(url, "_blank", "noopener");
+  addEventListener("focus", () => { helperCache.delete(url); for (const [k, v] of settleCache) v.p.then(x => { if (x.err) settleCache.delete(k); }); setTimeout(go, 300); }, { once: true });
+}
+
 // The "Search engines and sources" dropdown for the tools row.
 let pickerOpen = false;
 function sourcesPicker() {
   const rows = sourceRows();
   const used = rows.filter(r => !r.off && r.st !== "locked").length;
+  const toSolve = rows.filter(r => r.solve).length;
   const pop = el("div", { className: "tool-pop", hidden: !pickerOpen }, sourcesList());
-  const btn = el("button", { type: "button", className: "tool-btn" + (offSources.size || offSites.size ? " on" : ""), textContent: `Search engines and sources · ${used} of ${rows.length} ▾`,
+  const btn = el("button", { type: "button", className: "tool-btn" + (offSources.size || offSites.size ? " on" : ""), textContent: `Search engines and sources · ${used} of ${rows.length}${toSolve ? ` · ⚠ ${toSolve} to solve` : ""} ▾`,
     onclick: e => { e.stopPropagation(); pickerOpen = !pickerOpen; pop.hidden = !pickerOpen; } });
   return el("div", { className: "tool-dd" }, btn, pop);
 }
@@ -754,14 +765,19 @@ addEventListener("scroll", closeMore, { passive: true });
 function tabButton(t) {
   const b = el("button", { type: "button", role: "tab", textContent: t.name });
   b.setAttribute("aria-selected", t.id === tab);
-  b.onclick = () => { if (tab !== t.id) { tab = t.id; sub = ""; } userPicked = t.id !== "all"; if (t.id === "all") wholeWebFor = query; go(); };
+  b.onclick = () => { if (tab !== t.id || t.id === "all") { tab = t.id; sub = ""; } userPicked = t.id !== "all"; if (t.id === "all") wholeWebFor = query; go(); };
   return b;
 }
 
 function renderTabs() {
   const main = TABS.filter(t => !t.more), more = TABS.filter(t => t.more);
+  // All's topics (Recipes, Events, Movies & TV, Learn, Open source, Reviews) live in More, not in a row under the tabs.
+  const allTopics = TABS.find(t => t.id === "all").subs.filter(s => s.id !== "all");
+  const topicOn = tab === "all" && allTopics.find(s => s.id === sub);
   const active = more.find(t => t.id === tab);
-  const menu = el("div", { className: "more-menu", hidden: true }, ...more.map(t => { const b = tabButton(t); b.onclick = () => { menu.hidden = true; tab = t.id; sub = ""; userPicked = true; go(); }; return b; }));
+  const topicButton = s => { const b = el("button", { type: "button", role: "tab", textContent: s.name }); b.setAttribute("aria-selected", tab === "all" && sub === s.id); b.onclick = () => { menu.hidden = true; tab = "all"; sub = s.id; userPicked = true; go(); }; return b; };
+  const menu = el("div", { className: "more-menu", hidden: true }, ...allTopics.map(topicButton), el("hr", { className: "more-sep" }),
+    ...more.map(t => { const b = tabButton(t); b.onclick = () => { menu.hidden = true; tab = t.id; sub = ""; userPicked = true; go(); }; return b; }));
   const moreBtn = el("button", { type: "button", className: "more-btn", textContent: "More ▾", ariaHaspopup: "true" });
   moreBtn.onclick = e => {
     e.stopPropagation();
@@ -769,13 +785,16 @@ function renderTabs() {
     Object.assign(menu.style, { top: r.bottom + "px", left: Math.min(r.left, innerWidth - 190) + "px" });
     menu.hidden = !menu.hidden;
   };
-  fill($("tabs"), ...main.map(tabButton), active && tabButton(active), el("div", { className: "more-wrap" }, moreBtn, menu));
+  const tabsRow = main.map(tabButton);
+  // While a topic from More is open, All isn't underlined; the topic shows next to it.
+  if (topicOn) tabsRow[0].setAttribute("aria-selected", "false");
+  fill($("tabs"), ...tabsRow, topicOn && topicButton(topicOn), active && tabButton(active), el("div", { className: "more-wrap" }, moreBtn, menu));
   document.body.dataset.tab = tab;
 
   // The filters under the tab.
   const c = cur(), t = TABS.find(x => x.id === tab);
   const box = $("subtabs");
-  if (!t.subs) { box.hidden = true; return; }
+  if (!t.subs || t.id === "all") { box.hidden = true; return; }
   fill(box, t.shop && el("span", { className: "row-label", textContent: "Shop for" }), ...t.subs.map(s => {
     const b = el("button", { type: "button", className: "chip sub" + (s.id === c.sub ? " active" : ""), textContent: s.name });
     b.setAttribute("aria-pressed", s.id === c.sub);

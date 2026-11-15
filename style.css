@@ -1629,3 +1629,7 @@ body.topic-travel #topic-form .tf-grid { background: none; padding: 0; gap: 0; }
 body.topic-travel #topic-form .tf-grid > .tf-field:not(:first-child) { border: 2px solid #ffb700; border-radius: 0; }
 body.topic-travel #topic-form .tf-actions { position: static; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 18px; }
 body.topic-travel .rmain, body.topic-travel .rnav { max-width: 1180px; }
+
+.more-menu .more-sep{width:100%;margin:4px 0;border:0;border-top:1px solid var(--border)}
+.sp-solve{grid-column:3;justify-self:start;margin-top:2px;padding:3px 10px;border:0;border-radius:999px;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:12px;font-weight:600;cursor:pointer;flex:none}
+.sp-solve:hover{filter:brightness(1.1)}

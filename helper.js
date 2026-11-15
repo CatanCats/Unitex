@@ -30,7 +30,7 @@ function helperFetchNow(url, ms, post) {
     helperWaiting.set(id, res => {
       clearTimeout(timer);
       const why = helperProblem(url, res);
-      if (why) reject(new Error(why));
+      if (why) reject(blocked(why, url));
       else resolve(res);
     });
     window.postMessage({ type: "unitex-helper-fetch", id, url, ...(post != null ? { post } : {}) }, location.origin);
@@ -65,6 +65,11 @@ document.addEventListener("error", e => {
   const src = img.src;
   helperImage(src).then(data => { img.src = data; }, () => { img.src = relayImage(src); });
 }, true);
+
+// A page that wants a person (CAPTCHA, bot check, cookie consent): the error carries that page's address,
+// so "Search engines and sources" can offer a Solve button that opens it.
+const blocked = (message, url) => Object.assign(new Error(message), { solveUrl: url });
+const needsPerson = e => /captcha|bot check|cookie consent/i.test(e?.message || "");
 
 // Clear reasons instead of "Failed to fetch" / "HTTP 429": cookie-consent pages and CAPTCHA pages.
 const CONSENT_HOSTS = /^(consent\.google\.[a-z.]+|consent\.youtube\.com|consent\.yahoo\.com|guce\.yahoo\.com|guce\.oath\.com)$/;
@@ -311,8 +316,8 @@ function parseResultsPage(html, base, engineName, kind = "web") {
 
   if (!out.length) {
     const text = doc.body?.textContent?.toLowerCase() || "";
-    if (/captcha|unusual traffic|are you a robot|not a robot|verify you are human|challenge/.test(text) || /showcaptcha|\/sorry\//.test(base)) throw new Error("asked for a CAPTCHA (open it once yourself to clear it)");
-    if (doc.querySelector("form[action*='consent.'], iframe[src*='consent.']") || /before you continue to (google|youtube)/.test(text)) throw new Error("asked for a cookie consent — open the site once yourself and accept");
+    if (/captcha|unusual traffic|are you a robot|not a robot|verify you are human|challenge/.test(text) || /showcaptcha|\/sorry\//.test(base)) throw blocked("asked for a CAPTCHA (open it once yourself to clear it)", base);
+    if (doc.querySelector("form[action*='consent.'], iframe[src*='consent.']") || /before you continue to (google|youtube)/.test(text)) throw blocked("asked for a cookie consent — open the site once yourself and accept", base);
     if (/enable javascript|turn on javascript|javascript is disabled|noscript/.test(text) || doc.querySelector("noscript meta[http-equiv=refresh]")) throw new Error("needs JavaScript, can't be read in the background");
   }
   return out;
@@ -453,7 +458,7 @@ function storeProducts(html, base, via, site) {
   if (out.length < 3) for (const p of parsePriced(doc, base, via, /^$/)) if (!seen.has(p.url)) { seen.add(p.url); out.push({ ...p, card: { ...p.card, site } }); }
   if (!out.length) {
     const text = (doc.body?.textContent || "").toLowerCase();
-    if (/captcha|are you a robot|verify you are human|access denied|press & hold/.test(text)) throw new Error(`asked for a bot check (open ${site} once yourself to clear it)`);
+    if (/captcha|are you a robot|verify you are human|access denied|press & hold/.test(text)) throw blocked(`asked for a bot check (open ${site} once yourself to clear it)`, base);
     if (/enable javascript|javascript is (disabled|required)/.test(text)) throw new Error("needs JavaScript, can't be read in the background");
   }
   return out.filter(Boolean).slice(0, 30);
@@ -494,7 +499,7 @@ const STORE_SOURCES = {
     const f = shopChoices();
     const rh = [(f.min || f.max) && `p_36:${Math.round(f.min * 100)}-${f.max ? Math.round(f.max * 100) : ""}`, (used || f.condition === "used") && "p_n_condition-type:Used"].filter(Boolean).join(",");
     const { doc, base, html } = await helperDoc(`https://${storeHost("amazon", region)}/s?k=${encodeURIComponent(q)}&page=${P + 1}${rh ? "&rh=" + encodeURIComponent(rh) : ""}`);
-    if (/captcha|robot check/i.test(html.slice(0, 20000)) && !/s-search-result/.test(html)) throw new Error("asked for a CAPTCHA (open Amazon once yourself to clear it)");
+    if (/captcha|robot check/i.test(html.slice(0, 20000)) && !/s-search-result/.test(html)) throw blocked("asked for a CAPTCHA (open Amazon once yourself to clear it)", base);
     return conditionSearched(parseAmazon(doc, base, "Amazon"), used || f.condition === "used" ? "used" : "");
   }},
   ebay: { paged: true, name: "eBay", async run(q, { region, used, page: P = 0 } = {}) {
@@ -599,7 +604,7 @@ const HELPER_VERTICALS = {
     }},
     yandex: { paged: true, name: "Yandex Images", async run(q, { page: P = 0 } = {}) {
       const { doc, base, html } = await helperDoc(`https://yandex.com/images/search?text=${encodeURIComponent(q)}&p=${P}`);
-      if (/showcaptcha|smartcaptcha/i.test(base + html.slice(0, 5000))) throw new Error("asked for a CAPTCHA (open yandex.com/images once yourself to clear it)");
+      if (/showcaptcha|smartcaptcha/i.test(base + html.slice(0, 5000))) throw blocked("asked for a CAPTCHA (open yandex.com/images once yourself to clear it)", base);
       // Only real image tiles: links carrying img_url (the picture); the page it is on comes from the tile's data.
       const out = [], seen = new Set();
       const pageIn = (o, full, depth = 0) => {
