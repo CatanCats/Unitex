@@ -34,23 +34,7 @@ function renderEngine() {
 
 // One row: what kind of results (All, Images, News…), then the areas with their own pages (Shopping, Houses, Jobs…).
 const AREA_TABS = new Set(["shopping", "jobs", "apps", "travel"]); // these are areas below, not result kinds
-function renderTopics() {
-  $("topics").replaceChildren(el("span", { className: "row-label", textContent: "Search" }), ...HOME_TABS.filter(([id]) => (id !== "ai" || aiEnabled()) && !AREA_TABS.has(id)).map(([id, name]) => {
-    const b = el("button", { type: "button", className: "chip topic" + (id === homeTab ? " active" : ""), textContent: name });
-    b.setAttribute("aria-pressed", id === homeTab);
-    b.onclick = () => {
-      homeTab = id;
-      // "Search for" (Shopping, Jobs…) runs through Unitex search.
-      if (id !== "all" && !byId(engineId).local) { engineId = "unitex"; store.set("unitex.engine", "unitex"); }
-      store.set("unitex.hometab", id);
-      renderTopics();
-      renderEngine();
-      if (id !== "all" && $("q").value.trim()) $("search").requestSubmit();
-      else $("q").focus();
-    };
-    return b;
-  }), el("span", { className: "quick-sep", ariaHidden: "true" }), ...areaChips());
-}
+function renderTopics() { $("topics").replaceChildren(...areaChips()); }
 
 // ---------- areas: Shopping, Houses, Jobs… each in the colours of the site people know it from ----------
 
@@ -70,8 +54,9 @@ const AREAS = [
 // Chips in the same row, each with its icon on its site's colour, the sites it reads on hover.
 function areaChips() {
   return AREAS.map(([tab, sub, name, emoji, from, bg, fg, accent]) => {
-    const a = el("a", { className: "chip area", title: from, href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
-      el("span", { className: "area-icon", textContent: emoji, ariaHidden: "true" }), name);
+    const a = el("a", { className: "area-card", title: from, href: "search.html?" + new URLSearchParams({ tab, ...(sub ? { sub } : {}) }) },
+      el("span", { className: "area-art", ariaHidden: "true" }, el("span", { className: "area-emoji", textContent: emoji })),
+      el("span", { className: "area-name", textContent: name }));
     a.style.cssText = `--area-bg:${bg};--area-fg:${fg};--area-accent:${accent}`;
     // Whatever is typed in the search box goes along: "headphones" → Shopping for headphones.
     a.onclick = () => { const q = $("q").value.trim(); if (q) a.href += "&" + new URLSearchParams({ q }); };
@@ -162,13 +147,6 @@ $("search").addEventListener("submit", e => {
 
 $("q").addEventListener("input", () => renderAlternatives($("alts"), $("q").value));
 attachSuggestions($("q"), text => { rememberSearch(text); location.href = searchUrl(text); });
-$("find-alts").onclick = () => {
-  const q = $("q").value.trim();
-  if (q && !detectAlternatives(q)?.explicit) $("q").value = `open source alternatives to ${q}`;
-  else if (!q) $("q").value = "open source alternatives to ";
-  $("q").focus();
-  renderAlternatives($("alts"), $("q").value);
-};
 
 // ---------- news ----------
 // Live: read from Google News, Bing News, Yahoo News and the news websites each time (livenews.js).

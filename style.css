@@ -1639,3 +1639,20 @@ body.topic-travel .rmain, body.topic-travel .rnav { max-width: 1180px; }
 .sp-save:hover{filter:brightness(1.08)}
 .rewards-note{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;max-width:min(560px,calc(100vw - 32px));padding:10px 16px;border-radius:12px;background:var(--fg);color:var(--bg);font-size:.88rem;box-shadow:var(--shadow-lg)}
 .rewards-note a{color:inherit;font-weight:700;text-decoration:underline}
+
+/* home: big featured area tiles in one row */
+#topics.quick { flex-wrap: nowrap; justify-content: flex-start; gap: 14px; margin: 26px -16px 0; padding: 6px 16px 14px; scroll-snap-type: x proximity; }
+#topics.quick > :first-child { margin-left: auto; }
+#topics.quick > :last-child { margin-right: auto; }
+.area-card { flex: none; display: flex; flex-direction: column; align-items: center; gap: 9px; width: 132px; text-decoration: none; color: var(--fg); scroll-snap-align: start; }
+.area-art { position: relative; display: grid; place-items: center; width: 132px; height: 160px; overflow: hidden; border-radius: 22px;
+  background: radial-gradient(120% 90% at 30% 15%, color-mix(in srgb, var(--area-accent) 55%, var(--area-bg)), var(--area-bg) 70%);
+  box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--area-accent) 70%, #000), inset 0 0 0 1px rgb(255 255 255 / .18);
+  transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+.area-art::before { content: ""; position: absolute; width: 150%; height: 150%; left: -25%; top: -70%; border-radius: 50%; background: rgb(255 255 255 / .16); }
+.area-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgb(0 0 0 / .28)); }
+.area-emoji { position: relative; z-index: 1; font-size: 4.2rem; line-height: 1; filter: drop-shadow(0 8px 10px rgb(0 0 0 / .35)); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.area-card:hover .area-art { transform: translateY(-4px); box-shadow: 0 16px 30px -10px color-mix(in srgb, var(--area-accent) 80%, #000), inset 0 0 0 1px rgb(255 255 255 / .3); }
+.area-card:hover .area-emoji { transform: scale(1.12) rotate(-4deg); }
+.area-name { font-size: 0.8rem; font-weight: 600; letter-spacing: .01em; color: var(--muted); }
+.area-card:hover .area-name { color: var(--fg); }
