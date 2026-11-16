@@ -21,7 +21,9 @@ async function lookUpPlace(q) {
   // "… in Brunswick VIC 3056", as the Where suggestions write it: no lookup needed.
   const stated = q.split(/\b(?:in|near|around)\s+/i).pop().match(/^\s*([A-Za-z][A-Za-z' -]*?),?\s+(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b,?\s*(\d{4})?\s*$/i);
   if (stated?.[3]) return { suburb: stated[1].trim(), state: stated[2].toLowerCase(), postcode: stated[3] };
-  const place = q.replace(PROPERTY_WORDS, " ").replace(/[^\p{L}\s'-]/gu, " ").replace(/\s+/g, " ").trim();
+  // A street address ("in 12 Smith Street, Brunswick"): looked up with its number; the suburb, state and postcode come from the answer.
+  const isAddress = /\b(?:in|near|around)\s+\d+[a-z]?(?:\/\d+)?\s+[A-Za-z]/i.test(q);
+  const place = isAddress ? q.split(/\b(?:in|near|around)\s+/i).pop().replace(/\s+/g, " ").trim() : q.replace(PROPERTY_WORDS, " ").replace(/[^\p{L}\s'-]/gu, " ").replace(/\s+/g, " ").trim();
   if (!place) throw new Error("add a suburb to search listings");
   const city = CITY_POSTCODE[place.toLowerCase().replace(/\s+(nsw|vic|qld|sa|wa|tas|act|nt)$/, "")];
   if (city) return { suburb: place.replace(/\s+(nsw|vic|qld|sa|wa|tas|act|nt)$/i, ""), state: city[0], postcode: city[1] };

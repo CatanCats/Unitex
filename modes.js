@@ -327,6 +327,12 @@ function applyFilters(cards) {
   if (by) out = [...out].sort(by);
   // Apps come from seven stores at once: with no sort picked, the ones named like the search come first
   // ("vlc" → VLC, VLC for Android… before a game that only matched a word in its description).
+  else if (topicId === "houses" && formState("houses").address) {
+    // A street address was typed: the homes on that street first, the number's own home before the rest.
+    const want = lc(formState("houses").address.split(",")[0]).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !/^(st|street|rd|road|ave|avenue|dr|drive|ct|court|pl|place|ln|lane|cr|crescent)$/.test(w));
+    const score = c => { const a = lc(c.card.address || c.title).replace(/[^a-z0-9 ]/g, " "); return want.filter(w => ` ${a} `.includes(` ${w} `)).length; };
+    out = out.map((c, i) => [c, score(c), i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]).map(x => x[0]);
+  }
   else if (["apps", "games", "opensource"].includes(topicId)) {
     const want = lc(appWords(query)).replace(/[^a-z0-9 ]/g, "").trim(), squash = s => lc(s).replace(/[^a-z0-9]/g, "");
     const score = c => { const n = lc(c.card.name).replace(/[^a-z0-9 ]/g, ""); return !want ? 0 : squash(n) === squash(want) ? 3 : n.startsWith(want) ? 2 : has(n, want) ? 1 : 0; };
@@ -404,6 +410,17 @@ function saveButton(c, topic) {
   return b;
 }
 
+// A listing's picture as a browser can show it: https, absolute, with the size placeholders filled in ("{size}", "{width}x{height}").
+function tidyImage(u, base) {
+  if (!u || typeof u !== "string") return "";
+  let s = u.trim().replace(/&amp;/g, "&").replace(/\{(?:width|w)\}/gi, "800").replace(/\{(?:height|h)\}/gi, "600").replace(/\{size\}/gi, "800x600");
+  if (/^data:image\//.test(s)) return s;
+  if (s.startsWith("//")) s = "https:" + s;
+  else if (/^http:\/\//i.test(s)) s = s.replace(/^http:/i, "https:");
+  else if (!/^https:/i.test(s) && base) { try { s = new URL(s, base).href; } catch { return ""; } }
+  return /^https:/i.test(s) ? s : "";
+}
+const IMG_PLACEHOLDER = { house: "🏠", car: "🚗", product: "🛍️", job: "💼", recipe: "🍳", show: "🎬", event: "🎟️", app: "📱" };
 const cardTitle = c => c.card.address || c.card.name || c.card.role || c.title;
 function cardFacts(c) {
   const k = c.card;
@@ -423,7 +440,7 @@ function cardFacts(c) {
 const PLATFORM_SHORT = { "iPhone & iPad": "iOS" };
 function renderAppCard(c, topic, url) {
   const k = c.card;
-  const img = (src, cls) => src && el("img", { className: cls, src, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
+  const img = (src, cls) => (src = tidyImage(src)) && el("img", { className: cls, src, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } });
   const open = k.openSource || openSourceNames().has(lc(k.name).replace(/[^a-z0-9]/g, ""));
   return el("article", { className: "xcard app" + (k.game ? " game" : "") },
     el("a", { className: "app-art", href: url, rel: "noopener", ariaLabel: k.name }, img(k.banner || k.icon, k.banner ? "app-banner" : "app-banner icon-only")),
@@ -461,7 +478,8 @@ function renderCard(c, topic) {
   const url = safeUrl(c.url);
   if (!url) return null;
   if (k.kind === "app") return renderAppCard(c, topic, url);
-  const img = c.image ? el("img", { src: c.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
+  const shot = tidyImage(c.image, c.url);
+  const img = shot ? el("img", { src: shot, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
     : k.kind === "job" && k.company ? el("span", { className: "job-logo", textContent: k.company.trim().charAt(0).toUpperCase() }) : null;
   const facts = {
     house: [fact("🛏", k.beds, "Bedrooms"), fact("🛁", k.baths, "Bathrooms"), fact("🚗", k.cars, "Car spaces"), k.type && el("span", { className: "fact" }, k.type)],
@@ -488,7 +506,7 @@ function renderCard(c, topic) {
   const genres = k.kind === "show" && k.genres?.length && el("div", { className: "card-tags" }, ...k.genres.map(g => el("span", { textContent: g })));
   const via = viaLabel(c.via, c.url, k.site);
   return el("article", { className: `xcard ${k.kind}${c.image || k.kind === "job" ? "" : " no-img"}` },
-    el("div", { className: "xcard-img" }, img, k.deal && el("span", { className: "deal-badge", textContent: k.deal === "rent" ? "For rent" : "For sale" })),
+    el("div", { className: "xcard-img" }, k.kind !== "job" && el("span", { className: "img-ph", ariaHidden: "true", textContent: IMG_PLACEHOLDER[k.kind] || "🖼️" }), img, k.deal && el("span", { className: "deal-badge", textContent: k.deal === "rent" ? "For rent" : "For sale" })),
     el("div", { className: "xcard-body" },
       el("h3", { className: "xcard-title" }, cardLink(c, topic, url, cardTitle(c))),
       k.kind === "job" && (k.company || k.location) && el("p", { className: "xcard-sub job-where" }, k.company && el("span", { className: "job-co", textContent: k.company }), k.location && el("span", { textContent: k.location })),
@@ -545,7 +563,8 @@ function guessForm(topicIdNow, q) {
   const max = q.match(/under\s*\$?([\d,]+k?)/i)?.[1]?.replace(/,/g, "").replace(/k$/i, "000");
   const pick = (list, re = x => new RegExp(`\\b${x.replace(/ /g, "[- ]?")}\\b`, "i")) => list.filter(x => re(x).test(q));
   const cap = x => x && x[0].toUpperCase() + x.slice(1).toLowerCase();
-  if (topicIdNow === "houses") return { deal: /\bshare\b/i.test(q) ? "share" : listingKind(q), where, beds: beds && `${beds}+`, type: cap(type), max,
+  const isAddr = /^\d+[a-z]?(\/\d+)?\s+\S/i.test(where || "");
+  if (topicIdNow === "houses") return { deal: /\bshare\b/i.test(q) ? "share" : listingKind(q), where: isAddr ? "" : where, address: isAddr ? where : "", beds: beds && `${beds}+`, type: cap(type), max,
     extras: pick(["Pets allowed", "Furnished", "Pool", "Garden", "Air conditioning"], x => EXTRA_WORDS[x]) };
   if (topicIdNow === "jobs") {
     const p = jobParts(q), sal = q.match(/\$\s?([\d,]+)(k)?\s*\+?/i);
@@ -864,7 +883,8 @@ const words = (...parts) => parts.flat().filter(Boolean).join(" ").replace(/\s+/
 const TOPIC_FORMS = {
   houses: { title: "🏠 Find a home", fields: {
       deal: { type: "seg", label: "I want to", options: opt([["buy", "Buy"], ["rent", "Rent"], ["share", "Share"]]) },
-      where: { label: "Where", placeholder: "Suburb, town or postcode", wide: true },
+      where: { label: "Suburb or postcode", placeholder: "Suburb, town or postcode", wide: true },
+      address: { label: "Or a street address", placeholder: "e.g. 12 Smith Street, Brunswick", wide: true },
       type: anyOf("Property type", ["House", "Apartment", "Townhouse", "Unit", "Villa", "Land", "Acreage"]),
       beds: anyOf("Bedrooms", ["1+", "2+", "3+", "4+", "5+"]),
       baths: anyOf("Bathrooms", ["1+", "2+", "3+"]),
@@ -873,7 +893,7 @@ const TOPIC_FORMS = {
       max: { label: "Max price", placeholder: "$", type: "number" },
       extras: { type: "checks", label: "Must have", options: opt(["Pets allowed", "Furnished", "Pool", "Garden", "Air conditioning"]) } },
     build: v => words(v.beds && `${parseInt(v.beds)} bedroom`, v.deal === "share" ? "room in share house" : (v.type || "house").toLowerCase(),
-      v.deal === "rent" ? "for rent" : v.deal === "share" ? "for rent" : "for sale", v.max && `under $${v.max}`, (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`),
+      v.deal === "rent" ? "for rent" : v.deal === "share" ? "for rent" : "for sale", v.max && `under $${v.max}`, (v.extras || []).map(e => e.toLowerCase()), (v.address || v.where) && `in ${v.address || v.where}`),
     filters: v => ({ min: priceNum(v.min), max: priceNum(v.max), bedsSel: v.beds || undefined, baths: parseInt(v.baths) || undefined, carsMin: parseInt(v.cars) || undefined }) },
 
   jobs: { title: "💼 Find a job", fields: {

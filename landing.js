@@ -164,6 +164,7 @@ function renderLanding(topic) {
   return el("div", { className: `landing site-${topic.id}` },
     // The site's own search panel, or (Amazon) its picture cards; a plain title only where the site has neither.
     hero || el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() })),
+    advancedPanel(topic),
     siteCats(topic, L, cats),
     mine.length > 0 && el("div", { className: "landing-recent" }, el("span", { className: "row-label", textContent: "Your searches" }),
       ...mine.slice(0, 6).map(q => el("button", { type: "button", className: "chip", textContent: q, onclick: () => searchFor(q) }))),
@@ -180,6 +181,38 @@ function tilesRow(title, items) {
     el("div", { className: "landing-strip saved-strip" }, ...items.slice(0, 14).map(s => el("a", { className: "saved-tile", href: s.url, rel: "noopener" },
       s.image ? el("img", { src: s.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }) : el("span", { className: "saved-letter", textContent: (s.title || "?").charAt(0) }),
       el("b", { textContent: s.title }), el("small", { textContent: [s.price, s.site].filter(Boolean).join(" · ") })))));
+}
+
+// ---------- advanced search on every front page ----------
+// The area's own filters (Houses: buy/rent, suburb or street address, type, bedrooms, bathrooms, parking, price, must-haves;
+// Jobs: work type, salary…) right on its front page, the way the sites show them under their search box.
+function advancedPanel(topic) {
+  const form = TOPIC_FORMS[topic.id];
+  if (!form) return null;
+  const v = { ...store.get("unitex.form." + topic.id, {}) };
+  delete v._q;
+  const open = store.get("unitex.adv." + topic.id, true);
+  const toggle = (k, val, on) => { v[k] = on ? [...many(v[k]), val] : many(v[k]).filter(x => x !== val); };
+  const control = (k, f) => {
+    if (f.type === "seg") {
+      const cur = v[k] ?? f.options[0][0];
+      return el("div", { className: "segmented-mini" }, ...f.options.map(([val, t]) => el("button", { type: "button", textContent: t, className: val === cur ? "on" : "", onclick() { v[k] = val; for (const b of this.parentElement.children) b.classList.toggle("on", b === this); } })));
+    }
+    if (f.type === "checks") return el("div", { className: "tf-checks" }, ...f.options.map(([val, t]) => el("label", { className: "f-check" },
+      el("input", { type: "checkbox", checked: many(v[k]).includes(val), onchange() { toggle(k, val, this.checked); } }), " " + t)));
+    if (f.type === "select") return el("select", { className: "f-input", onchange() { v[k] = this.value; } }, ...f.options.map(([val, t]) => el("option", { value: val, textContent: t, selected: (v[k] || "") === val })));
+    const inp = el("input", { className: "f-input", type: f.type === "number" ? "text" : f.type || "text", inputMode: f.type === "number" ? "numeric" : undefined, placeholder: f.placeholder || "", value: v[k] || "", oninput() { v[k] = this.value.trim(); } });
+    if (["where", "from", "to"].includes(k)) placeSuggest(inp, place => { inp.value = place; v[k] = place; });
+    return inp;
+  };
+  const run = e => { e?.preventDefault(); const q = form.build(v); if (q) heroSubmit(topic.id, v); };
+  const panel = el("form", { className: "adv-panel" + (open ? "" : " closed"), onsubmit: run },
+    el("div", { className: "adv-head" }, el("h3", { textContent: "Advanced search" }),
+      el("button", { type: "button", className: "tf-toggle", textContent: open ? "Hide ▴" : "Show ▾", onclick() { const o = panel.classList.toggle("closed"); store.set("unitex.adv." + topic.id, !o); this.textContent = o ? "Show ▾" : "Hide ▴"; } })),
+    el("div", { className: "adv-grid" }, ...Object.entries(form.fields).map(([k, f]) => el("label", { className: "tf-field" + (f.wide ? " wide" : "") + (f.type === "checks" ? " checks" : "") }, f.label && el("span", { textContent: f.label }), control(k, f)))),
+    el("div", { className: "adv-actions" }, el("button", { type: "submit", className: "btn-primary", textContent: "Search" }),
+      el("button", { type: "button", className: "btn-ghost", textContent: "Clear", onclick() { store.set("unitex.form." + topic.id, {}); drawCards(); } })));
+  return panel;
 }
 
 // ---------- shop fronts: the app store and the book shop ----------
@@ -256,6 +289,7 @@ function appStore() {
     ["🏠 Discover", scrollToId("apps-top"), true], ["🏆 Top charts", scrollToId("apps-chart")], ["🎮 Games", () => { location.href = "search.html?tab=games"; }], ["🧩 Alternatives", () => { location.href = "search.html?tab=alternatives"; }],
     "Categories", ...APP_CATEGORIES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
     el("div", { className: "store-head", id: "apps-top" }, el("h2", { textContent: "Apps and games" }), el("span", { textContent: "Google Play, the App Store, Steam, the Microsoft Store, F-Droid and Flathub" })),
+    advancedPanel(topicById("apps")),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "apps")),
     storeHero(steam.items.length ? steam : free, "app"),
     storeShelf(helper ? "Top free iPhone apps" : "Popular free apps", free, "app", go("free apps")),
@@ -292,6 +326,7 @@ function gameStore() {
     ["🏠 Discover", scrollToId("games-top"), true], ["🏆 Top charts", scrollToId("games-chart")], ["🏷️ On sale", go("games on sale")], ["🆓 Free to play", go("free games")], ["🤝 Co-op", go("co-op games")],
     "Genres", ...GAME_GENRES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
     el("div", { className: "store-head", id: "games-top" }, el("h2", { textContent: "Games" }), el("span", { textContent: helper ? "Steam, GOG, Epic, Humble, Google Play and the App Store" : "Prices across Steam, GOG, Epic and Humble" })),
+    advancedPanel(topicById("games")),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "games")),
     storeHero(best.items.length ? best : sale, "app game"),
     storeShelf("On sale now", sale, "app game", go("games on sale"), false),
@@ -322,7 +357,7 @@ function altStore() {
   const oss = helper ? shelfData("alts:flathub", () => APP_SOURCES.flathub.run("productivity").then(l => l.map(appTile)), redraw) : null;
   const shelves = [["Instead of Photoshop", "Photoshop"], ["Instead of Microsoft Office", "Microsoft Office"], ["Instead of Slack", "Slack"], ["Instead of Notion", "Notion"], ["Instead of Spotify", "Spotify"]]
     .map(([t, p]) => { const row = altShelfFor(p); return row && storeShelf(t, row, "app", go(`open source alternative to ${p}`)); });
-  return el("div", { className: "alt-page" }, hero,
+  return el("div", { className: "alt-page" }, hero, advancedPanel(topicById("opensource")),
     el("nav", { className: "site-circles", ariaLabel: "Categories" }, ...LANDINGS.opensource.cats.map(([e, label, q]) => el("button", { type: "button", onclick: go(q) }, el("span", { className: "circle", textContent: e, ariaHidden: "true" }), el("span", { textContent: label })))),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "opensource")),
     storeShelf("Popular open-source apps", popular, "app", go("open source apps")),
@@ -396,7 +431,7 @@ const SITE_HEROES = {
     const tabs = [["buy", "Buy"], ["rent", "Rent"], ["share", "Share"]];
     const f = el("form", { className: "rea-card", onsubmit(e) { e.preventDefault(); heroSubmit("houses", { deal: heroDeal, ...formValues(this) }); } },
       el("div", { className: "rea-tabs", role: "tablist" }, ...tabs.map(([d, t]) => el("button", { type: "button", role: "tab", className: d === heroDeal ? "on" : "", ariaSelected: String(d === heroDeal), textContent: t, onclick() { heroDeal = d; for (const b of this.parentElement.children) { b.classList.toggle("on", b === this); b.ariaSelected = String(b === this); } } }))),
-      el("div", { className: "rea-row" }, el("span", { className: "rea-icon", textContent: "⌕", ariaHidden: "true" }), heroWhere("Search suburb, postcode or state", recentPlaces()[0] || ""),
+      el("div", { className: "rea-row" }, el("span", { className: "rea-icon", textContent: "⌕", ariaHidden: "true" }), heroWhere("Search suburb, postcode or street address", recentPlaces()[0] || ""),
         el("button", { type: "submit", className: "rea-search", textContent: "Search" })));
     // A drawn sky and rooftops (realestate.com.au uses a suburb photo; a listing's own photo is often an empty kitchen).
     return el("section", { className: "rea-hero" }, el("h2", { textContent: "Properties to call home" }), f);

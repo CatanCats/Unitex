@@ -108,7 +108,14 @@ document.addEventListener("error", e => {
   const img = e.target;
   if (!(img instanceof HTMLImageElement) || img.dataset.rescued) return;
   let h = ""; try { h = new URL(img.src).hostname; } catch { return; }
-  if (!HELPER_IMAGE_HOSTS.test(h)) return;
+  // Any other picture that won't load (hotlink protection, a blocked tracker domain, no referrer): one try through the public image relay.
+  if (!HELPER_IMAGE_HOSTS.test(h)) {
+    if (/^(wsrv\.nl|icons\.duckduckgo\.com|www\.google\.com)$/.test(h) || img.classList.contains("fav") || img.closest("[data-no-rescue]") || !/^https?:/.test(img.src)) return;
+    e.stopImmediatePropagation();
+    img.dataset.rescued = "1";
+    img.src = relayImage(img.src);
+    return;
+  }
   e.stopImmediatePropagation();
   img.dataset.rescued = "1"; // one rescue each: if the relay fails too, the picture's own onerror runs
   const src = img.src;

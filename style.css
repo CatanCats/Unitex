@@ -1846,3 +1846,18 @@ body.look-unitex .rea-hero { background: var(--hero-bg) !important; }
 body.look-unitex .cs-photo, body.look-unitex .cs-photo[style*="background-image"] { background: none !important; }
 body.look-unitex[data-look="movies"] .subtabs .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 body.look-unitex[data-look="movies"] .subtabs .chip { background: var(--card); border-color: var(--border); color: var(--fg); }
+
+/* a picture that is still loading or can't load shows its kind's icon, not an empty box */
+.xcard-img .img-ph { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2.6rem; opacity: .35; }
+.xcard-img > img { position: relative; z-index: 1; background: var(--card-2); }
+
+/* advanced search on each area's front page */
+.adv-panel { margin: 14px 0 6px; padding: 14px 18px 16px; border: 1px solid var(--border); border-radius: var(--u-r, 16px); background: var(--card); box-shadow: var(--shadow); }
+.adv-head { display: flex; align-items: center; justify-content: space-between; }
+.adv-head h3 { margin: 0; font-size: 1rem; }
+.adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 14px; margin-top: 12px; }
+.adv-grid .tf-field.wide { grid-column: span 2; }
+.adv-grid .tf-field.checks { grid-column: 1 / -1; }
+.adv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.adv-panel.closed .adv-grid, .adv-panel.closed .adv-actions { display: none; }
+@media (max-width: 560px) { .adv-grid .tf-field.wide { grid-column: auto; } }
