@@ -301,6 +301,7 @@ function applyFilters(cards) {
   F.ratingMin = F.ratingSel ? parseInt(F.ratingSel) : undefined;
   let out = cards.filter(c => {
     const p = priceOf(c), k = c.card;
+    if (CARD_KINDS[topicId] === "app" && !facetPass(c)) return false;
     if (F.min && (p == null || p < F.min)) return false;
     if (F.max && (p == null || p > F.max)) return false;
     // A home that doesn't say its rooms isn't hidden for them (the sites were searched for them); one that says fewer is.
@@ -322,7 +323,7 @@ function applyFilters(cards) {
     return formMatches(c);
   });
   const by = { "price-asc": (a, b) => (priceOf(a) ?? Infinity) - (priceOf(b) ?? Infinity), "price-desc": (a, b) => (priceOf(b) ?? -1) - (priceOf(a) ?? -1),
-    "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0) }[F.sort];
+    "rating": (a, b) => (b.card.rating ?? -1) - (a.card.rating ?? -1), "reviews": (a, b) => reviewCount(b) - reviewCount(a), "year": (a, b) => (b.card.year ?? 0) - (a.card.year ?? 0), "name": (a, b) => String(a.card.name).localeCompare(String(b.card.name)), "discount": (a, b) => (parseInt(String(b.card.discount).replace(/\D/g, "")) || 0) - (parseInt(String(a.card.discount).replace(/\D/g, "")) || 0) }[F.sort];
   if (by) out = [...out].sort(by);
   // Apps come from seven stores at once: with no sort picked, the ones named like the search come first
   // ("vlc" → VLC, VLC for Android… before a game that only matched a word in its description).
@@ -347,9 +348,9 @@ function filterBar(topic, cards, side = false) {
     s.onchange = () => { filters[key] = s.value || undefined; drawCards(); };
     return s;
   };
-  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"], app: ["rating", "reviews"] }[kind] || [];
+  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"], app: ["rating", "reviews", "price-asc", "price-desc", "name", "discount"] }[kind] || [];
   const sortSel = sorts.length && (() => {
-    const names = { "price-asc": "Price: low to high", "price-desc": "Price: high to low", rating: "Best rated", reviews: "Most reviews", year: "Newest" };
+    const names = { "price-asc": "Price: low to high", "price-desc": "Price: high to low", rating: "Best rated", reviews: "Most reviews", year: "Newest", name: "Name (A–Z)", discount: "Biggest discount" };
     const s = el("select", { className: "f-input", ariaLabel: "Sort" }, el("option", { value: "", textContent: "Sort: best match" }), ...sorts.map(o => el("option", { value: o, textContent: names[o], selected: filters.sort === o })));
     s.onchange = () => { filters.sort = s.value || undefined; drawCards(); };
     return s;
@@ -380,7 +381,6 @@ function filterBar(topic, cards, side = false) {
     kind === "product" && !formHas.has("condition") && select("condition", "New or used", ["new", "used"]),
     ["house", "product", "car"].includes(kind) && (() => el("label", { className: "f-check" }, el("input", { type: "checkbox", checked: !!filters.priced, onchange() { filters.priced = this.checked; drawCards(); } }), " Shows a price"))(),
     !side && sites.length > 1 && select("site", kind === "product" ? "All stores" : "All websites", sites),
-    kind === "app" && sites.length > 1 && select("site", "All stores", sites),
     !side && sortSel);
 }
 
@@ -732,9 +732,9 @@ function cardsHeadline(topic, n) {
 
 const VIEW_DEFAULT = { house: "list", job: "list", car: "list", product: "grid", recipe: "grid", show: "grid", event: "list", app: "grid" };
 function sortSelect(kind) {
-  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"], app: ["rating", "reviews"] }[kind] || [];
+  const sorts = { house: ["price-asc", "price-desc"], product: ["price-asc", "price-desc", "rating", "reviews"], car: ["price-asc", "price-desc", "year"], show: ["rating"], app: ["rating", "reviews", "price-asc", "price-desc", "name", "discount"] }[kind] || [];
   if (!sorts.length) return null;
-  const names = { "price-asc": "Price (low to high)", "price-desc": "Price (high to low)", rating: "Best rated", reviews: "Most reviews", year: "Newest" };
+  const names = { "price-asc": "Price (low to high)", "price-desc": "Price (high to low)", rating: "Best rated", reviews: "Most reviews", year: "Newest", name: "Name (A–Z)", discount: "Biggest discount" };
   const s = el("select", { className: "f-input", ariaLabel: "Sort" }, el("option", { value: "", textContent: "Sort: Featured" }), ...sorts.map(o => el("option", { value: o, textContent: "Sort: " + names[o], selected: filters.sort === o })));
   s.onchange = () => { filters.sort = s.value || undefined; drawCards(); };
   return s;
@@ -777,14 +777,15 @@ function drawCards() {
   const main = el("section", { className: "mode-main" }, (query || listOpen) && top,
     modeOn && listPanel(topic),
     ["shopping", "marketplace", "reviews"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, "Amazon, eBay, Google Shopping, Bing Shopping and the big stores in your country need ", el("a", { href: "install.html", textContent: "Unitex Helper" }), ". Without it, products only come from store pages found in search results."),
-    ["apps", "games", "opensource"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, topic.id === "opensource" ? "Flathub and F-Droid need " : "Google Play, Steam, F-Droid, Flathub and the Microsoft Store need ", el("a", { href: "install.html", textContent: "Unitex Helper" }),
-      topic.id === "games" ? ". Without it, games come from CheapShark's store deals (Steam, GOG, Epic, Humble…) and Apple's App Store." : topic.id === "opensource" ? ". Without it, alternatives come from Unitex's own list of open-source apps." : ". Without it, apps only come from Apple's App Store and Mac App Store."),
+    ["apps", "games", "opensource"].includes(topic.id) && !helperVersion() && el("p", { className: "shop-note" }, topic.id === "opensource" ? "Flathub needs " : "Google Play and Flathub need ", el("a", { href: "install.html", textContent: "Unitex Helper" }),
+      topic.id === "games" ? ". Without it, games come from CheapShark's deals (Steam, GOG, Epic, Humble…), the App Store, and Steam when a public relay answers." : topic.id === "opensource" ? ". Without it, alternatives come from Unitex's own list and GitHub." : ". Without it, apps come from the App Store and Mac App Store, plus Steam, F-Droid and the Microsoft Store when a public relay answers."),
     !query ? renderLanding(topic)
       : !shown.length ? el("p", { className: "hint mode-empty", textContent: lastCards.length ? `None of the ${lastCards.length} ${mode.noun} found match every filter. Untick a filter to see more.` : `No ${mode.noun} could be read for this search yet.` }) : null,
     el("div", { className: `xcards ${modeOn ? view : "grid"}${settings.cards === "large" ? "" : " compact"}` }, ...shown.slice(0, limit).map(c => renderCard(c, topic)).filter(Boolean)),
     shown.length > 0 && moreBtn);
   // The filters are a bar of pills across the top, like the job, property and app stores' own sites.
-  fill(box, modeOn ? el("div", { className: "mode-layout top-filters" }, side, main) : main);
+  // Apps, games and alternatives get a refine sidebar (price, rating, platform, store, licence, category) beside the results.
+  fill(box, modeOn ? el("div", { className: "mode-layout top-filters" }, side, kind === "app" && query ? el("div", { className: "facet-layout" }, facetSidebar(topic, lastCards), main) : main) : main);
   box.hidden = !lastCards.length && !modeOn;
 }
 
@@ -822,9 +823,14 @@ function oneEach(list) {
   const out = [], at = new Map();
   for (const c of list) {
     const year = String(c.card?.years || "").match(/\d{4}/)?.[0] || "";
-    const keys = [urlKey(c.url), c.card?.kind === "show" && `show:${lc(c.card.name || c.title).trim()}:${year}`].filter(Boolean);
+    // One game per store family: Hades from CheapShark and from Steam is one card (the PC one), the phone version is another.
+    const keys = [urlKey(c.url), c.card?.kind === "show" && `show:${lc(c.card.name || c.title).trim()}:${year}`,
+      c.card?.kind === "app" && topicId === "opensource" && `oss:${lc(c.card.name).replace(/[^a-z0-9]/g, "")}`,
+      c.card?.kind === "app" && topicId === "games" && `game:${lc(c.card.name).replace(/[^a-z0-9]/g, "")}:${(c.card.platforms || []).some(p => /iPhone|Android/.test(p)) ? "phone" : "pc"}`].filter(Boolean);
     const i = keys.map(k => at.get(k)).find(x => x !== undefined);
     if (i === undefined) { keys.forEach(k => at.set(k, out.length)); out.push(c); continue; }
+    if (c.card?.kind === "app") { const a = out[i]; out[i] = { ...a, card: { ...a.card, banner: a.card.banner || c.card.banner, discount: a.card.discount || c.card.discount, rating: a.card.rating ?? c.card.rating,
+      platforms: [...new Set([...(a.card.platforms || []), ...(c.card.platforms || [])])] } }; }
     if (c.card?.kind === "show") { const a = out[i]; out[i] = { ...a, image: a.image || c.image, card: { ...Object.fromEntries(Object.entries(c.card).filter(([, x]) => x != null && x !== "")), ...Object.fromEntries(Object.entries(a.card).filter(([, x]) => x != null && x !== "" && !(Array.isArray(x) && !x.length))) } }; }
     keys.forEach(k => at.set(k, i));
   }
@@ -909,8 +915,7 @@ const TOPIC_FORMS = {
       // Device tabs, like Google Play's Phone / Tablet / TV chips.
       platform: { type: "seg", label: "Platform", options: opt([["", "All devices"], ["Android", "Android"], ["iPhone & iPad", "iPhone & iPad"], ["Windows", "Windows"], ["Mac", "Mac"], ["Linux", "Linux"]]) },
       license: { type: "select", label: "Licence", options: opt([["", "Any licence"], ["free", "Free"], ["paid", "Paid"], ["open", "Open source"]]) },
-      kind: { type: "seg", label: "Type", options: opt([["", "All"], ["apps", "Apps"], ["games", "Games"]]) },
-      rating: anyOf("Rating", ["4★ & up", "3★ & up"]) },
+      kind: { type: "seg", label: "Type", options: opt([["", "All"], ["apps", "Apps"], ["games", "Games"]]) } },
     build: v => words(v.license === "open" && "open source", v.license === "free" && "free", v.what || (v.kind === "games" ? "games" : "apps"), v.kind === "games" && v.what && "game", v.platform && `for ${v.platform}`),
     filters: v => ({ ratingSel: v.rating || undefined }) },
 
@@ -918,12 +923,8 @@ const TOPIC_FORMS = {
       what: { label: "Game or what it's like", placeholder: "e.g. Hades, or cosy farming sim", wide: true },
       platform: { type: "seg", label: "Platform", options: opt([["", "All platforms"], ["Windows", "PC"], ["Mac", "Mac"], ["Linux", "Linux"], ["Android", "Android"], ["iPhone & iPad", "iPhone & iPad"]]) },
       genre: anyOf("Genre", ["Action", "Adventure", "RPG", "Strategy", "Simulation", "Shooter", "Platformer", "Roguelike", "Survival", "Puzzle", "Horror", "Racing", "Sports", "Indie"]),
-      players: anyOf("Players", ["Single-player", "Co-op", "Multiplayer"]),
-      license: { type: "select", label: "Price", options: opt([["", "Any price"], ["free", "Free to play"], ["paid", "Paid"]]) },
-      rating: anyOf("Rating", ["4★ & up", "3★ & up"]),
-      extras: { type: "checks", label: "Options", options: opt([["sale", "On sale"]]) } },
-    build: v => words(v.license === "free" && "free", v.genre?.toLowerCase(), v.players?.toLowerCase(), v.what || "games", v.what && "game", v.platform && `for ${v.platform}`),
-    filters: v => ({ ratingSel: v.rating || undefined }) },
+      players: anyOf("Players", ["Single-player", "Co-op", "Multiplayer"]) },
+    build: v => words(v.genre?.toLowerCase(), v.players?.toLowerCase(), v.what || "games", v.what && "game", v.platform && `for ${v.platform}`) },
 
   marketplace: { title: "♻️ Find it second-hand", fields: {
       what: { label: "What", placeholder: "e.g. road bike", wide: true },

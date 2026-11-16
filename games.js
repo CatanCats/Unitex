@@ -56,11 +56,24 @@ function altEntries(q) {
   return list.filter(x => !seen.has(x.a[0]) && seen.add(x.a[0])).slice(0, 30);
 }
 const altCard = ({ a: [name, url, desc, license], instead }) => ({ title: name, url, image: bigIcon(url), domain: host(url), via: "Unitex list",
-  card: { kind: "app", name, developer: `Instead of ${instead}`, icon: bigIcon(url), price: "Free", free: true, openSource: true, license, summary: desc, platforms: platformsIn(desc), site: "Open source" } });
+  card: { kind: "app", name, developer: `Instead of ${instead}`, icon: bigIcon(url), price: "Free", free: true, openSource: true, license, summary: desc, platforms: platformsIn(desc), site: "Unitex list" } });
 // The stores are asked about the alternatives themselves (GIMP, Krita…), or the words of the search.
 const altStoreNames = q => { const f = detectAlternatives(q); return f?.match ? f.match.entry.alts.slice(0, 4).map(a => a[0]) : [appWords(q)]; };
+// GitHub's repository search (any website may read it): the most-starred open-source projects for the words, or "X alternative".
+const kfmt = n => n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+async function githubApps(q) {
+  const f = detectAlternatives(q);
+  const what = f?.explicit ? `${f.product} alternative` : altTerms(q).join(" ");
+  if (!what.trim()) return [];
+  const d = await getJson(`https://api.github.com/search/repositories?q=${encodeURIComponent(what + " in:name,description,topics")}&sort=stars&order=desc&per_page=24`, 9000);
+  return (d.items || []).filter(r => !r.archived && !r.fork && r.description).map(r => appCard({ name: r.name, url: r.html_url, icon: r.owner?.avatar_url, developer: r.owner?.login, reviews: `${kfmt(r.stargazers_count)} stars`,
+    price: "Free", free: true, openSource: true, license: r.license?.spdx_id && r.license.spdx_id !== "NOASSERTION" ? r.license.spdx_id : undefined, category: r.language || undefined,
+    summary: short(r.description, 200), platforms: platformsIn(`${r.description} ${(r.topics || []).join(" ")}`) }, "GitHub")).filter(Boolean);
+}
+APP_SOURCES.github = { name: "GitHub (open source)", async run(q) { const c = appChoices(); return c.license === "open" || saysOpenSource(q) ? githubApps(q) : []; } };
 const ALT_SOURCES = {
   list: { name: "Unitex list", async run(q) { return altEntries(q).map(altCard); } },
+  github: { name: "GitHub", run: githubApps },
   flathub: { name: "Flathub (Linux)", helper: true, async run(q) { const names = altStoreNames(q); return (await Promise.all(names.map(n => APP_SOURCES.flathub.run(n).catch(() => [])))).flat().filter(c => c.card.openSource || names.some(n => lc(c.card.name) === lc(n))); } },
   fdroid: { name: "F-Droid (Android)", helper: true, async run(q) { return (await Promise.all(altStoreNames(q).map(n => APP_SOURCES.fdroid.run(n).catch(() => [])))).flat(); } },
 };

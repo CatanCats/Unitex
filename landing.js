@@ -90,7 +90,7 @@ const SPECIAL_ROWS = {
   async "@apple:top-free"() { return appleChart("top-free"); },
   async "@apple:top-paid"() { return appleChart("top-paid"); },
   async "@steam"() {
-    const d = await helperJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
+    const d = await readJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
     return (d.top_sellers?.items || []).filter(a => a.name && !/^steam (deck|frame|machine|controller)/i.test(a.name)).map(a => appCard({ name: a.name, url: `https://store.steampowered.com/app/${a.id}/`, icon: a.small_capsule_image, banner: a.small_capsule_image,
       price: a.final_price ? `$${(a.final_price / 100).toFixed(2)}` : "Free to play", free: !a.final_price, discount: a.discount_percent ? `-${a.discount_percent}%` : undefined, game: true,
       platforms: Object.entries({ Windows: a.windows_available, Mac: a.mac_available, Linux: a.linux_available }).filter(([, on]) => on).map(([p]) => p) }, "Steam")).filter(Boolean);
@@ -264,7 +264,7 @@ function appStore() {
     helper && storeShelf("Open source on Flathub", oss, "app", go("open source apps")));
 }
 async function steamTop() {
-  const d = await helperJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
+  const d = await readJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
   return (d.top_sellers?.items || []).filter(a => a.name && !/^steam (deck|frame|machine|controller)/i.test(a.name)).map(a => appCard({ name: a.name, url: `https://store.steampowered.com/app/${a.id}/`, icon: a.small_capsule_image, banner: a.large_capsule_image,
     price: a.final_price ? `$${(a.final_price / 100).toFixed(2)}` : "Free to play", free: !a.final_price, game: true, developer: "Steam",
     platforms: Object.entries({ Windows: a.windows_available, Mac: a.mac_available, Linux: a.linux_available }).filter(([, on]) => on).map(([p]) => p) }, "Steam")).filter(Boolean);
@@ -276,7 +276,7 @@ const GAME_GENRES = [["⚔️", "Action", "action games"], ["🗺️", "Adventur
   ["🧩", "Puzzle", "puzzle games"], ["🧟", "Horror", "horror games"], ["🤝", "Co-op", "co-op games"], ["🎲", "Roguelike", "roguelike games"], ["🏎️", "Racing", "racing games"], ["🌱", "Indie", "indie games"]];
 const gameTile = c => c && { title: c.card.name, sub: [c.card.discount, c.card.summary].filter(Boolean).join(" · "), image: c.card.banner || c.card.icon, url: c.url, rating: c.card.rating, price: c.card.price, banner: c.card.banner };
 async function steamList(key) {
-  const d = await helperJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
+  const d = await readJson(`https://store.steampowered.com/api/featuredcategories?cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
   const cur = n => n ? `$${(n / 100).toFixed(2)}` : "Free to play";
   return (d[key]?.items || []).filter(a => a.name && !/^steam (deck|frame|machine|controller)/i.test(a.name)).map(a => ({ title: a.name, url: `https://store.steampowered.com/app/${a.id}/`, image: a.header_image || a.small_capsule_image, banner: a.large_capsule_image || a.header_image,
     sub: a.discount_percent ? `-${a.discount_percent}% · was ${cur(a.original_price)}` : (a.release_date ? new Date(a.release_date * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""), price: cur(a.final_price) }));
@@ -285,21 +285,21 @@ function gameStore() {
   const redraw = () => { if (!query && topicId === "games" && modeOn) drawCards(); };
   const helper = !!helperVersion(), go = q => () => searchFor(q);
   const shark = k => shelfData("games:shark:" + k, () => sharkDeals(k).then(l => l.map(gameTile)), redraw);
-  const steam = k => shelfData("games:steam:" + k + regionId, () => steamList(k), redraw);
-  const sale = helper ? steam("specials") : shark("sale"), best = helper ? steam("top_sellers") : shark("rating");
-  const fresh = helper ? steam("new_releases") : shark("new"), soon = helper ? steam("coming_soon") : null, free = shark("free");
+  // Steam's own lists first (Unitex Helper, or the store or a public relay); CheapShark's deals when Steam can't be read.
+  const steam = (k, alt) => shelfData("games:steam:" + k + regionId, () => steamList(k).then(l => l.length ? l : Promise.reject(new Error("empty"))).catch(() => sharkDeals(alt).then(l => l.map(gameTile))), redraw);
+  const sale = steam("specials", "sale"), best = steam("top_sellers", "rating"), fresh = steam("new_releases", "new"), soon = helper ? steam("coming_soon", "new") : null, free = shark("free");
   return storeLayout([
     ["🏠 Discover", scrollToId("games-top"), true], ["🏆 Top charts", scrollToId("games-chart")], ["🏷️ On sale", go("games on sale")], ["🆓 Free to play", go("free games")], ["🤝 Co-op", go("co-op games")],
     "Genres", ...GAME_GENRES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
     el("div", { className: "store-head", id: "games-top" }, el("h2", { textContent: "Games" }), el("span", { textContent: helper ? "Steam, GOG, Epic, Humble, Google Play and the App Store" : "Prices across Steam, GOG, Epic and Humble" })),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "games")),
     storeHero(best.items.length ? best : sale, "app game"),
-    storeShelf(helper ? "Special offers on Steam" : "On sale now", sale, "app game", go("games on sale"), false),
-    storeShelf(helper ? "Top sellers" : "Best deals right now", best, "app game", go("games"), false),
-    storeShelf(helper ? "New & trending" : "New & well reviewed on sale", fresh, "app game", go("new games"), false),
+    storeShelf("On sale now", sale, "app game", go("games on sale"), false),
+    storeShelf("Top sellers", best, "app game", go("games"), false),
+    storeShelf("New & trending", fresh, "app game", go("new games"), false),
     soon && storeShelf("Coming soon", soon, "app game"),
     storeShelf("Free right now", free, "app game", go("free games"), false),
-    storeChart("games", ["Best deals", "Biggest savings", "New"], [best, sale, fresh], "app game", redraw));
+    storeChart("games", ["Top sellers", "On sale", "New"], [best, sale, fresh], "app game", redraw));
 }
 
 // The alternatives site, laid out like AlternativeTo: one big "what do you want to replace?" box, the apps people replace most,

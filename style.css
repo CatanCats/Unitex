@@ -1675,3 +1675,42 @@ body[data-look="games"] .store-nav-item.on { background: #1b2838; color: #c7d5e0
 .alt-popular button { border: 1px solid rgb(255 255 255 / .35); border-radius: 999px; padding: 5px 12px; background: rgb(255 255 255 / .1); color: #fff; font-size: .85rem; cursor: pointer; }
 .alt-popular button:hover { background: rgb(255 255 255 / .25); }
 .alt-page .site-circles { margin: 6px 0 14px; }
+
+/* the refine sidebar for apps, games and alternatives */
+.facet-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 22px; align-items: start; }
+.fx { position: sticky; top: 130px; max-height: calc(100vh - 150px); overflow: auto; padding: 14px 16px 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); box-shadow: var(--shadow); scrollbar-width: thin; }
+.fx-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.fx-head h3 { margin: 0; font-size: 1rem; }
+.fx-clear { border: 0; background: none; color: var(--accent); font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.fx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fx-chip { border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; background: var(--accent-soft); color: var(--accent); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }
+.fx-search, .fx-num { box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--fg); font: inherit; font-size: .88rem; }
+.fx-search { margin-bottom: 4px; }
+.fx-sec { padding: 10px 0; border-top: 1px solid var(--border); }
+.fx-sec:first-of-type { border-top: 0; }
+.fx-sec > summary { cursor: pointer; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; list-style: none; }
+.fx-sec > summary::-webkit-details-marker { display: none; }
+.fx-sec > summary::after { content: "▾"; float: right; }
+.fx-sec:not([open]) > summary::after { content: "▸"; }
+.fx-check { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: .88rem; cursor: pointer; }
+.fx-check span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-check em { font-style: normal; font-size: .76rem; color: var(--muted); }
+.fx-check input { margin: 0; accent-color: var(--accent); }
+.fx-range { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.fx-more { border: 0; background: none; padding: 4px 2px; color: var(--accent); font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.fx .hint { margin: 2px 0; font-size: .82rem; }
+.fx-toggle { display: none; }
+@media (max-width: 860px) {
+  .facet-layout { grid-template-columns: 1fr; }
+  .fx { position: static; max-height: none; }
+  .fx-toggle { display: flex; }
+  .fx:not(.open) > :not(.fx-toggle) { display: none; }
+}
+
+/* game cards show their store banner, like Steam's capsules */
+.xcards:not(.list) .xcard.app.game .app-art { display: block; margin: -14px -14px 2px; height: 104px; overflow: hidden; border-radius: 14px 14px 0 0; }
+.xcards:not(.list) .xcard.app.game .app-art .app-banner { width: 100%; height: 100%; object-fit: cover; }
+.xcards:not(.list) .xcard.app.game .app-art:has(.icon-only) { display: none; }
+.xcard.app .app-discount { padding: 1px 6px; border-radius: 4px; background: #4c6b22; color: #beee11; font-weight: 700; }
+
+.xcard.app .app-art:empty { display: none !important; }

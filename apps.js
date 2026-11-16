@@ -23,6 +23,18 @@ async function helperJson(url, post) {
   try { return JSON.parse(res.html); } catch { throw new Error("couldn't be read"); }
 }
 
+// JSON from stores that don't let websites read them: Unitex Helper when it's installed; otherwise the store itself
+// or a public relay, whichever answers first (the relays only ever see the store's address).
+const JSON_RELAYS = [u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`];
+async function readJson(url) {
+  if (helperVersion()) { try { return await helperJson(url); } catch { /* fall through to the relays */ } }
+  const attempt = async u => {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 9000);
+    try { const r = await fetch(u, { signal: ctrl.signal }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return JSON.parse(await r.text()); } finally { clearTimeout(timer); }
+  };
+  try { return await Promise.any([attempt(url), ...JSON_RELAYS.map(r => attempt(r(url)))]); } catch { throw new Error("couldn't be read"); }
+}
+
 const APP_SOURCES = {
   appstore: { name: "App Store", paged: false, async run(q) {
     if (!forPlatform(["iPhone & iPad"])) return [];
@@ -61,14 +73,14 @@ const APP_SOURCES = {
     }
     return out.filter(Boolean);
   }},
-  fdroid: { name: "F-Droid (open source)", helper: true, async run(q) {
+  fdroid: { name: "F-Droid (open source)", async run(q) {
     if (!forPlatform(["Android"])) return [];
-    const d = await helperJson(`https://search.f-droid.org/api/search_apps?q=${encodeURIComponent(appWords(q))}`);
+    const d = await readJson(`https://search.f-droid.org/api/search_apps?q=${encodeURIComponent(appWords(q))}`);
     return (d.apps || []).slice(0, 20).map(a => appCard({ name: a.name, url: a.url, icon: a.icon, summary: a.summary, price: "Free", free: true, openSource: true, license: "Open source" }, "F-Droid", ["Android"])).filter(Boolean);
   }},
-  steam: { name: "Steam", helper: true, async run(q) {
+  steam: { name: "Steam", async run(q) {
     if (!forPlatform(["Windows", "Mac", "Linux"])) return [];
-    const d = await helperJson(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(appWords(q))}&cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
+    const d = await readJson(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(appWords(q))}&cc=${APP_COUNTRY[regionId] || "us"}&l=en`);
     return (d.items || []).map(a => {
       const plat = Object.entries({ Windows: a.platforms?.windows, Mac: a.platforms?.mac, Linux: a.platforms?.linux }).filter(([, on]) => on).map(([p]) => p);
       const p = a.price, cur = p?.currency && p.currency !== "AUD" && p.currency !== "USD" ? p.currency + " " : "$";
@@ -83,10 +95,10 @@ const APP_SOURCES = {
     return (d.hits || []).slice(0, 20).map(a => appCard({ name: a.name, url: `https://flathub.org/apps/${a.app_id}`, icon: a.icon, developer: a.developer_name, summary: a.summary, price: "Free", free: true,
       openSource: !!a.is_free_license, license: a.project_license, category: (a.main_categories || [])[0], game: [].concat(a.main_categories || []).some(c => /game/i.test(c)) }, "Flathub", ["Linux"])).filter(Boolean);
   }},
-  msstore: { name: "Microsoft Store", helper: true, async run(q) {
+  msstore: { name: "Microsoft Store", async run(q) {
     if (!forPlatform(["Windows"])) return [];
     const c = APP_COUNTRY[regionId] || "us";
-    const d = await helperJson(`https://apps.microsoft.com/api/products/search?query=${encodeURIComponent(appWords(q))}&mediaType=all&age=all&price=all&category=all&subscription=all&gl=${c.toUpperCase()}&hl=en-${c}`);
+    const d = await readJson(`https://apps.microsoft.com/api/products/search?query=${encodeURIComponent(appWords(q))}&mediaType=all&age=all&price=all&category=all&subscription=all&gl=${c.toUpperCase()}&hl=en-${c}`);
     return (d.productsList || []).slice(0, 20).map(a => appCard({ name: a.title, url: `https://apps.microsoft.com/detail/${a.productId}`, icon: a.iconUrl, developer: a.publisherName, rating: a.averageRating || undefined, reviews: a.ratingCountFormatted,
       ...appPrice(a.price, a.displayPrice), summary: short(a.description || "", 220), category: (a.categories || [])[0], game: a.isGamingAppOnly || /game/i.test(a.typeTag || "") }, "Microsoft Store", ["Windows"])).filter(Boolean);
   }},
