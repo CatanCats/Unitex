@@ -237,6 +237,8 @@ function formMatches(c) {
       if (!k.levelSearched && v.level === "Mid level" && (LEVELS["Entry level"].test(t) || LEVELS.Senior.test(t))) return false;
       if (!k.levelSearched && v.level && LEVELS[v.level] && !LEVELS[v.level].test(t)) return false;
       if (v.salary && !(k.salarySearched && !k.salary) && !(salaryTop(k.salary) >= salaryWanted(v.salary))) return false;
+      // "Listed: last 7 days": an ad older than that goes; one that doesn't say its age stays.
+      if (v.listed) { const days = { "Today": 1, "Last 3 days": 3, "Last 7 days": 7, "Last 14 days": 14, "Last 30 days": 30 }[v.listed], ts = Date.parse(k.posted); if (days && ts && Date.now() - ts > days * 864e5) return false; }
       if (v.where && !(k.placeSearched && !/remote|anywhere|worldwide/i.test(k.location || "")) && !has(lc(`${k.location} ${c.title} ${c.snippet || ""}`), firstWord(v.where)) && !((v.extras || []).some(x => /remote|home/i.test(x)) && (remoteJob || /remote|anywhere/i.test(k.location || "")))) return false;
       return true;
     case "houses":
@@ -258,12 +260,17 @@ function formMatches(c) {
       for (const f of ["meal", "cuisine"]) if (v[f] && !has(t, v[f])) return false;
       if (v.diet && !has(t, v.diet.replace(/ free$/i, "-free").split(" ")[0])) return false;
       if (v.time && !(minutesOf(k.time) && minutesOf(k.time) <= minutesOf(v.time.replace("hour", "h")) )) return false;
+      if (v.without && (has(lc(cardTitle(c)), v.without) || (k.ingredients || []).some(i => has(lc(i), v.without)))) return false;
       return true;
     case "movies":
       if (v.genre && !(k.genres || []).some(g => has(lc(g), v.genre))) return false;
       // IMDb and TVmaze say whether it's a movie or TV; other cards are judged by their words.
       if (v.kind === "movie" && (k.type ? k.type !== "movie" : /\b(series|tv|season)\b/.test(t))) return false;
       if (v.kind === "tv show" && (k.type ? k.type !== "tv" : !/\b(series|tv|season|show)\b/.test(t) && !k.network)) return false;
+      { const yrs = String(k.years || "").match(/\d{4}/g) || [], first = +yrs[0], last = +yrs[yrs.length - 1];
+        if (v.yearFrom && first && last < +v.yearFrom) return false;
+        if (v.yearTo && first && first > +v.yearTo) return false;
+        if (v.minRating && k.rating && k.rating < parseInt(v.minRating)) return false; }
       return true;
     case "apps": case "games": case "opensource":
       if (topicId === "games" && !k.game) return false;
@@ -281,6 +288,8 @@ function formMatches(c) {
     case "events":
       if (k.when && eventTime(k.when).t < todayStart()) return false; // already over
       if (v.when && !eventInRange(k.when, v.when)) return false;
+      if (v.price === "free" && k.price && !/free|^\$?0(\.0+)?$/i.test(k.price)) return false;
+      if (v.price === "paid" && /^free$/i.test(k.price || "")) return false;
       if (v.where && !has(lc(`${k.place} ${k.venue} ${t}`), firstWord(v.where))) return false;
       return true;
   }
@@ -308,6 +317,7 @@ function applyFilters(cards) {
     if (F.beds && k.beds != null && !(k.beds >= F.beds)) return false;
     if (F.site && k.site !== F.site) return false;
     if (F.yearMin && !(k.year >= F.yearMin)) return false;
+    if (F.yearMax && !(k.year <= F.yearMax)) return false;
     if (F.salaryOnly && !k.salary) return false;
     if (F.category && k.category !== F.category && k.cuisine !== F.category) return false;
     if (F.genre && !(k.genres || []).includes(F.genre)) return false;
@@ -728,9 +738,12 @@ function formFilters(topicIdNow) {
     return inp;
   };
   // The search box at the top is the keywords, so the bar starts with the filters themselves.
-  const shown = Object.entries(form.fields).filter(([k]) => k !== "what");
+  // Like the sites' own bars, only the few that matter most are pills; the rest are behind Filters.
+  const quick = typeof QUICK_PILLS === "object" ? QUICK_PILLS[topicIdNow] : null;
+  const shown = Object.entries(form.fields).filter(([k]) => k !== "what" && (!quick || quick.includes(k)));
   const anySet = shown.some(([k, f]) => f.type !== "seg" && many(v[k]).length);
   return el("div", { className: "mf-form pill-bar" }, ...shown.map(([k, f]) => el("div", { className: "mf-field" + (f.type === "number" || k === "where" ? " has-pop" : "") }, control(k, f))),
+    typeof filterButton === "function" && filterButton(topicIdNow, "in-bar"),
     anySet && el("button", { type: "button", className: "pill-clear", textContent: "Clear", onclick: () => { store.set(key, {}); filters = {}; query = form.build({ what: v.what }) || query; store.set(key, { _q: query }); go(); } }));
 }
 let openPill = ""; // the filter pill whose ticks are open ("jobs:worktype")
@@ -900,11 +913,13 @@ const TOPIC_FORMS = {
       what: { label: "Job title or keywords", placeholder: "e.g. junior web developer", wide: true },
       where: { label: "Where", placeholder: "City or suburb" },
       worktype: { type: "checks", label: "Work type", options: opt(["Full time", "Part time", "Casual", "Contract", "Internship"]) },
+      classification: anyOf("Classification", ["Accounting", "Administration", "Banking & finance", "Construction", "Customer service", "Education", "Engineering", "Healthcare", "Hospitality", "IT", "Legal", "Manufacturing", "Marketing", "Retail", "Sales", "Trades & services", "Transport & logistics"]),
       level: anyOf("Experience", ["Entry level", "Mid level", "Senior"]),
       salary: { label: "Minimum salary", placeholder: "$ per year", type: "number" },
+      listed: anyOf("Listed", ["Today", "Last 3 days", "Last 7 days", "Last 14 days", "Last 30 days"]),
       extras: { type: "checks", label: "Options", options: opt(["Remote", "Work from home", "Visa sponsorship", "No experience needed"]) } },
     // A minimum salary doesn't hide jobs that don't show one when the site was searched with it (SEEK, Indeed); "Shows salary" does.
-    build: v => words(v.level?.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", many(v.worktype).map(w => w.toLowerCase()), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`) },
+    build: v => words(v.level?.toLowerCase(), v.classification && !v.what && v.classification.toLowerCase(), v.what || "jobs", v.what && !/\bjobs?\b/i.test(v.what) && "jobs", many(v.worktype).map(w => w.toLowerCase()), (v.extras || []).map(e => e.toLowerCase()), v.where && `in ${v.where}`, v.salary && `$${v.salary}+`) },
 
   cars: { title: "🚗 Find a car", fields: {
       deal: { type: "seg", label: "Condition", options: opt([["used", "Used"], ["new", "New"], ["any", "Any"]]) },
@@ -913,12 +928,16 @@ const TOPIC_FORMS = {
       body: anyOf("Body type", ["Sedan", "Hatchback", "SUV", "Ute", "Wagon", "Van", "Coupe", "Convertible"]),
       fuel: anyOf("Fuel", ["Petrol", "Diesel", "Hybrid", "Electric"]),
       gearbox: anyOf("Transmission", ["Automatic", "Manual"]),
+      drive: anyOf("Drive type", ["2WD", "4WD", "AWD"]),
       yearMin: { label: "Year from", placeholder: "e.g. 2018", type: "number" },
+      yearMax: { label: "Year to", placeholder: "e.g. 2024", type: "number" },
+      min: { label: "Min price", placeholder: "$", type: "number" },
       max: { label: "Max price", placeholder: "$", type: "number" },
       kmMax: { label: "Max km", placeholder: "e.g. 80000", type: "number" },
+      seller: anyOf("Seller", ["Dealer", "Private"]),
       where: { label: "Where", placeholder: "City or state" } },
-    build: v => words(v.deal !== "any" && (v.deal || "used"), v.yearMin && `${v.yearMin}+`, v.make, v.model, v.fuel?.toLowerCase(), v.body?.toLowerCase(), v.gearbox?.toLowerCase(), !v.make && !v.model && !v.body && "car", "for sale", v.max && `under $${v.max}`, v.where && `in ${v.where}`),
-    filters: v => ({ yearMin: priceNum(v.yearMin), max: priceNum(v.max), kmMax: priceNum(v.kmMax) }) },
+    build: v => words(v.deal !== "any" && (v.deal || "used"), v.yearMin && `${v.yearMin}+`, v.make, v.model, v.fuel?.toLowerCase(), v.body?.toLowerCase(), v.gearbox?.toLowerCase(), v.drive, v.seller && `${v.seller.toLowerCase()} seller`, !v.make && !v.model && !v.body && "car", "for sale", v.max && `under $${v.max}`, v.where && `in ${v.where}`),
+    filters: v => ({ yearMin: priceNum(v.yearMin), yearMax: priceNum(v.yearMax), min: priceNum(v.min), max: priceNum(v.max), kmMax: priceNum(v.kmMax) }) },
 
   shopping: { title: "🛍️ What are you shopping for?", fields: {
       what: { label: "Product", placeholder: "e.g. noise cancelling headphones", wide: true },
@@ -949,10 +968,12 @@ const TOPIC_FORMS = {
   marketplace: { title: "♻️ Find it second-hand", fields: {
       what: { label: "What", placeholder: "e.g. road bike", wide: true },
       where: { label: "Near", placeholder: "Suburb or city" },
+      condition: { type: "seg", label: "Condition", options: opt([["", "Any"], ["new", "New"], ["used", "Used"]]) },
+      min: { label: "Min price", placeholder: "$", type: "number" },
       max: { label: "Max price", placeholder: "$", type: "number" },
       extras: { type: "checks", label: "Options", options: opt(["Free", "Pickup only", "Delivery"]) } },
-    build: v => words("second hand", v.what, (v.extras || []).map(e => e.toLowerCase()), v.where && `near ${v.where}`),
-    filters: v => ({ max: priceNum(v.max) }) },
+    build: v => words("second hand", v.condition, v.what, (v.extras || []).map(e => e.toLowerCase()), v.where && `near ${v.where}`),
+    filters: v => ({ min: priceNum(v.min), max: priceNum(v.max) }) },
 
   reviews: { title: "★ Check reviews before you buy", fields: {
       what: { label: "Product or service", placeholder: "e.g. robot vacuum", wide: true },
@@ -965,13 +986,18 @@ const TOPIC_FORMS = {
       meal: anyOf("Meal", ["Breakfast", "Lunch", "Dinner", "Dessert", "Snack"]),
       cuisine: anyOf("Cuisine", ["Italian", "Indian", "Chinese", "Thai", "Mexican", "Japanese", "Middle Eastern", "French", "Greek"]),
       diet: anyOf("Diet", ["Vegetarian", "Vegan", "Gluten free", "Dairy free", "Keto", "High protein"]),
-      time: anyOf("Ready in", ["15 minutes", "30 minutes", "1 hour"]) },
-    build: v => words(v.diet?.toLowerCase(), v.cuisine, v.meal?.toLowerCase(), v.what, "recipe", v.time && `in ${v.time}`) },
+      time: anyOf("Ready in", ["15 minutes", "30 minutes", "1 hour"]),
+      difficulty: anyOf("Difficulty", ["Easy", "Medium", "Hard"]),
+      without: { label: "Leave out an ingredient", placeholder: "e.g. nuts, mushrooms" } },
+    build: v => words(v.diet?.toLowerCase(), v.difficulty?.toLowerCase(), v.cuisine, v.meal?.toLowerCase(), v.what, "recipe", v.time && `in ${v.time}`) },
 
   movies: { title: "🎬 Find something to watch", fields: {
       what: { label: "Title, actor or vibe", placeholder: "e.g. Severance, or 'cosy mystery'", wide: true },
       kind: { type: "seg", label: "Type", options: opt([["", "Any"], ["movie", "Movie"], ["tv show", "TV show"]]) },
       genre: anyOf("Genre", ["Comedy", "Drama", "Thriller", "Sci-fi", "Horror", "Romance", "Documentary", "Animation", "Crime"]),
+      yearFrom: { label: "Released from", placeholder: "e.g. 2010", type: "number" },
+      yearTo: { label: "Released to", placeholder: "e.g. 2024", type: "number" },
+      minRating: anyOf("IMDb rating", ["6+", "7+", "8+"]),
       watch: { type: "checks", label: "", options: opt(["Where to watch"]) } },
     build: v => words(v.genre?.toLowerCase(), v.what, v.kind, (v.watch || []).length && "where to watch") },
 
@@ -989,9 +1015,12 @@ const TOPIC_FORMS = {
   events: { title: "🎟️ Find events", fields: {
       what: { label: "What", placeholder: "e.g. live music, comedy, markets", wide: true },
       where: { label: "Where", placeholder: "City or suburb" },
-      when: anyOf("When", ["Today", "Tonight", "This weekend", "This week", "This month"]),
-      extras: { type: "checks", label: "Options", options: opt(["Free", "Family friendly", "All ages"]) } },
-    build: v => words((v.extras || []).map(e => e.toLowerCase()), v.what || "events", v.when?.toLowerCase(), v.where && `in ${v.where}`) },
+      when: anyOf("When", ["Today", "Tonight", "Tomorrow", "This weekend", "This week", "This month"]),
+      category: anyOf("Category", ["Music", "Food & drink", "Arts & theatre", "Comedy", "Sports", "Business", "Family", "Charity", "Festival", "Markets"]),
+      price: { type: "seg", label: "Price", options: opt([["", "Any"], ["free", "Free"], ["paid", "Paid"]]) },
+      format: { type: "seg", label: "Format", options: opt([["", "Any"], ["online", "Online"], ["in person", "In person"]]) },
+      extras: { type: "checks", label: "Options", options: opt(["Family friendly", "All ages"]) } },
+    build: v => words(v.price === "free" && "free", (v.extras || []).map(e => e.toLowerCase()), v.category?.toLowerCase(), v.what || "events", v.format === "online" && "online", v.when?.toLowerCase(), v.where && `in ${v.where}`) },
 
   learn: { title: "🎓 Learn something", fields: {
       what: { label: "What do you want to learn?", placeholder: "e.g. Python, guitar, Spanish", wide: true },
