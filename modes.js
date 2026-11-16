@@ -753,7 +753,7 @@ function drawCards() {
   if (!mode) { box.hidden = true; return; }
   const kind = CARD_KINDS[topic.id];
   const limit = modeOn ? cardLimit : 6;
-  const view = store.get("unitex.view." + topic.id, VIEW_DEFAULT[kind] || "grid");
+  const view = store.get("unitex.view." + topic.id, (typeof look === "object" && look.layout) || VIEW_DEFAULT[kind] || "grid");
   const moreBtn = modeOn && query && moreButton("cards", `Show more ${mode.noun}`);
   // Left: every option as a filter, then the engines and websites. Right: the results.
   const extras = filterBar(topic, lastCards, true);

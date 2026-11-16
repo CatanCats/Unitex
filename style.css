@@ -1714,3 +1714,135 @@ body[data-look="games"] .store-nav-item.on { background: #1b2838; color: #c7d5e0
 .xcard.app .app-discount { padding: 1px 6px; border-radius: 4px; background: #4c6b22; color: #beee11; font-weight: 700; }
 
 .xcard.app .app-art:empty { display: none !important; }
+
+/* ================= Unitex look =================
+   Every area keeps what it learned from its site (hero search panel, tabs, category tiles, photo-first cards) but wears
+   Unitex's colours, corners and type. "The sites they read" in Make Unitex yours turns this off. */
+:root { --u-r: 16px; }
+body.look-unitex[data-look] { --accent: unset; --accent-2: unset; --accent-soft: unset; --look-head: unset; --look-head-fg: unset; --look-head-line: unset; --look-go: unset; --look-go-fg: unset;
+  --look-btn: unset; --look-btn-fg: unset; --look-btn-line: unset; --look-price: unset; --look-btn-radius: 999px; --look-radius: calc(var(--u-r) * .9); --look-card-radius: var(--u-r); }
+body.look-unitex[data-look="movies"] { --bg: unset; --card: unset; --card-2: unset; --fg: unset; --muted: unset; --border: unset; background: var(--bg); }
+body.look-unitex[data-look="shopping"] .rnav, body.look-unitex[data-look="reviews"] .rnav { max-width: 1180px; background: none; padding: 10px 16px 0; }
+body.look-unitex[data-look="shopping"] .rtabs button, body.look-unitex[data-look="reviews"] .rtabs button { color: var(--muted); }
+body.look-unitex[data-look="shopping"] .rtabs button[aria-selected="true"], body.look-unitex[data-look="reviews"] .rtabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+body.look-unitex[data-look="shopping"] .subtabs.departments .chip, body.look-unitex[data-look="reviews"] .subtabs.departments .chip { color: var(--fg); background: var(--card); border-color: var(--border); }
+body.look-unitex[data-look="shopping"] .subtabs.departments .chip.active, body.look-unitex[data-look="reviews"] .subtabs.departments .chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+body.look-unitex[data-look="shopping"] .subtabs .row-label, body.look-unitex[data-look="reviews"] .subtabs .row-label, body.look-unitex[data-look="shopping"] .intent-note, body.look-unitex[data-look="reviews"] .intent-note { color: var(--muted); }
+body.look-unitex[data-look="movies"] .rnav, body.look-unitex[data-look="movies"] .rtabs button { color: var(--muted); }
+body.look-unitex[data-look="shopping"] .xcard-img { background: var(--card-2); }
+body.look-unitex[data-look="shopping"] .xcard.product .xcard-title { font-weight: 600; }
+body.look-unitex[data-look="shopping"] .xcard.product .xcard-price { font-weight: 800; }
+body.look-unitex[data-look="shopping"] .xcard.product .fact:first-child { color: var(--accent); }
+body.look-unitex[data-look="jobs"] .xcard.job:hover { border-left-color: var(--accent); }
+body.look-unitex[data-look="movies"] .landing-row-head h3 { color: var(--fg); font-size: 1.2rem; }
+body.look-unitex[data-look="movies"] .landing-row-head h3::before { background: var(--accent); }
+body.look-unitex[data-look="houses"] .rtop { border-bottom-width: 1px; }
+body.look-unitex[data-look="houses"] .btn-primary:hover { background: var(--accent); }
+
+/* hero panels: one family, in Unitex colours */
+body.look-unitex { --hero-bg: radial-gradient(120% 140% at 12% 0%, var(--accent), color-mix(in srgb, var(--accent-2) 78%, #000 22%) 78%); }
+body.look-unitex .rea-hero, body.look-unitex .seek-hero, body.look-unitex .cs-hero, body.look-unitex .gt-hero, body.look-unitex .taste-hero, body.look-unitex .eb-banner {
+  margin: 4px 0 0; border-radius: calc(var(--u-r) + 6px); background: var(--hero-bg); color: #fff; box-shadow: 0 18px 40px -22px var(--accent); overflow: hidden; }
+body.look-unitex .rea-hero { padding: 40px 20px 44px; }
+body.look-unitex .rea-hero::before { background: radial-gradient(60% 80% at 85% 0%, rgb(255 255 255 / .22), transparent 70%); border-radius: inherit; }
+body.look-unitex .rea-hero h2 { color: #fff; font-size: clamp(1.5rem, 3.4vw, 2.1rem); font-weight: 800; letter-spacing: -.02em; }
+body.look-unitex .rea-card, body.look-unitex .cs-card { background: var(--card); color: var(--fg); border-radius: var(--u-r); box-shadow: 0 14px 34px -14px rgb(0 0 0 / .45); }
+body.look-unitex .rea-tabs { border-bottom-color: var(--border); }
+body.look-unitex .rea-tabs button { color: var(--muted); }
+body.look-unitex .rea-tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
+body.look-unitex .rea-icon { color: var(--muted); }
+body.look-unitex .rea-search, body.look-unitex .seek-btn, body.look-unitex .cs-btn, body.look-unitex .gt-btn, body.look-unitex .eb-btn { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-radius: 999px; }
+body.look-unitex .seek-btn:hover, body.look-unitex .rea-search:hover, body.look-unitex .cs-btn:hover { filter: brightness(1.08); background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+body.look-unitex .gt-btn { background: #fff; color: var(--accent); }
+body.look-unitex .seek-hero { padding: 28px 26px; }
+body.look-unitex .hero-input { color: var(--fg); }
+body.look-unitex .seek-hero .hero-input, body.look-unitex .gt-search .hero-input { background: var(--card); border: 0; border-radius: 999px; padding: 0 20px; height: 48px; box-sizing: border-box; }
+body.look-unitex .seek-hero .hero-where-wrap, body.look-unitex .gt-search .hero-where-wrap { background: var(--card); border-radius: 999px; }
+body.look-unitex .cs-photo { height: 190px; border-radius: 0; background-color: transparent; }
+body.look-unitex .cs-hero { padding-bottom: 20px; }
+body.look-unitex .cs-card { margin: -90px 22px 0; }
+body.look-unitex .cs-head h2, body.look-unitex .cs-row label { color: var(--fg); }
+body.look-unitex .cs-select, body.look-unitex .landing .cs-select { background: var(--bg); color: var(--fg); border-color: var(--border); border-radius: calc(var(--u-r) * .7); }
+body.look-unitex .cs-bodies { border-top-color: var(--border); }
+body.look-unitex .cs-body { color: var(--fg); }
+body.look-unitex .cs-body:hover { background: var(--accent-soft); }
+body.look-unitex .gt-hero { padding: 22px 24px 8px; }
+body.look-unitex .gt-cats button { color: #fff; opacity: .92; }
+body.look-unitex .taste-hero { padding: 46px 20px; }
+body.look-unitex .taste-panel { background: rgb(255 255 255 / .14); backdrop-filter: blur(8px); border: 1px solid rgb(255 255 255 / .3); border-radius: var(--u-r); }
+body.look-unitex .taste-panel h2, body.look-unitex .taste-trending b { color: #fff; }
+body.look-unitex .taste-box { background: var(--card); border-radius: 999px; }
+body.look-unitex .taste-box > span { color: var(--accent); }
+body.look-unitex .taste-trending button { background: rgb(255 255 255 / .16); border-color: rgb(255 255 255 / .4); color: #fff; }
+body.look-unitex .eb-banner { padding: 34px 40px; min-height: 220px; }
+body.look-unitex .eb-banner b, body.look-unitex .eb-kicker { background: rgb(255 255 255 / .94); color: var(--accent); border-radius: 6px; }
+body.look-unitex .eb-search { background: var(--card); border-color: var(--border); }
+body.look-unitex .eb-search .hero-where-wrap { border-left-color: var(--border); }
+body.look-unitex .imdb-feature { border-radius: calc(var(--u-r) + 4px); }
+body.look-unitex .imdb-next { background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--u-r) + 4px); }
+body.look-unitex .imdb-next h3 { color: var(--accent); }
+body.look-unitex .imdb-next-item { color: var(--fg); }
+body.look-unitex .imdb-chips button, body.look-unitex .site-pills button { border-color: var(--border); background: var(--card); color: var(--fg); }
+body.look-unitex .site-pills button:hover { border-color: var(--accent); box-shadow: none; }
+body.look-unitex .amz-card { background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: var(--u-r); box-shadow: var(--shadow); }
+body.look-unitex .amz-card h3, body.look-unitex .amz-quad-item { color: var(--fg); }
+body.look-unitex .amz-quad-item img { background: var(--card-2); border-radius: calc(var(--u-r) * .5); }
+body.look-unitex .amz-more { color: var(--accent); }
+body.look-unitex .amz-ways-grid button { background: var(--card-2); border-radius: calc(var(--u-r) * .6); color: var(--fg); }
+body.look-unitex .store-head h2 { background: none; color: var(--fg); -webkit-text-fill-color: currentColor; }
+body.look-unitex .store-nav-item.on { background: var(--accent-soft); color: var(--accent); }
+body.look-unitex .alt-hero { background: var(--hero-bg); box-shadow: 0 18px 40px -22px var(--accent); border-radius: calc(var(--u-r) + 6px); }
+body.look-unitex .alt-btn { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+
+/* cards: photo first, Unitex corners, a price that stands out */
+body .xcard, body .fx, body .amz-card { border-radius: var(--u-r); }
+body.look-unitex .xcard { box-shadow: var(--shadow); transition: transform .2s, box-shadow .2s, border-color .2s; }
+body.look-unitex .xcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+body.look-unitex .xcard-img > img { transition: transform .5s cubic-bezier(.2, .8, .2, 1); }
+body.look-unitex .xcard:hover .xcard-img > img { transform: scale(1.04); }
+body.look-unitex .xcard.house .xcard-price, body.look-unitex .xcard.car .xcard-price, body.look-unitex .xcard.product .xcard-price { color: var(--fg); font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; }
+body.look-unitex .xcard.house .xcard-img::after, body.look-unitex .xcard.car .xcard-img::after { content: ""; position: absolute; inset: auto 0 0; height: 40%; background: linear-gradient(180deg, transparent, rgb(0 0 0 / .28)); pointer-events: none; }
+body.look-unitex .fact { border-radius: 999px; }
+body.look-unitex .deal-badge { background: var(--accent); color: #fff; border-radius: 999px; }
+body.look-unitex .save-btn.heart { background: rgb(255 255 255 / .92); color: var(--accent); border-radius: 50%; box-shadow: 0 2px 8px rgb(0 0 0 / .2); }
+
+/* customization: spacing, photo size, tile size */
+body.dens-compact .xcards { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+body.dens-compact .xcard-body { padding: 8px 11px 2px; gap: 2px; }
+body.dens-compact .xcards.list .xcard, body.dens-compact .xcards.list .xcard-img { min-height: 150px; }
+body.dens-compact .landing { gap: 12px; }
+body.photos-large .xcard-img { aspect-ratio: 3 / 2; }
+body.photos-large .xcards { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+body.photos-small .xcard-img { aspect-ratio: 16 / 9; }
+body.photos-small .xcards.list .xcard { grid-template-columns: minmax(150px, 24%) minmax(0, 1fr); }
+body.tiles-small .area-card { width: 104px; }
+body.tiles-small .area-art { width: 104px; height: 112px; border-radius: 18px; }
+body.tiles-small .area-emoji { font-size: 3rem; }
+body.tiles-small #topics.quick { gap: 10px; }
+
+/* the Make Unitex yours dialog */
+.look-dialog { width: min(460px, 94vw); padding: 0; border: 1px solid var(--border); border-radius: calc(var(--u-r) + 4px); background: var(--card); color: var(--fg); box-shadow: var(--shadow-lg); }
+.look-dialog::backdrop { background: rgb(10 10 20 / .5); backdrop-filter: blur(3px); }
+.look-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 6px; }
+.look-head h2 { margin: 0; font-size: 1.15rem; }
+.look-body { display: grid; gap: 16px; padding: 10px 20px 8px; max-height: 68vh; overflow: auto; }
+.look-field { display: grid; gap: 6px; }
+.look-field small { color: var(--muted); font-size: .8rem; margin-top: -2px; }
+.look-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.look-swatch { position: relative; width: 32px; height: 32px; padding: 0; border: 3px solid var(--card); border-radius: 50%; box-shadow: 0 0 0 1px var(--border); cursor: pointer; display: grid; place-items: center; color: var(--muted); font-size: 1.1rem; background: var(--card-2); }
+.look-swatch.on { box-shadow: 0 0 0 3px var(--accent); }
+.look-swatch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.look-foot { display: flex; justify-content: space-between; padding: 12px 20px 18px; }
+body.look-unitex[data-look="shopping"], body.look-unitex[data-look="reviews"], body.look-unitex[data-look="marketplace"], body.look-unitex[data-look="cars"], body.look-unitex[data-look="houses"], body.look-unitex[data-look="jobs"] { background: var(--bg); }
+/* property and car listings: a big photo on the left, price first, then address and the icons row (realestate.com.au, Domain, carsales) */
+body.look-unitex .xcards.list .xcard.house, body.look-unitex .xcards.list .xcard.car { grid-template-columns: minmax(260px, 40%) minmax(0, 1fr); min-height: 240px; }
+body.look-unitex .xcards.list .xcard.house .xcard-img, body.look-unitex .xcards.list .xcard.car .xcard-img { min-height: 240px; }
+body.look-unitex .xcards.list .xcard.house .xcard-body, body.look-unitex .xcards.list .xcard.car .xcard-body { padding: 20px 24px 6px; gap: 8px; }
+body.look-unitex .xcards.list .xcard.house .xcard-price, body.look-unitex .xcards.list .xcard.car .xcard-price { order: -1; font-size: 1.6rem; }
+body.look-unitex .xcards.list .xcard.house .xcard-title, body.look-unitex .xcards.list .xcard.car .xcard-title { font-size: 1.05rem; font-weight: 500; color: var(--muted); }
+body.look-unitex .xcard.house .facts .fact, body.look-unitex .xcard.car .facts .fact { font-size: .9rem; padding: 4px 10px; background: var(--card-2); }
+body.look-unitex .xcard.house .xcard-from, body.look-unitex .xcard.car .xcard-from { margin-top: auto; }
+body.look-unitex .rea-hero { background: var(--hero-bg) !important; }
+body.look-unitex .cs-photo, body.look-unitex .cs-photo[style*="background-image"] { background: none !important; }
+body.look-unitex[data-look="movies"] .subtabs .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+body.look-unitex[data-look="movies"] .subtabs .chip { background: var(--card); border-color: var(--border); color: var(--fg); }
