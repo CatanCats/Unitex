@@ -798,7 +798,7 @@ function renderSources(settled, sources, extraLocked = []) {
 }
 
 function renderNotice() {
-  if (helperOutdated()) { $("notice").replaceWith(Object.assign(helperUpdateBanner(), { id: "notice" })); return; }
+  if (helperOutdated() && !helperUpdateDismissed()) { $("notice").replaceWith(Object.assign(helperUpdateBanner(), { id: "notice" })); return; }
   // One slim line, like an engine's notice; it can be closed for a day.
   const closedAt = store.get("unitex.notice.closed", 0);
   fill($("notice"),

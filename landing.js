@@ -162,9 +162,8 @@ function renderLanding(topic) {
   const rows = [...(mine[0] ? [[`Because you searched “${mine[0]}”`, mine[0], null]] : []), ...L.rows().map(([t, q, use]) => [t, q, use || L.use])];
   const hero = SITE_HEROES[topic.id]?.(topic, L, cats);
   return el("div", { className: `landing site-${topic.id}` },
-    ["movies", "shopping", "reviews", "learn"].includes(topic.id) && areaSearchBar(topic),
     // The site's own search panel, or (Amazon) its picture cards; a plain title only where the site has neither.
-    hero || el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() })),
+    hero || el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() }), filterButton(topic.id, "head-filters")),
     siteCats(topic, L, cats),
     mine.length > 0 && el("div", { className: "landing-recent" }, el("span", { className: "row-label", textContent: "Your searches" }),
       ...mine.slice(0, 6).map(q => el("button", { type: "button", className: "chip", textContent: q, onclick: () => searchFor(q) }))),
@@ -256,8 +255,7 @@ function appStore() {
   return storeLayout([
     ["🏠 Discover", scrollToId("apps-top"), true], ["🏆 Top charts", scrollToId("apps-chart")], ["🎮 Games", () => { location.href = "search.html?tab=games"; }], ["🧩 Alternatives", () => { location.href = "search.html?tab=alternatives"; }],
     "Categories", ...APP_CATEGORIES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
-    el("div", { className: "store-head", id: "apps-top" }, el("h2", { textContent: "Apps and games" }), el("span", { textContent: "Google Play, the App Store, Steam, the Microsoft Store, F-Droid and Flathub" })),
-    areaSearchBar(topicById("apps")),
+    el("div", { className: "store-head", id: "apps-top" }, el("h2", { textContent: "Apps and games" }), el("span", { textContent: "Google Play, the App Store, Steam, the Microsoft Store, F-Droid and Flathub" }), filterButton("apps", "head-filters")),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "apps")),
     storeHero(steam.items.length ? steam : free, "app"),
     storeShelf(helper ? "Top free iPhone apps" : "Popular free apps", free, "app", go("free apps")),
@@ -293,8 +291,7 @@ function gameStore() {
   return storeLayout([
     ["🏠 Discover", scrollToId("games-top"), true], ["🏆 Top charts", scrollToId("games-chart")], ["🏷️ On sale", go("games on sale")], ["🆓 Free to play", go("free games")], ["🤝 Co-op", go("co-op games")],
     "Genres", ...GAME_GENRES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
-    el("div", { className: "store-head", id: "games-top" }, el("h2", { textContent: "Games" }), el("span", { textContent: helper ? "Steam, GOG, Epic, Humble, Google Play and the App Store" : "Prices across Steam, GOG, Epic and Humble" })),
-    areaSearchBar(topicById("games")),
+    el("div", { className: "store-head", id: "games-top" }, el("h2", { textContent: "Games" }), el("span", { textContent: helper ? "Steam, GOG, Epic, Humble, Google Play and the App Store" : "Prices across Steam, GOG, Epic and Humble" }), filterButton("games", "head-filters")),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "games")),
     storeHero(best.items.length ? best : sale, "app game"),
     storeShelf("On sale now", sale, "app game", go("games on sale"), false),
@@ -319,13 +316,13 @@ function altStore() {
   const hero = el("form", { className: "alt-hero", onsubmit(e) { e.preventDefault(); const v = formValues(this); if (v.replaces) heroSubmit("opensource", v); } },
     el("h2", { textContent: "Find a free alternative to any app" }),
     el("p", { textContent: "Open-source replacements for the software you pay for, with licences and where they run." }),
-    el("div", { className: "alt-box" }, heroInput("replaces", "Which app do you want to replace? e.g. Photoshop, Notion, Spotify"), el("button", { type: "submit", className: "alt-btn", textContent: "Find alternatives" })),
+    el("div", { className: "alt-box" }, heroInput("replaces", "Which app do you want to replace? e.g. Photoshop, Notion, Spotify"), filterButton("opensource", "alt-filters"), el("button", { type: "submit", className: "alt-btn", textContent: "Find alternatives" })),
     el("div", { className: "alt-popular" }, el("b", { textContent: "Popular:" }), ...ALT_POPULAR.map(n => el("button", { type: "button", textContent: n, onclick: go(`open source alternative to ${n}`) }))));
   const seenAlt = new Set(), popular = { state: "done", items: ALTERNATIVES.map(e => e.alts[0]).filter(a => !seenAlt.has(a[0]) && seenAlt.add(a[0])).slice(0, 18).map(altTile) };
   const oss = helper ? shelfData("alts:flathub", () => APP_SOURCES.flathub.run("productivity").then(l => l.map(appTile)), redraw) : null;
   const shelves = [["Instead of Photoshop", "Photoshop"], ["Instead of Microsoft Office", "Microsoft Office"], ["Instead of Slack", "Slack"], ["Instead of Notion", "Notion"], ["Instead of Spotify", "Spotify"]]
     .map(([t, p]) => { const row = altShelfFor(p); return row && storeShelf(t, row, "app", go(`open source alternative to ${p}`)); });
-  return el("div", { className: "alt-page" }, hero, areaSearchBar(topicById("opensource")),
+  return el("div", { className: "alt-page" }, hero,
     el("nav", { className: "site-circles", ariaLabel: "Categories" }, ...LANDINGS.opensource.cats.map(([e, label, q]) => el("button", { type: "button", onclick: go(q) }, el("span", { className: "circle", textContent: e, ariaHidden: "true" }), el("span", { textContent: label })))),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "opensource")),
     storeShelf("Popular open-source apps", popular, "app", go("open source apps")),
@@ -491,6 +488,6 @@ function siteCats(topic, L, cats) {
       el("div", { className: "amz-ways-grid" }, ...cats.slice(0, 8).map(([e, label, q]) => el("button", { type: "button", onclick: () => searchFor(q) }, el("span", { textContent: e, ariaHidden: "true" }), label)))));
   }
   const cls = { pills: "site-pills", circles: "site-circles", imdb: "imdb-chips" }[style];
-  return el("nav", { className: cls, ariaLabel: "Categories" }, ...cats.map(([e, label, q]) =>
+  return el("nav", { className: cls, ariaLabel: "Categories" }, style === "imdb" && filterButton(topic.id, "imdb-filters"), ...cats.map(([e, label, q]) =>
     el("button", { type: "button", onclick: () => searchFor(q) }, style === "circles" && el("span", { className: "circle", textContent: e, ariaHidden: "true" }), el("span", { textContent: label }), style === "imdb" && el("span", { textContent: "›", ariaHidden: "true" }))));
 }

@@ -33,19 +33,26 @@ const helperOutdated = () => !!helperInstalled() && versionLess(helperInstalled(
 // What's new between the installed version and the latest.
 const helperWhatsNew = () => Object.entries(HELPER_CHANGES).filter(([v]) => versionLess(helperInstalled(), v)).map(([v, t]) => `${v}: ${t}`);
 
-// A ready-made "update available" banner; pages put it wherever suits them.
+// One small line, not a panel: "Unitex Helper 1.18.0 is ready · Update · ✕". Closing it hides it until the next helper version.
+const helperUpdateKey = "unitex.helperUpdate.dismissed";
+const helperUpdateDismissed = () => { try { return localStorage.getItem(helperUpdateKey) === HELPER_LATEST; } catch { return false; } };
 function helperUpdateBanner() {
   const box = document.createElement("section");
-  box.className = "notice update";
+  box.className = "notice slim update";
   box.setAttribute("role", "status");
-  const b = document.createElement("strong");
-  b.textContent = `Unitex Helper update available: you have ${helperInstalled()}, the latest is ${HELPER_LATEST}.`;
-  const p = document.createElement("p");
-  p.textContent = helperWhatsNew().join(" ") + " Download it again from the install page, extract it over your old folder, then click ↻ reload on Unitex Helper in your browser's extensions page.";
+  const t = document.createElement("span");
+  t.textContent = `Unitex Helper ${HELPER_LATEST} is ready (you have ${helperInstalled()}).`;
   const a = document.createElement("a");
-  a.className = "btn-primary";
   a.href = "install.html";
-  a.textContent = "Update Unitex Helper";
-  box.append(b, p, a);
+  a.textContent = "Update";
+  a.title = helperWhatsNew().join(" ");
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "notice-x";
+  x.setAttribute("aria-label", "Dismiss until the next update");
+  x.title = "Dismiss";
+  x.textContent = "✕";
+  x.onclick = () => { try { localStorage.setItem(helperUpdateKey, HELPER_LATEST); } catch {} box.hidden = true; };
+  box.append(t, a, x);
   return box;
 }

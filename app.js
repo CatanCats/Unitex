@@ -277,7 +277,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && Da
 
 // ---------- helper update banner ----------
 
-if (helperOutdated()) { $("helper-update").append(helperUpdateBanner()); $("helper-update").hidden = false; }
+if (helperOutdated() && !helperUpdateDismissed()) { $("helper-update").append(helperUpdateBanner()); $("helper-update").hidden = false; }
 
 // ---------- start ----------
 

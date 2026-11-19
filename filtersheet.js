@@ -112,13 +112,3 @@ function openFilters(topicId) {
   draw();
   d.showModal();
 }
-
-// A slim search bar for the areas whose front page has no search box of its own (Amazon's, IMDb's, the app stores'): the words, Filters, Search.
-function areaSearchBar(topic) {
-  const form = TOPIC_FORMS[topic.id], key = form.fields.what ? "what" : form.fields.replaces ? "replaces" : null;
-  if (!key) return null;
-  const v = currentForm(topic.id);
-  const inp = el("input", { className: "hero-input", name: key, type: "search", autocomplete: "off", placeholder: form.fields[key].placeholder || "Search…", ariaLabel: "Search", value: v[key] || "" });
-  return el("form", { className: "area-sbar", onsubmit(e) { e.preventDefault(); heroSubmit(topic.id, { ...currentForm(topic.id), [key]: inp.value.trim() }); } },
-    el("span", { className: "area-sbar-icon", ariaHidden: "true", textContent: "⌕" }), inp, filterButton(topic.id, "in-bar"), el("button", { type: "submit", className: "area-sbar-go", textContent: "Search" }));
-}
