@@ -244,7 +244,7 @@ function openSavedDrawer() {
 var nanoReady;
 // Only when Gemini Nano is the chosen AI: nothing downloads for people who didn't pick it.
 async function aiWarmUp() {
-  if (!navigator.userActivation?.isActive || nanoReady || typeof aiEnabled === "function" && !aiEnabled() || !store.get("unitex.ai.nano", false)) return;
+  if (!navigator.userActivation?.isActive || nanoReady || typeof aiEnabled === "function" && !aiEnabled() || settings.overview !== "nano") return;
   for (const api of [globalThis.LanguageModel, globalThis.Summarizer].filter(Boolean)) {
     const opts = api === globalThis.Summarizer ? { outputLanguage: "en" } : { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
     const a = await api.availability(opts).catch(() => "unavailable");
@@ -258,9 +258,9 @@ for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, aiWarmUp, { ca
 // ---------- settings ----------
 // Stored only in this browser. Keys are sent only to the company they belong to, straight from the browser.
 
-const SETTINGS_DEFAULT = { ai: true };
+const SETTINGS_DEFAULT = { ai: true, overview: "google" };
 const settings = { ...SETTINGS_DEFAULT, ...store.get("unitex.settings", {}) };
-delete settings.keys; delete settings.models; delete settings.overview; // old AI choices: there is one AI now
+delete settings.keys; delete settings.models; // old online-AI keys are gone
 const saveSettings = () => store.set("unitex.settings", settings);
 const aiEnabled = () => settings.ai !== false;
 
@@ -294,7 +294,8 @@ function openSettings(startTab = "appearance") {
     ],
     ai: () => [
       row("Show AI", "The AI overview on the All tab and the AI tab.", switchEl(draft.ai !== false, v => { draft.ai = v; })),
-      el("p", { className: "sd-note" }, "Unitex AI uses Google's AI answer, read through Unitex Helper. No account or sign-in is needed. Without the helper it uses an AI that is already on this computer (Chrome's built-in Gemini Nano), when there is one."),
+      row("AI used", "Google's AI answer needs no sign-in. The ones on this computer download once (about 1–2 GB) and run in your browser.", typeof aiSelect === "function" ? aiSelect(draft.overview || "google", v => { draft.overview = v; }) : null),
+      el("p", { className: "sd-note" }, "The answer says which AI wrote it. If the one you chose has no answer, Unitex tries the other way and tells you."),
     ],
     rewards: () => {
       const level = row("Rewards level", "How many searches a day count before Unitex stops opening Bing in front.", select([["member", "Member: 10 searches a day"], ["gold", "Silver or Gold: 30 a day"], ["off", "Off: never stop"]], draft.rewardsLevel || "member", v => { draft.rewardsLevel = v; }, "Microsoft Rewards level"));

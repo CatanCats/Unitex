@@ -1,5 +1,5 @@
 // Unitex AI: the overview on the All tab and the AI tab. There is one AI.
-//  - With Unitex Helper it is Google's own AI answer (the AI Overview, or Google's AI Mode when there is no overview),
+//  - You pick the AI in the overview or in Settings. By default it is Google's own AI answer (the AI Overview, or Google's AI Mode when there is no overview),
 //    read from Google's results page: no account, no sign-in, nothing to pick.
 //  - Without the helper, an AI that already runs on this computer (Gemini Nano in Chrome, or a model downloaded before)
 //    writes the answer from Unitex's own search results and cites them as [1], [2]…
@@ -244,16 +244,38 @@ const progressBar = () => {
   return { box: el("div", { className: "ai-progress", hidden: true }, label, bar), set(v, text) { bar.value = v || 0; label.textContent = text ? `${text}… ${v ? Math.round(v * 100) + "%" : ""}` : ""; this.box.hidden = !text; } };
 };
 
-// ---------- the one AI ----------
+// ---------- choosing the AI ----------
+// Google's AI answer (through Unitex Helper, no sign-in) or an AI that runs on this computer. The choice is kept in Settings and
+// shown on every answer, which also says which one wrote it (and why, when it isn't the one chosen).
 
-// The ways Unitex AI can answer, best first: Google's AI answer (Unitex Helper), then a model already on this computer.
-async function aiChain() {
-  const { tries, avail } = aiEnabled() ? await pickModel() : { tries: [], avail: {} };
-  // Models on this computer join in only once they are ready: a big download never starts by itself.
-  const local = tries.filter(m => avail[m]?.state === "ready");
-  return [...(helperVersion() ? ["google"] : []), ...local];
+const AI_GOOGLE = { id: "google", name: "Google AI Overview", note: "through Unitex Helper, no sign-in" };
+const aiName = id => id === "google" ? AI_GOOGLE.name : aiModel(id)?.name || "AI";
+const chosenAi = () => (settings.overview === "google" || aiModel(settings.overview)) ? settings.overview : "google";
+
+// The AI picker: Google's answer, then the AIs on this computer, each with what it needs.
+function aiSelect(value, onchange, avail = {}) {
+  const local = AI_MODELS.map(m => {
+    const a = avail[m.id], off = a?.state === "no";
+    return el("option", { value: m.id, selected: m.id === value, disabled: off, title: a?.why || "",
+      textContent: `${m.name} · ${off ? "not available here" : a?.state === "ready" ? "ready" : m.note + (m.kind === "web" ? ", downloads once" : "")}` });
+  });
+  const s = el("select", { className: "f-input", ariaLabel: "AI" },
+    el("optgroup", { label: "Online, no sign-in" }, el("option", { value: "google", selected: value === "google", textContent: `${AI_GOOGLE.name} · ${AI_GOOGLE.note}${helperVersion() ? "" : " (needs the helper)"}` })),
+    el("optgroup", { label: "On this computer (private)" }, ...local));
+  s.onchange = () => onchange(s.value);
+  return s;
 }
-const aiSourceName = id => id === "google" ? "Google's AI answer" : aiModel(id)?.name || "AI";
+
+// The order to try: the chosen AI first, then the other way as a back-up (Google ↔ one already ready on this computer).
+async function aiChain(first = chosenAi()) {
+  if (!aiEnabled()) return { chain: [], avail: {} };
+  const { tries, avail } = await pickModel();
+  const ready = tries.filter(m => avail[m]?.state === "ready");
+  const google = helperVersion() ? ["google"] : [];
+  // A model chosen by name is used even when it still has to download (with a progress bar); back-ups only when ready.
+  const lead = first === "google" ? google : (avail[first] && avail[first].state !== "no" ? [first] : []);
+  return { chain: [...new Set([...lead, ...google, ...ready])], avail };
+}
 
 // Runs one way of answering. Returns the text.
 async function runAi(id, q, messages, onText, onProgress) {
@@ -263,12 +285,18 @@ async function runAi(id, q, messages, onText, onProgress) {
   return aiGenerate(m, messages, onText, onProgress);
 }
 
+// "By Llama 3.2 1B, on this computer, from the results below" / "By Google AI Overview…". When the chosen AI didn't answer, it says so.
+function aiByline(used, chosen, why) {
+  const where = used === "google" ? "from Google through Unitex Helper" : "running on this computer, from the results below";
+  return `By ${aiName(used)}, ${where}${used !== chosen ? ` · ${aiName(chosen)} ${why || "had no answer"}, so this is the back-up` : ""} · check important facts · `;
+}
+
 // ---------- AI overview on the All tab ----------
 
 // Shown as soon as a search starts, so it's clear the overview is coming.
 function aiOverviewStart() {
   if (cur().kind !== "web" || !aiEnabled()) return;
-  fill($("ai-overview"), el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("span", { className: "hint", textContent: "Generating…" })),
+  fill($("ai-overview"), el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("span", { className: "hint", textContent: `Generating with ${aiName(chosenAi())}…` })),
     el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: "Generating…" })));
   $("ai-overview").hidden = false;
 }
@@ -278,36 +306,39 @@ async function renderAiOverview(q, results) {
   const id = runId;
   if (!q || cur().kind !== "web" || !aiEnabled()) { box.hidden = true; return; }
   const ctx = aiContext(results);
-  const body = el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: "Generating…" }));
+  const chosen = chosenAi();
+  const body = el("div", { className: "ai-body" }, el("p", { className: "hint ai-gen", textContent: `Generating with ${aiName(chosen)}…` }));
   const bar = progressBar();
   const note = el("p", { className: "hint ai-note" });
+  const { chain, avail } = await aiChain(chosen);
+  if (id !== runId) return;
+  const pick = aiSelect(chosen, v => { settings.overview = v; saveSettings(); renderAiOverview(q, results); }, avail);
   // Folded to a few lines with "Show more", like the engines' AI overviews.
   const expand = el("button", { type: "button", className: "ai-expand", textContent: "Show more ▾", onclick() { box.classList.toggle("open"); this.textContent = box.classList.contains("open") ? "Show less ▴" : "Show more ▾"; } });
   expand.hidden = true; // only once there is a long answer
   box.classList.remove("open");
-  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" })), bar.box, body, expand, note);
+  fill(box, el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "AI overview" }), el("label", { className: "ai-model" }, "by ", pick)), bar.box, body, expand, note);
   box.hidden = false;
 
-  const chain = await aiChain();
-  if (id !== runId) return;
-  const failed = [];
+  let why = "";
   for (const pid of chain) {
+    fill(body, el("p", { className: "hint ai-gen", textContent: `Generating with ${aiName(pid)}…` }));
     try {
       const text = await runAi(pid, q, [systemPrompt(q, ctx), { role: "user", content: q }], t => { if (id === runId) { fill(body, aiRich(t, ctx)); expand.hidden = t.length < 350; } }, (v, t) => bar.set(v, t));
       if (id !== runId) return;
       if (!text.trim()) throw new Error("wrote nothing");
       bar.set(0, "");
-      fill(note, pid === "google" ? "From Google's AI · " : "Written on this computer from the results below · ", "check important facts · ",
-        el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } }));
+      pick.value = pid;
+      fill(note, aiByline(pid, chosen, why), el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } }));
       return;
     } catch (e) {
       if (id !== runId) return;
       bar.set(0, "");
-      failed.push({ id: pid, why: e.message });
+      if (pid === chosen) why = /needs Unitex Helper/.test(e.message) ? "needs Unitex Helper" : "couldn't answer";
+      console.info("AI overview:", `${aiName(pid)}: ${e.message}`);
     }
   }
   // Like the engines: when there's no overview, there's no overview box.
-  if (failed.length) console.info("AI overview:", failed.map(f => `${aiSourceName(f.id)}: ${f.why}`).join(" · "));
   box.hidden = true;
 }
 
@@ -316,18 +347,19 @@ async function renderAiOverview(q, results) {
 let aiThread = { q: "", turns: [] };
 async function renderAiTab(q, results) {
   const box = $("ai-chat");
-  const id = runId;
   const ctx = aiContext(results, 10);
   if (aiThread.q !== q) aiThread = { q, turns: [] };
   const thread = el("div", { className: "ai-thread" });
   const bar = progressBar();
   const input = el("input", { type: "text", placeholder: "Ask a follow-up…", ariaLabel: "Ask a follow-up" });
   const form = el("form", { className: "ai-ask" }, input, el("button", { type: "submit", className: "btn-primary", textContent: "Ask" }));
+  const { avail } = await pickModel();
+  const sel = aiSelect(chosenAi(), v => { settings.overview = v; saveSettings(); }, avail);
   let busy = false;
 
   const turnEl = t => t.role === "user"
     ? el("div", { className: "ai-msg user" }, el("p", { textContent: t.content }))
-    : el("div", { className: "ai-msg bot" }, el("div", { className: "ai-who" }, el("span", { className: "ai-badge", textContent: "AI" }), "Unitex AI"), t.el || aiRich(t.content, ctx));
+    : el("div", { className: "ai-msg bot" }, el("div", { className: "ai-who" }, el("span", { className: "ai-badge", textContent: "AI" }), t.model || "AI"), t.el || aiRich(t.content, ctx));
   const draw = () => fill(thread, ...aiThread.turns.map(turnEl));
 
   // A follow-up is asked as its own question: a short one keeps the topic ("price?" → "<search> price?").
@@ -335,23 +367,28 @@ async function renderAiTab(q, results) {
   async function ask(question) {
     if (busy) return;
     busy = true;
+    const chosen = chosenAi();
     const history = aiThread.turns.filter(t => t.content).map(t => ({ role: t.role, content: t.content }));
     if (!aiThread.turns.some(t => t.role === "user" && t.content === question)) aiThread.turns.push({ role: "user", content: question });
-    const answer = { role: "assistant", question, content: "", el: el("p", { className: "hint ai-gen", textContent: "Generating…" }) };
+    const answer = { role: "assistant", question, model: aiName(chosen), content: "", el: el("p", { className: "hint ai-gen", textContent: `Generating with ${aiName(chosen)}…` }) };
     aiThread.turns.push(answer);
     draw();
-    const chain = await aiChain();
-    let lastWhy = "";
+    const { chain } = await aiChain(chosen);
     for (const pid of chain) {
       try {
+        answer.model = aiName(pid) + (pid !== chosen ? ` (back-up: ${aiName(chosen)} had no answer)` : "");
+        answer.el = el("p", { className: "hint ai-gen", textContent: `Generating with ${aiName(pid)}…` }); draw();
         answer.content = await runAi(pid, askText(question), [systemPrompt(q, ctx), ...history, { role: "user", content: question }], t => { answer.el = aiRich(t, ctx); draw(); }, (v, t) => bar.set(v, t));
         if (!answer.content.trim()) throw new Error("wrote nothing");
         answer.el = null;
         break;
-      } catch (e) { answer.content = ""; lastWhy = e.message; }
+      } catch (e) { answer.content = ""; }
     }
-    if (!answer.content) answer.el = el("p", { className: "hint", textContent: helperVersion() ? "No answer could be read this time. Try asking it another way." : "Unitex AI needs Unitex Helper to read Google's AI answers (or Chrome's built-in AI)." }, !helperVersion() && " ",
-      !helperVersion() && el("a", { href: "install.html", textContent: "Get Unitex Helper" }));
+    if (!answer.content) {
+      answer.model = aiName(chosen);
+      answer.el = el("p", { className: "hint" }, helperVersion() ? "No answer could be read this time. Try asking it another way, or pick another AI above." : "Google's AI needs Unitex Helper. Pick an AI on this computer above, or ",
+        !helperVersion() && el("a", { href: "install.html", textContent: "get Unitex Helper" }));
+    }
     bar.set(0, "");
     busy = false;
     draw();
@@ -359,8 +396,8 @@ async function renderAiTab(q, results) {
   form.onsubmit = e => { e.preventDefault(); const v = input.value.trim(); if (v) { input.value = ""; ask(v); } };
 
   fill(box,
-    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" })),
-    el("p", { className: "hint", textContent: "Answers come from Google's AI, read through Unitex Helper, or from Unitex's search results below. Check important facts." }),
+    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "AI ", sel)),
+    el("p", { className: "hint", textContent: "Google's AI is read through Unitex Helper; AIs on this computer write from the search results below and keep everything in your browser. Check important facts." }),
     bar.box, thread, form,
     ctx.length && el("details", { className: "ai-sources" }, el("summary", { textContent: `Sources the AI reads (${ctx.length})` }),
       el("ol", {}, ...ctx.map(c => el("li", {}, el("a", { href: c.url, rel: "noopener", textContent: c.title }), el("span", { className: "hint", textContent: " · " + c.site }))))));
