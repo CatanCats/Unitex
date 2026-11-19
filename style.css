@@ -2132,3 +2132,16 @@ body.landing-on .shop-note { display: none; }
 .ad-posters, .ad-wides, .ad-colls { gap: 0; }
 .ad-story-app > span:not(.ad-get) { display: grid; min-width: 0; flex: 1; }
 .ad-story-app > .ad-get { display: inline-block; flex: none; }
+
+/* start pages have no tab bar (the home page's tiles are how you move between areas); the tiles are one row across the whole screen */
+body.landing-on .rnav { display: none; }
+@media (min-width: 900px) {
+  #topics.quick, .start-tiles.quick { flex-wrap: nowrap; justify-content: center; gap: 12px; overflow: visible; row-gap: 0; padding: 4px 0 8px;
+    width: min(1640px, calc(100vw - 64px)); position: relative; left: 50%; transform: translateX(-50%); margin-left: 0; margin-right: 0; }
+  #topics .area-card, .start-tiles .area-card { flex: 1 1 0; min-width: 0; width: auto; max-width: 170px; }
+  #topics .area-art, .start-tiles .area-card .area-art { width: 100%; height: auto; aspect-ratio: 132 / 160; }
+  #topics .area-emoji, .start-tiles .area-emoji { font-size: clamp(2.2rem, 4.1vw, 4.6rem); }
+  #topics .area-name, .start-tiles .area-name { font-size: clamp(.68rem, .85vw, .85rem); text-align: center; }
+  body.tiles-small #topics .area-card, body.tiles-small .start-tiles .area-card { max-width: 110px; }
+}
+@media (min-width: 900px) { .start-tiles .area-card { max-width: 150px; } .start-tiles .area-emoji { font-size: clamp(3rem, 5.2vw, 5rem); } }
