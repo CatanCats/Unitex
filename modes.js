@@ -488,6 +488,8 @@ function renderCard(c, topic) {
   const url = safeUrl(c.url);
   if (!url) return null;
   if (k.kind === "app") return renderAppCard(c, topic, url);
+  // Each site's own result layout (cards.js): realestate.com.au's listing, carsales' row, SEEK's job, Amazon's tile…
+  if (typeof siteCard === "function" && SITE_CARD_KINDS.has(k.kind)) { const sc = siteCard(c, topic, url); if (sc) return sc; }
   const shot = tidyImage(c.image, c.url);
   const img = shot ? el("img", { src: shot, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } })
     : k.kind === "job" && k.company ? el("span", { className: "job-logo", textContent: k.company.trim().charAt(0).toUpperCase() }) : null;
@@ -836,6 +838,7 @@ function showCards(results, extra = []) {
   lastCards = oneEach([...extra.filter(c => extraRelevant(c)), ...cards.filter(c => cardRelevant(c, 0.5))]);
   cardLimit = CARD_STEP;
   drawCards();
+  if (typeof enrichImages === "function") enrichImages(); // cards that came without a picture get their page's own
   return rest;
 }
 

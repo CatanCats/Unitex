@@ -24,32 +24,26 @@ function applyLook() {
 }
 const saveLook = () => { store.set("unitex.look", look); applyLook(); if (typeof drawCards === "function" && !$("cards")?.hidden) drawCards(); };
 
-function openLook() {
-  let d = $("look-dialog");
-  if (!d) {
-    d = el("dialog", { id: "look-dialog", className: "viewer settings look-dialog" });
-    document.body.append(d);
-    d.addEventListener("click", e => { if (e.target === d) d.close(); });
-  }
-  const seg = (key, label, options, hint) => el("div", { className: "look-field" }, el("b", { textContent: label }), hint && el("small", { textContent: hint }),
+// The appearance controls, drawn inside Settings › Appearance.
+function lookPanel() {
+  const wrap = el("div", { className: "look-panel" });
+  const seg = (key, label, options, hint) => el("div", { className: "sd-row stack" }, el("div", { className: "sd-row-text" }, el("b", { textContent: label }), hint && el("small", { textContent: hint })),
     el("div", { className: "segmented-mini" }, ...options.map(([val, t]) => el("button", { type: "button", textContent: t, className: look[key] === val ? "on" : "", onclick() { look[key] = val; if (key === "layout") { try { for (const k of Object.keys(localStorage)) if (k.startsWith("unitex.view.")) localStorage.removeItem(k); } catch {} } saveLook(); draw(); } }))));
-  const draw = () => d.replaceChildren(
-    el("div", { className: "look-head" }, el("h2", { textContent: "Make Unitex yours" }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
-    el("div", { className: "look-body" },
-      el("div", { className: "look-field" }, el("b", { textContent: "Colour" }),
-        el("div", { className: "look-swatches" }, ...LOOK_ACCENTS.map(([hex, name]) => el("button", { type: "button", className: "look-swatch" + ((look.accent || "#5b5bd6") === hex ? " on" : ""), title: name, ariaLabel: name, style: `background:${hex}`, onclick() { look.accent = hex === "#5b5bd6" ? "" : hex; saveLook(); draw(); } })),
-          el("label", { className: "look-swatch custom", title: "Your own colour" }, "+", el("input", { type: "color", value: look.accent || "#5b5bd6", oninput() { look.accent = this.value; saveLook(); } })))),
-      seg("style", "Areas look like", [["unitex", "Unitex"], ["site", "The sites they read"]], "Houses, Jobs, Cars… in Unitex's colours, or in each site's own colours."),
-      seg("radius", "Corners", [["sharp", "Sharp"], ["soft", "Soft"], ["round", "Round"]]),
-      seg("density", "Spacing", [["comfy", "Comfortable"], ["compact", "Compact"]]),
-      seg("photos", "Photo size", [["small", "Small"], ["normal", "Medium"], ["large", "Large"]]),
-      seg("layout", "Results as", [["", "Each area's best"], ["grid", "Grid"], ["list", "List"]]),
-      seg("tiles", "Front-page tiles", [["big", "Big"], ["small", "Small"]])),
-    el("div", { className: "look-foot" }, el("button", { type: "button", className: "btn-ghost", textContent: "Reset", onclick() { Object.assign(look, LOOK_DEFAULT); saveLook(); draw(); } }),
-      el("button", { type: "button", className: "btn-primary", textContent: "Done", onclick: () => d.close() })));
+  const draw = () => wrap.replaceChildren(
+    el("div", { className: "sd-row stack" }, el("div", { className: "sd-row-text" }, el("b", { textContent: "Colour" }), el("small", { textContent: "Buttons, tabs, hero panels and highlights." })),
+      el("div", { className: "look-swatches" }, ...LOOK_ACCENTS.map(([hex, name]) => el("button", { type: "button", className: "look-swatch" + ((look.accent || "#5b5bd6") === hex ? " on" : ""), title: name, ariaLabel: name, style: `background:${hex}`, onclick() { look.accent = hex === "#5b5bd6" ? "" : hex; saveLook(); draw(); } })),
+        el("label", { className: "look-swatch custom", title: "Your own colour" }, "+", el("input", { type: "color", value: look.accent || "#5b5bd6", oninput() { look.accent = this.value; saveLook(); } })))),
+    seg("style", "Areas look like", [["unitex", "Unitex"], ["site", "The sites they read"]], "Houses, Jobs, Cars… in Unitex's colours, or in each site's own colours."),
+    seg("radius", "Corners", [["sharp", "Sharp"], ["soft", "Soft"], ["round", "Round"]]),
+    seg("density", "Spacing", [["comfy", "Comfortable"], ["compact", "Compact"]]),
+    seg("photos", "Photo size", [["small", "Small"], ["normal", "Medium"], ["large", "Large"]]),
+    seg("layout", "Results as", [["", "Each area's best"], ["grid", "Grid"], ["list", "List"]]),
+    seg("tiles", "Front-page tiles", [["big", "Big"], ["small", "Small"]]),
+    el("div", { className: "sd-row" }, el("div", { className: "sd-row-text" }, el("b", { textContent: "Reset appearance" })), el("button", { type: "button", className: "btn-ghost", textContent: "Reset", onclick() { Object.assign(look, LOOK_DEFAULT); saveLook(); draw(); } })));
   draw();
-  d.showModal();
+  return wrap;
 }
+const openLook = () => openSettings("appearance");
 
 applyLook();
 $("theme")?.before(el("button", { id: "look-btn", type: "button", className: "icon-btn", ariaLabel: "Make Unitex yours", title: "Colours and layout", textContent: "🎨", onclick: openLook }));

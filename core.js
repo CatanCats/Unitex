@@ -264,53 +264,72 @@ delete settings.keys; delete settings.models; delete settings.overview; // old A
 const saveSettings = () => store.set("unitex.settings", settings);
 const aiEnabled = () => settings.ai !== false;
 
-function openSettings() {
+// Settings: one dialog with a menu down the side, like an app's settings. Appearance changes apply at once; the rest is kept when you press Save.
+function openSettings(startTab = "appearance") {
   let d = $("settings");
   if (!d) {
-    d = el("dialog", { id: "settings", className: "viewer settings" });
+    d = el("dialog", { id: "settings", className: "viewer settings settings-dialog" });
     d.addEventListener("click", e => { if (e.target === d) d.close(); });
     document.body.append(d);
   }
   const draft = JSON.parse(JSON.stringify(settings));
-  const region = el("select", { className: "f-input", ariaLabel: "Country" }, ...REGIONS.map(r => el("option", { value: r.id, textContent: r.name, selected: r.id === regionId })));
-  const theme = el("select", { className: "f-input", ariaLabel: "Theme" }, ...[["", "Match my device"], ["light", "Light"], ["dark", "Dark"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (store.get("unitex.theme") || "") === v })));
-  const cardSize = el("select", { className: "f-input", ariaLabel: "Card size" }, ...[["compact", "Small: see more at once"], ["large", "Large: bigger photos"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (draft.cards || "compact") === v })));
-  cardSize.onchange = () => { draft.cards = cardSize.value; };
-  const aiBox = el("input", { type: "checkbox", checked: draft.ai !== false, onchange() { draft.ai = this.checked; } });
-  fill(d,
-    el("div", { className: "viewer-head" }, el("h2", { textContent: "Settings" }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
-    el("div", { className: "set-body" },
-      el("h3", { textContent: "AI" }),
-      el("label", { className: "f-check set-check" }, aiBox, " Show AI (the AI overview and the AI tab)"),
-      el("p", { className: "hint" }, "Unitex AI uses Google's AI answer, read through Unitex Helper. No account or sign-in is needed. Without the helper it uses an AI that is already on this computer (Chrome's built-in Gemini Nano), when there is one."),
-      el("h3", { textContent: "Search" }),
-      el("label", { className: "set-field" }, el("span", { textContent: "Country (for local stores and sites)" }), region),
-      el("label", { className: "set-field" }, el("span", { textContent: "Theme" }), theme),
-      el("label", { className: "set-field" }, el("span", { textContent: "Cards (Shopping, Houses, Jobs…)" }), cardSize),
-      // One switch: off, Bing is read signed out; on, Bing is read with your account and your searches earn Rewards.
-      (() => {
-        const level = el("select", { className: "f-input", ariaLabel: "Microsoft Rewards level" },
-          ...[["member", "Member: stop after 10 searches a day"], ["gold", "Silver or Gold: stop after 30 searches a day"], ["off", "Off: never stop"]].map(([v, t]) => el("option", { value: v, textContent: t, selected: (draft.rewardsLevel || "member") === v })));
-        level.onchange = () => { draft.rewardsLevel = level.value; };
-        const levelField = el("label", { className: "set-field", hidden: !draft.bingRewards }, el("span", { textContent: "Rewards level" }), level);
-        return el("div", { className: "set-group" },
-          el("label", { className: "f-check set-check" }, el("input", { type: "checkbox", checked: !!draft.bingRewards, onchange() { draft.bingRewards = this.checked; levelField.hidden = !this.checked; } }),
-            " Use my Microsoft account on Bing and earn Rewards points"),
-          el("p", { className: "hint" }, "Off: Bing is read signed out, so it doesn't use up your Rewards searches. On: Bing is read with your account, and each search you make opens on bing.com in front for a few seconds so it earns points, until your level's daily searches are done. Be signed in to Bing in this browser; needs Unitex Helper 1.15.0. Microsoft decides what earns points."),
-          levelField);
-      })(),
-      el("button", { type: "button", className: "chip", textContent: "Switch all sources back on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All sources are on ✓"; } }),
-      el("p", { className: "hint" }, document.documentElement.dataset.unitexHelper ? `Unitex Helper ${document.documentElement.dataset.unitexHelper} is installed. ` : "Unitex Helper isn't installed, so Google, Bing, stores and engine AI overviews can't be read. ",
-        el("a", { href: "install.html", textContent: document.documentElement.dataset.unitexHelper ? "Update or reinstall" : "Install Unitex Helper" }))),
-    el("div", { className: "set-actions" },
-      el("button", { type: "button", className: "btn-ghost", textContent: "Cancel", onclick: () => d.close() }),
-      el("button", { type: "button", className: "btn-primary", textContent: "Save", onclick() {
-        Object.assign(settings, draft);
-        saveSettings();
-        setRegion(region.value);
-        if (theme.value) store.set("unitex.theme", theme.value); else try { localStorage.removeItem("unitex.theme"); } catch {}
-        location.reload();
-      } })));
+  let tabNow = startTab;
+  const helperV = document.documentElement.dataset.unitexHelper;
+
+  const switchEl = (checked, onchange) => el("label", { className: "sd-switch" }, el("input", { type: "checkbox", checked, onchange() { onchange(this.checked); } }), el("span", { className: "sd-knob" }));
+  const row = (title, hint, control) => el("div", { className: "sd-row" }, el("div", { className: "sd-row-text" }, el("b", { textContent: title }), hint && el("small", { textContent: hint })), control);
+  const select = (options, value, onchange, label) => { const s = el("select", { className: "f-input sd-select", ariaLabel: label }, ...options.map(([v, t]) => el("option", { value: v, textContent: t, selected: v === value }))); s.onchange = () => onchange(s.value); return s; };
+
+  const panels = {
+    appearance: () => [
+      row("Theme", "Light, dark, or follow your device.", select([["", "Match my device"], ["light", "Light"], ["dark", "Dark"]], store.get("unitex.theme") || "", v => {
+        if (v) { store.set("unitex.theme", v); document.documentElement.dataset.theme = v; } else { try { localStorage.removeItem("unitex.theme"); } catch {} delete document.documentElement.dataset.theme; }
+      }, "Theme")),
+      typeof lookPanel === "function" ? lookPanel() : null,
+    ],
+    search: () => [
+      row("Country", "For local stores, jobs, property and events.", select(REGIONS.map(r => [r.id, r.name]), regionId, v => { draft.region = v; }, "Country")),
+      row("Result cards", "Shopping, Houses, Jobs and the other areas.", select([["compact", "Small: see more at once"], ["large", "Large: bigger photos"]], draft.cards || "compact", v => { draft.cards = v; }, "Card size")),
+      row("Sources", "Switch back on any search engine or site you turned off.", el("button", { type: "button", className: "btn-ghost", textContent: "Switch all on", onclick() { store.set("unitex.off", []); store.set("unitex.offsites", []); this.textContent = "All on ✓"; } })),
+    ],
+    ai: () => [
+      row("Show AI", "The AI overview on the All tab and the AI tab.", switchEl(draft.ai !== false, v => { draft.ai = v; })),
+      el("p", { className: "sd-note" }, "Unitex AI uses Google's AI answer, read through Unitex Helper. No account or sign-in is needed. Without the helper it uses an AI that is already on this computer (Chrome's built-in Gemini Nano), when there is one."),
+    ],
+    rewards: () => {
+      const level = row("Rewards level", "How many searches a day count before Unitex stops opening Bing in front.", select([["member", "Member: 10 searches a day"], ["gold", "Silver or Gold: 30 a day"], ["off", "Off: never stop"]], draft.rewardsLevel || "member", v => { draft.rewardsLevel = v; }, "Microsoft Rewards level"));
+      level.hidden = !draft.bingRewards;
+      return [
+        row("Earn Microsoft Rewards points", "Reads Bing with your account and opens each search on bing.com for a few seconds so it counts. Be signed in to Bing; needs Unitex Helper 1.15.0.", switchEl(!!draft.bingRewards, v => { draft.bingRewards = v; level.hidden = !v; })),
+        level,
+        el("p", { className: "sd-note" }, "Off: Bing is read signed out, so it doesn't use up your Rewards searches. Microsoft decides what earns points."),
+      ];
+    },
+    helper: () => [
+      el("div", { className: "sd-card" }, el("b", { textContent: helperV ? `Unitex Helper ${helperV} is installed` : "Unitex Helper isn't installed" }),
+        el("p", { textContent: helperV ? "Google, Bing, stores, jobs, property and Google's AI answers can be read." : "Without it, Google, Bing, stores, engine AI answers and many sites can't be read." }),
+        el("a", { className: "btn-primary", href: "install.html", textContent: helperV ? "Update or reinstall" : "Install Unitex Helper" })),
+      row("What can my browser read?", "Checks which sources work in this browser.", el("a", { className: "btn-ghost", href: "test.html", textContent: "Run the check" })),
+    ],
+  };
+  const TABS_ = [["appearance", "🎨", "Appearance"], ["search", "🔎", "Search"], ["ai", "✨", "AI"], ["rewards", "🏆", "Microsoft Rewards"], ["helper", "🧩", "Unitex Helper"]];
+  const draw = () => {
+    fill(d,
+      el("div", { className: "sd-head" }, el("h2", { textContent: "Settings" }), el("button", { type: "button", className: "icon-btn", ariaLabel: "Close", textContent: "✕", onclick: () => d.close() })),
+      el("div", { className: "sd-main" },
+        el("nav", { className: "sd-nav", ariaLabel: "Settings sections" }, ...TABS_.map(([id, icon, name]) => el("button", { type: "button", className: id === tabNow ? "on" : "", onclick: () => { tabNow = id; draw(); } }, el("span", { ariaHidden: "true", textContent: icon }), name))),
+        el("div", { className: "sd-panel" }, el("h3", { textContent: TABS_.find(t => t[0] === tabNow)[2] }), ...panels[tabNow]().filter(Boolean))),
+      el("div", { className: "sd-foot" },
+        el("button", { type: "button", className: "btn-ghost", textContent: "Cancel", onclick: () => d.close() }),
+        el("button", { type: "button", className: "btn-primary", textContent: "Save", onclick() {
+          const { region, ...rest } = draft;
+          Object.assign(settings, rest);
+          saveSettings();
+          if (region && region !== regionId) setRegion(region);
+          location.reload();
+        } })));
+  };
+  draw();
   if (!d.open) d.showModal();
 }
 
@@ -318,5 +337,5 @@ function openSettings() {
 (() => {
   const theme = document.getElementById("theme");
   if (!theme) return;
-  theme.before(el("button", { id: "settings-btn", type: "button", className: "icon-btn", ariaLabel: "Settings", title: "Settings", textContent: "⚙", onclick: openSettings }));
+  theme.before(el("button", { id: "settings-btn", type: "button", className: "icon-btn", ariaLabel: "Settings", title: "Settings", textContent: "⚙", onclick: () => openSettings("search") }));
 })();
