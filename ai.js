@@ -379,64 +379,136 @@ async function renderAiOverview(q, results) {
 }
 
 // ---------- the AI tab ----------
+// A chat, like ChatGPT's and Perplexity's: your messages and the AI's answers, the pages an answer can lean on as numbered source
+// cards, a bar under each answer (copy, regenerate, open in ChatGPT, share as text), suggested follow-ups, an answer style
+// (balanced, concise, detailed, simple), Stop while it writes, New chat, and a History of your last chats kept in this browser.
 
-let aiThread = { q: "", turns: [] };
+const AI_CHATS_KEY = "unitex.ai.chats";
+const AI_STYLES = { balanced: ["Balanced", "", ""], concise: ["Concise", "briefly", "Answer in at most three short sentences."], detailed: ["Detailed", "in detail", "Give a thorough answer with short sections and examples."], simple: ["Simple", "explained simply", "Explain it simply, as to a beginner, without jargon."] };
+const newChatId = () => String(Date.now()) + Math.random().toString(36).slice(2, 6);
+const savedChats = () => store.get(AI_CHATS_KEY, []);
+let aiThread = { id: newChatId(), q: "", turns: [] };
+function saveThread() {
+  const turns = aiThread.turns.filter(t => t.content).map(({ role, content, model }) => ({ role, content, model }));
+  if (!turns.length) return;
+  const rest = savedChats().filter(c => c.id !== aiThread.id);
+  store.set(AI_CHATS_KEY, [{ id: aiThread.id, q: aiThread.q, t: Date.now(), turns }, ...rest].slice(0, 20));
+}
+const chatText = turns => turns.map(t => `${t.role === "user" ? "You" : "Unitex AI"}: ${t.content}`).join("\n\n");
+const FOLLOW_UPS = ["Explain it simply", "Give me examples", "What are the pros and cons?", "Summarise that in 3 bullet points", "What should I watch out for?", "Compare it with alternatives"];
+
 async function renderAiTab(q, results) {
   const box = $("ai-chat");
   const ctx = aiContext(results, 10);
-  if (aiThread.q !== q) aiThread = { q, turns: [] };
-  const thread = el("div", { className: "ai-thread" });
-  const bar = progressBar();
-  const input = el("input", { type: "text", placeholder: "Ask a follow-up…", ariaLabel: "Ask a follow-up" });
-  const form = el("form", { className: "ai-ask" }, input, el("button", { type: "submit", className: "btn-primary", textContent: "Ask" }));
+  if (aiThread.q !== q) aiThread = { id: newChatId(), q, turns: [] };
   const { avail } = await pickModel();
+  let busy = false, cancelled = false, historyOpen = false, style = store.get("unitex.ai.style", "balanced");
+  if (!AI_STYLES[style]) style = "balanced";
+
+  const thread = el("div", { className: "aic-thread", ariaLive: "polite" });
+  const bar = progressBar();
   const sel = aiSelect(chosenAi(), v => { settings.overview = v; saveSettings(); }, avail);
-  let busy = false;
+  const styleSel = el("select", { className: "f-input", ariaLabel: "Answer style" }, ...Object.entries(AI_STYLES).map(([id, [name]]) => el("option", { value: id, textContent: name, selected: id === style })));
+  styleSel.onchange = () => { style = styleSel.value; store.set("unitex.ai.style", style); };
+  const input = el("textarea", { className: "aic-input", rows: 1, placeholder: "Ask a follow-up…", ariaLabel: "Ask a follow-up" });
+  const send = el("button", { type: "submit", className: "aic-send", ariaLabel: "Send" }, "↑");
+  const form = el("form", { className: "aic-composer" }, input, send);
+  const historyBox = el("div", { className: "aic-history", hidden: true });
 
-  const turnEl = t => t.role === "user"
-    ? el("div", { className: "ai-msg user" }, el("p", { textContent: t.content }))
-    : el("div", { className: "ai-msg bot" }, el("div", { className: "ai-who" }, el("span", { className: "ai-badge", textContent: "AI" }), t.model || "AI"), t.el || aiRich(t.content, ctx));
-  const draw = () => fill(thread, ...aiThread.turns.map(turnEl));
+  const sourcesRow = () => ctx.length ? el("div", { className: "aic-sources" }, el("small", { textContent: "Related results" }),
+    el("div", { className: "aic-source-strip" }, ...ctx.slice(0, 6).map(c => el("a", { className: "aic-source", href: c.url, rel: "noopener", title: c.title },
+      el("span", { className: "aic-n", textContent: c.n }), domainIcon(c.site, 14), el("span", {}, el("b", { textContent: c.site }), el("small", { textContent: short(c.title, 46) })))))) : null;
 
-  // A follow-up is asked as its own question: a short one keeps the topic ("price?" → "<search> price?").
-  const askText = question => question.trim().split(/\s+/).length >= 4 || question.toLowerCase().includes(q.toLowerCase()) ? question : `${q} ${question}`;
-  async function ask(question) {
+  const copyBtn = (label, text) => el("button", { type: "button", className: "aic-act", textContent: label, async onclick() { try { await navigator.clipboard.writeText(text()); const was = this.textContent; this.textContent = "Copied ✓"; setTimeout(() => { this.textContent = was; }, 1400); } catch { /* clipboard blocked */ } } });
+  const turnEl = (t, i, last) => t.role === "user"
+    ? el("div", { className: "aic-msg user" }, el("p", { textContent: t.content }))
+    : el("div", { className: "aic-msg bot" },
+        el("div", { className: "aic-who" }, el("span", { className: "ai-badge", textContent: "AI" }), t.model || "Unitex AI"),
+        t.el || aiRich(t.content, ctx),
+        t.content && el("div", { className: "aic-actions" },
+          copyBtn("⧉ Copy", () => t.content),
+          el("button", { type: "button", className: "aic-act", textContent: "↻ Regenerate", disabled: busy, onclick: () => regenerate(i) }),
+          el("a", { className: "aic-act", href: `https://chatgpt.com/?q=${encodeURIComponent(aiThread.turns[i - 1]?.content || q)}`, target: "_blank", rel: "noopener", textContent: "Ask ChatGPT ↗" }),
+          copyBtn("⇪ Share as text", () => chatText(aiThread.turns.slice(0, i + 1)))),
+        t.content && i <= 1 && sourcesRow(),
+        last && t.content && !busy && el("div", { className: "aic-suggest" }, ...FOLLOW_UPS.slice(0, 4).map(s => el("button", { type: "button", className: "aic-chip", textContent: s, onclick: () => ask(s) }))));
+  const draw = () => {
+    fill(thread, ...aiThread.turns.map((t, i) => turnEl(t, i, i === aiThread.turns.length - 1)));
+    send.textContent = busy ? "■" : "↑"; send.title = busy ? "Stop" : "Send"; send.classList.toggle("stop", busy);
+    thread.lastElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+
+  // A follow-up is asked as its own question: a short one keeps the topic, and the style words steer Google's answer.
+  const askText = question => {
+    const base = question.trim().split(/\s+/).length >= 4 || question.toLowerCase().includes(q.toLowerCase()) ? question : `${q} ${question}`;
+    return [base, AI_STYLES[style][1]].filter(Boolean).join(" ");
+  };
+  const prompt = () => { const p = systemPrompt(q, ctx); return AI_STYLES[style][2] ? { ...p, content: p.content + "\n" + AI_STYLES[style][2] } : p; };
+
+  async function ask(question, avoid) {
     if (busy) return;
-    busy = true;
+    busy = true; cancelled = false;
     const chosen = chosenAi();
     const history = aiThread.turns.filter(t => t.content).map(t => ({ role: t.role, content: t.content }));
     if (!aiThread.turns.some(t => t.role === "user" && t.content === question)) aiThread.turns.push({ role: "user", content: question });
     const answer = { role: "assistant", question, model: aiName(chosen), content: "", el: el("p", { className: "hint ai-gen", textContent: `Generating with ${aiName(chosen)}…` }) };
     aiThread.turns.push(answer);
     draw();
-    const { chain } = await aiChain(chosen);
+    let { chain } = await aiChain(chosen);
+    if (avoid) chain = [...chain.filter(c => c !== avoid), ...chain.filter(c => c === avoid)]; // regenerate: try another AI first
     for (const pid of chain) {
+      if (cancelled) break;
       try {
-        answer.model = aiName(pid) + (pid !== chosen ? ` (back-up: ${aiName(chosen)} had no answer)` : "");
+        answer.model = aiName(pid) + (pid !== chosen && !avoid ? ` (back-up: ${aiName(chosen)} had no answer)` : "");
         answer.el = el("p", { className: "hint ai-gen", textContent: `Generating with ${aiName(pid)}…` }); draw();
-        answer.content = await runAi(pid, askText(question), [systemPrompt(q, ctx), ...history, { role: "user", content: question }], t => { answer.el = aiRich(t, ctx); draw(); }, (v, t) => bar.set(v, t));
-        if (!answer.content.trim()) throw new Error("wrote nothing");
+        const text = await runAi(pid, askText(question), [prompt(), ...history, { role: "user", content: question }], t => { if (!cancelled) { answer.el = aiRich(t, ctx); answer.content = t; draw(); } }, (v, t) => bar.set(v, t));
+        if (cancelled) break;
+        answer.content = text; answer.pid = pid;
+        if (!text.trim()) throw new Error("wrote nothing");
         answer.el = null;
         break;
-      } catch (e) { answer.content = ""; }
+      } catch (e) { if (!cancelled) answer.content = ""; }
     }
-    if (!answer.content) {
+    if (cancelled && answer.content) { answer.el = null; answer.model += " (stopped)"; }
+    else if (!answer.content) {
       answer.model = aiName(chosen);
-      answer.el = el("p", { className: "hint" }, helperVersion() ? "No answer could be read this time. Try asking it another way, or pick another AI above." : "The online AIs need Unitex Helper. Pick an AI on this computer above, or ",
-        !helperVersion() && el("a", { href: "install.html", textContent: "get Unitex Helper" }));
+      answer.el = el("p", { className: "hint" }, helperVersion() ? "No answer could be read this time. Try asking it another way, or pick another AI above." : "The online AIs need Unitex Helper. Pick an AI on this computer above, or ", !helperVersion() && el("a", { href: "install.html", textContent: "get Unitex Helper" }));
     }
     bar.set(0, "");
     busy = false;
+    saveThread();
     draw();
   }
-  form.onsubmit = e => { e.preventDefault(); const v = input.value.trim(); if (v) { input.value = ""; ask(v); } };
+  const regenerate = i => {
+    if (busy) return;
+    const prev = aiThread.turns[i];
+    const question = aiThread.turns[i - 1]?.content || q;
+    aiThread.turns.splice(i - 1, 2); // the question and its answer go; ask() adds them again
+    ask(question, prev?.pid);
+  };
 
-  fill(box,
-    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "AI ", sel), askChatGpt(q)),
-    el("p", { className: "hint", textContent: "Google, Bing Copilot and Brave are read through Unitex Helper; AIs on this computer write from the search results below and keep everything in your browser. Check important facts." }),
-    bar.box, thread, form,
-    ctx.length && el("details", { className: "ai-sources" }, el("summary", { textContent: `Sources the AI reads (${ctx.length})` }),
-      el("ol", {}, ...ctx.map(c => el("li", {}, el("a", { href: c.url, rel: "noopener", textContent: c.title }), el("span", { className: "hint", textContent: " · " + c.site }))))));
+  send.onclick = e => { if (busy) { e.preventDefault(); cancelled = true; } };
+  form.onsubmit = e => { e.preventDefault(); if (busy) return; const v = input.value.trim(); if (v) { input.value = ""; input.style.height = ""; ask(v); } };
+  input.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } };
+  input.oninput = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 160) + "px"; };
+
+  const drawHistory = () => {
+    const chats = savedChats();
+    fill(historyBox, el("div", { className: "aic-history-head" }, el("b", { textContent: "Your chats" }), chats.length > 0 && el("button", { type: "button", className: "aic-act", textContent: "Clear all", onclick() { store.set(AI_CHATS_KEY, []); drawHistory(); } })),
+      chats.length ? el("ul", {}, ...chats.map(c => el("li", {},
+        el("button", { type: "button", className: "aic-hist-item", onclick() { aiThread = { id: c.id, q: c.q, turns: c.turns.map(t => ({ ...t })) }; query = c.q; go(); } }, el("b", { textContent: short(c.q, 60) }), el("small", { textContent: `${c.turns.filter(t => t.role === "user").length} messages · ${ago(c.t / 1000)}` })),
+        el("button", { type: "button", className: "aic-x", ariaLabel: "Delete this chat", textContent: "✕", onclick() { store.set(AI_CHATS_KEY, savedChats().filter(x => x.id !== c.id)); drawHistory(); } }))))
+        : el("p", { className: "hint", textContent: "Your chats show up here." }));
+  };
+
+  fill(box, el("div", { className: "aichat" },
+    el("div", { className: "aic-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }),
+      el("div", { className: "aic-tools" }, el("label", { className: "ai-model" }, "AI ", sel), el("label", { className: "ai-model" }, "Style ", styleSel),
+        el("button", { type: "button", className: "aic-act", textContent: "＋ New chat", onclick() { aiThread = { id: newChatId(), q, turns: [] }; draw(); ask(q); } }),
+        el("button", { type: "button", className: "aic-act", textContent: "🕘 History", onclick() { historyOpen = !historyOpen; historyBox.hidden = !historyOpen; if (historyOpen) drawHistory(); } }))),
+    historyBox,
+    el("p", { className: "hint aic-note", textContent: "Google, Bing Copilot and Brave are read through Unitex Helper; AIs on this computer write from the search results and keep everything in your browser. Check important facts." }),
+    bar.box, thread, form));
   box.hidden = false;
   draw();
   if (!aiThread.turns.length) ask(q);
