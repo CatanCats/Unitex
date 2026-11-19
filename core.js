@@ -294,7 +294,7 @@ function openSettings(startTab = "appearance") {
     ],
     ai: () => [
       row("Show AI", "The AI overview on the All tab and the AI tab.", switchEl(draft.ai !== false, v => { draft.ai = v; })),
-      row("AI used", "Google's AI answer needs no sign-in. The ones on this computer download once (about 1–2 GB) and run in your browser.", typeof aiSelect === "function" ? aiSelect(draft.overview || "google", v => { draft.overview = v; }) : null),
+      row("AI used", "Google, Bing Copilot and Brave are read through Unitex Helper: no sign-in. The ones on this computer download once (about 1–2 GB) and run in your browser.", typeof aiSelect === "function" ? aiSelect(draft.overview || "google", v => { draft.overview = v; }) : null),
       el("p", { className: "sd-note" }, "The answer says which AI wrote it. If the one you chose has no answer, Unitex tries the other way and tells you."),
     ],
     rewards: () => {

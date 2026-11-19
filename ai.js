@@ -80,6 +80,34 @@ async function googleAnswer(q) {
   return text;
 }
 
+// Bing's Copilot answer, from Bing's results page (it runs on OpenAI's models).
+async function bingAnswer(q) {
+  if (!helperVersion()) throw new Error("needs Unitex Helper");
+  const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "bing").url(q));
+  const doc = adFreeDoc(res.html);
+  const box = doc.querySelector("#b_genserp_container, .b_genserp, [data-tag='copilot-answer'], .b_ans .rwrl, .b_ans .b_paractl, .b_ans .b_focusTextLarge, .b_ans .b_focusTextMedium");
+  const text = answerText(box) || blockAfterHeading(doc, /^(Copilot|Copilot Answer|AI-generated)/i);
+  if (!text || text.length < 60) throw new Error("Bing didn't show a Copilot answer for this search");
+  return text;
+}
+// Brave's AI summary: Brave's page names a summary, which is then asked for.
+async function braveAnswer(q) {
+  if (!helperVersion()) throw new Error("needs Unitex Helper");
+  const res = await helperFetch(HELPER_ENGINES.find(e => e.id === "brave").url(q));
+  const key = res.html.match(/summarizer["']?\s*:\s*\{[^}]*?["']?key["']?\s*:\s*["']([^"']+)["']/i)?.[1];
+  if (!key) throw new Error("Brave didn't offer an AI summary for this search");
+  const r = await helperFetch(`https://search.brave.com/api/summarizer?key=${encodeURIComponent(key)}&source=web`);
+  let text = "";
+  try {
+    const d = JSON.parse(r.html), parts = [];
+    walk(d, o => { if (typeof o.data === "string" && /token|text/i.test(o.type || "token")) parts.push(o.data); });
+    text = (parts.join("") || strip(JSON.stringify(d.summary || d.title || ""))).replace(/<[^>]+>/g, "");
+  } catch { text = strip(r.html); }
+  text = text.trim();
+  if (!text) throw new Error("Brave's AI summary came back empty");
+  return text;
+}
+
 // ---------- the models ----------
 
 const WEBLLM_URL = "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/+esm";
@@ -248,9 +276,14 @@ const progressBar = () => {
 // Google's AI answer (through Unitex Helper, no sign-in) or an AI that runs on this computer. The choice is kept in Settings and
 // shown on every answer, which also says which one wrote it (and why, when it isn't the one chosen).
 
-const AI_GOOGLE = { id: "google", name: "Google AI Overview", note: "through Unitex Helper, no sign-in" };
-const aiName = id => id === "google" ? AI_GOOGLE.name : aiModel(id)?.name || "AI";
-const chosenAi = () => (settings.overview === "google" || aiModel(settings.overview)) ? settings.overview : "google";
+const ONLINE_AIS = [
+  { id: "google", name: "Google AI Overview", note: "Google's own answer", run: q => googleAnswer(q) },
+  { id: "bing", name: "Bing Copilot", note: "OpenAI's models, through Bing", run: q => bingAnswer(q) },
+  { id: "brave", name: "Brave AI summary", note: "Brave's own answer", run: q => braveAnswer(q) },
+];
+const aiEngine = id => ONLINE_AIS.find(e => e.id === id);
+const aiName = id => aiEngine(id)?.name || aiModel(id)?.name || "AI";
+const chosenAi = () => (aiEngine(settings.overview) || aiModel(settings.overview)) ? settings.overview : "google";
 
 // The AI picker: Google's answer, then the AIs on this computer, each with what it needs.
 function aiSelect(value, onchange, avail = {}) {
@@ -260,7 +293,7 @@ function aiSelect(value, onchange, avail = {}) {
       textContent: `${m.name} · ${off ? "not available here" : a?.state === "ready" ? "ready" : m.note + (m.kind === "web" ? ", downloads once" : "")}` });
   });
   const s = el("select", { className: "f-input", ariaLabel: "AI" },
-    el("optgroup", { label: "Online, no sign-in" }, el("option", { value: "google", selected: value === "google", textContent: `${AI_GOOGLE.name} · ${AI_GOOGLE.note}${helperVersion() ? "" : " (needs the helper)"}` })),
+    el("optgroup", { label: "Online, no sign-in (through Unitex Helper)" }, ...ONLINE_AIS.map(e => el("option", { value: e.id, selected: value === e.id, textContent: `${e.name} · ${e.note}${helperVersion() ? "" : " (needs the helper)"}` }))),
     el("optgroup", { label: "On this computer (private)" }, ...local));
   s.onchange = () => onchange(s.value);
   return s;
@@ -271,15 +304,16 @@ async function aiChain(first = chosenAi()) {
   if (!aiEnabled()) return { chain: [], avail: {} };
   const { tries, avail } = await pickModel();
   const ready = tries.filter(m => avail[m]?.state === "ready");
-  const google = helperVersion() ? ["google"] : [];
-  // A model chosen by name is used even when it still has to download (with a progress bar); back-ups only when ready.
-  const lead = first === "google" ? google : (avail[first] && avail[first].state !== "no" ? [first] : []);
-  return { chain: [...new Set([...lead, ...google, ...ready])], avail };
+  const engines = helperVersion() ? ONLINE_AIS.map(e => e.id) : [];
+  // The chosen AI first. A model chosen by name is used even when it still has to download (with a progress bar);
+  // the other online AIs and the ones already ready on this computer are back-ups.
+  const lead = aiEngine(first) ? (helperVersion() ? [first] : []) : (avail[first] && avail[first].state !== "no" ? [first] : []);
+  return { chain: [...new Set([...lead, ...engines, ...ready])], avail };
 }
 
 // Runs one way of answering. Returns the text.
 async function runAi(id, q, messages, onText, onProgress) {
-  if (id === "google") { const text = await googleAnswer(q); onText(text); return text; }
+  if (aiEngine(id)) { const text = await aiEngine(id).run(q); onText(text); return text; }
   const m = aiModel(id);
   if (!m) throw new Error("unknown AI");
   return aiGenerate(m, messages, onText, onProgress);
@@ -287,7 +321,7 @@ async function runAi(id, q, messages, onText, onProgress) {
 
 // "By Llama 3.2 1B, on this computer, from the results below" / "By Google AI Overview…". When the chosen AI didn't answer, it says so.
 function aiByline(used, chosen, why) {
-  const where = used === "google" ? "from Google through Unitex Helper" : "running on this computer, from the results below";
+  const where = aiEngine(used) ? `from ${aiName(used).split(" ")[0]}'s results page through Unitex Helper` : "running on this computer, from the results below";
   return `By ${aiName(used)}, ${where}${used !== chosen ? ` · ${aiName(chosen)} ${why || "had no answer"}, so this is the back-up` : ""} · check important facts · `;
 }
 
@@ -386,7 +420,7 @@ async function renderAiTab(q, results) {
     }
     if (!answer.content) {
       answer.model = aiName(chosen);
-      answer.el = el("p", { className: "hint" }, helperVersion() ? "No answer could be read this time. Try asking it another way, or pick another AI above." : "Google's AI needs Unitex Helper. Pick an AI on this computer above, or ",
+      answer.el = el("p", { className: "hint" }, helperVersion() ? "No answer could be read this time. Try asking it another way, or pick another AI above." : "The online AIs need Unitex Helper. Pick an AI on this computer above, or ",
         !helperVersion() && el("a", { href: "install.html", textContent: "get Unitex Helper" }));
     }
     bar.set(0, "");
@@ -397,7 +431,7 @@ async function renderAiTab(q, results) {
 
   fill(box,
     el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "AI ", sel)),
-    el("p", { className: "hint", textContent: "Google's AI is read through Unitex Helper; AIs on this computer write from the search results below and keep everything in your browser. Check important facts." }),
+    el("p", { className: "hint", textContent: "Google, Bing Copilot and Brave are read through Unitex Helper; AIs on this computer write from the search results below and keep everything in your browser. Check important facts." }),
     bar.box, thread, form,
     ctx.length && el("details", { className: "ai-sources" }, el("summary", { textContent: `Sources the AI reads (${ctx.length})` }),
       el("ol", {}, ...ctx.map(c => el("li", {}, el("a", { href: c.url, rel: "noopener", textContent: c.title }), el("span", { className: "hint", textContent: " · " + c.site }))))));
