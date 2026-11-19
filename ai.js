@@ -320,6 +320,8 @@ async function runAi(id, q, messages, onText, onProgress) {
 }
 
 // "By Llama 3.2 1B, on this computer, from the results below" / "By Google AI Overview…". When the chosen AI didn't answer, it says so.
+// ChatGPT opens in its own tab with the question filled in (it answers without signing in).
+const askChatGpt = q => el("a", { className: "btn-ghost ai-chatgpt", href: `https://chatgpt.com/?q=${encodeURIComponent(q)}`, target: "_blank", rel: "noopener", textContent: "Ask ChatGPT ↗", title: "Opens chatgpt.com with this question" });
 function aiByline(used, chosen, why) {
   const where = aiEngine(used) ? `from ${aiName(used).split(" ")[0]}'s results page through Unitex Helper` : "running on this computer, from the results below";
   return `By ${aiName(used)}, ${where}${used !== chosen ? ` · ${aiName(chosen)} ${why || "had no answer"}, so this is the back-up` : ""} · check important facts · `;
@@ -363,7 +365,7 @@ async function renderAiOverview(q, results) {
       if (!text.trim()) throw new Error("wrote nothing");
       bar.set(0, "");
       pick.value = pid;
-      fill(note, aiByline(pid, chosen, why), el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } }));
+      fill(note, aiByline(pid, chosen, why), askChatGpt(q), " ", el("button", { type: "button", className: "btn-ghost", textContent: "Ask follow-up questions →", onclick: () => { tab = "ai"; sub = ""; go(); } }));
       return;
     } catch (e) {
       if (id !== runId) return;
@@ -430,7 +432,7 @@ async function renderAiTab(q, results) {
   form.onsubmit = e => { e.preventDefault(); const v = input.value.trim(); if (v) { input.value = ""; ask(v); } };
 
   fill(box,
-    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "AI ", sel)),
+    el("div", { className: "ai-head" }, el("span", { className: "ai-badge", textContent: "AI" }), el("h2", { textContent: "Ask AI" }), el("label", { className: "ai-model" }, "AI ", sel), askChatGpt(q)),
     el("p", { className: "hint", textContent: "Google, Bing Copilot and Brave are read through Unitex Helper; AIs on this computer write from the search results below and keep everything in your browser. Check important facts." }),
     bar.box, thread, form,
     ctx.length && el("details", { className: "ai-sources" }, el("summary", { textContent: `Sources the AI reads (${ctx.length})` }),
