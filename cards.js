@@ -72,7 +72,7 @@ function siteCard(c, topic, url) {
   const art = (cls, ...kids) => el("article", { className: `xcard sc sc-${k.kind} ${cls || ""}` }, ...kids, saveButton(c, topic));
   switch (k.kind) {
     case "house": {
-      const tag = k.deal === "rent" ? "For rent" : k.deal === "sale" || k.deal === "buy" ? "For sale" : "";
+      const tag = k.deal === "rent" ? "For rent" : k.deal === "sold" ? "Sold" : k.deal === "sale" || k.deal === "buy" ? "For sale" : "";
       return art("", scImage(c, "house", tag && el("span", { className: "deal-badge", textContent: tag }), k.type && el("span", { className: "sc-chip", textContent: k.type })),
         el("div", { className: "sc-body" },
           el("div", { className: "sc-price-row" }, el("span", { className: "sc-price big", textContent: k.price || "Contact agent" })),

@@ -5,7 +5,7 @@
 const AU_STATES = { "Victoria": "vic", "New South Wales": "nsw", "Queensland": "qld", "South Australia": "sa", "Western Australia": "wa", "Tasmania": "tas", "Australian Capital Territory": "act", "Northern Territory": "nt" };
 const PROPERTY_WORDS = /\b(houses?|homes?|apartments?|units?|flats?|townhouses?|villas?|studios?|propert(?:y|ies)|real ?estate|rooms?|to|for|a|an|the|rent(?:al|als|ing)?|lease|let|buy(?:ing)?|sale|purchase|in|near|around|with|bed(?:room)?s?|bath(?:room)?s?|car|cheap|affordable|new|under|over|share|land|acreage|pets?|allowed|furnished|pool|garden|air|conditioning|\d+(?:br|bd)?)\b/gi;
 
-const listingKind = q => /\b(rent|rental|rentals|renting|lease|to let)\b/i.test(q) ? "rent" : "buy";
+const listingKind = q => /\b(rent|rental|rentals|renting|lease|to let)\b/i.test(q) ? "rent" : /\b(sold|recently sold|sold prices?)\b/i.test(q) ? "sold" : "buy";
 const listingBeds = q => +(q.match(/(\d+)\s*(?:-\s*)?(?:bed|br|bd)/i)?.[1] || 0);
 
 const placeCache = new Map();
@@ -119,12 +119,12 @@ function parseRealestate(html) {
 const LISTING_SITES = {
   realestate: {
     name: "realestate.com.au",
-    url: (p, kind, beds) => `https://www.realestate.com.au/${kind}/${beds ? `with-${beds}-bedrooms-` : ""}in-${p.suburb.toLowerCase().replace(/\s+/g, "+")},+${p.state}+${p.postcode}/list-1`,
+    url: (p, kind, beds) => `https://www.realestate.com.au/${kind === "sold" ? "sold" : kind}/${beds ? `with-${beds}-bedrooms-` : ""}in-${p.suburb.toLowerCase().replace(/\s+/g, "+")},+${p.state}+${p.postcode}/list-1`,
     parse: parseRealestate,
   },
   domain: {
     name: "domain.com.au",
-    url: (p, kind, beds) => `https://www.domain.com.au/${kind === "rent" ? "rent" : "sale"}/${p.suburb.toLowerCase().replace(/\s+/g, "-")}-${p.state}-${p.postcode}/${beds ? `?bedrooms=${beds}-any` : ""}`,
+    url: (p, kind, beds) => `https://www.domain.com.au/${kind === "rent" ? "rent" : kind === "sold" ? "sold-listings" : "sale"}/${p.suburb.toLowerCase().replace(/\s+/g, "-")}-${p.state}-${p.postcode}/${beds ? `?bedrooms=${beds}-any` : ""}`,
     parse: parseDomain,
   },
 };
@@ -136,6 +136,6 @@ async function searchListings(siteId, q) {
   const items = site.parse(html);
   if (!items.length) throw new Error(botCheck(html) ? "sent a bot-check page instead of listings" : "page had no listings Unitex could read");
   const kind = listingKind(q);
-  return items.slice(0, 24).map(i => ({ ...i, via: `${site.name} (read directly)`, meta: `${kind === "rent" ? "For rent" : "For sale"} · ${place.suburb} ${place.state.toUpperCase()} ${place.postcode}`,
+  return items.slice(0, 24).map(i => ({ ...i, via: `${site.name} (read directly)`, meta: `${kind === "rent" ? "For rent" : kind === "sold" ? "Sold" : "For sale"} · ${place.suburb} ${place.state.toUpperCase()} ${place.postcode}`,
     card: { kind: "house", ...(i.card || { address: i.title }), deal: kind, area: `${place.suburb} ${place.state.toUpperCase()} ${place.postcode}` } }));
 }

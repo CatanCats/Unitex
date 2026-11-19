@@ -898,7 +898,7 @@ const words = (...parts) => parts.flat().filter(Boolean).join(" ").replace(/\s+/
 
 const TOPIC_FORMS = {
   houses: { title: "🏠 Find a home", fields: {
-      deal: { type: "seg", label: "I want to", options: opt([["buy", "Buy"], ["rent", "Rent"], ["share", "Share"]]) },
+      deal: { type: "seg", label: "I want to", options: opt([["buy", "Buy"], ["rent", "Rent"], ["sold", "Sold"], ["share", "Share"]]) },
       where: { label: "Suburb or postcode", placeholder: "Suburb, town or postcode", wide: true },
       address: { label: "Or a street address", placeholder: "e.g. 12 Smith Street, Brunswick", wide: true },
       type: anyOf("Property type", ["House", "Apartment", "Townhouse", "Unit", "Villa", "Land", "Acreage"]),
@@ -909,7 +909,7 @@ const TOPIC_FORMS = {
       max: { label: "Max price", placeholder: "$", type: "number" },
       extras: { type: "checks", label: "Must have", options: opt(["Pets allowed", "Furnished", "Pool", "Garden", "Air conditioning"]) } },
     build: v => words(v.beds && `${parseInt(v.beds)} bedroom`, v.deal === "share" ? "room in share house" : (v.type || "house").toLowerCase(),
-      v.deal === "rent" ? "for rent" : v.deal === "share" ? "for rent" : "for sale", v.max && `under $${v.max}`, (v.extras || []).map(e => e.toLowerCase()), (v.address || v.where) && `in ${v.address || v.where}`),
+      v.deal === "rent" ? "for rent" : v.deal === "share" ? "for rent" : v.deal === "sold" ? "recently sold" : "for sale", v.max && `under $${v.max}`, (v.extras || []).map(e => e.toLowerCase()), (v.address || v.where) && `in ${v.address || v.where}`),
     filters: v => ({ min: priceNum(v.min), max: priceNum(v.max), bedsSel: v.beds || undefined, baths: parseInt(v.baths) || undefined, carsMin: parseInt(v.cars) || undefined }) },
 
   jobs: { title: "💼 Find a job", fields: {

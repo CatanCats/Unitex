@@ -2056,3 +2056,79 @@ body.look-unitex[data-look="shopping"], body.look-unitex[data-look="reviews"] { 
 /* home tiles: two centred rows on a wide screen instead of a row that runs off the edge; one scrolling row on a phone */
 @media (min-width: 900px) { #topics.quick { flex-wrap: wrap; justify-content: center; overflow: visible; margin-left: 0; margin-right: 0; row-gap: 18px; } #topics.quick > :first-child, #topics.quick > :last-child { margin-left: 0; margin-right: 0; } }
 .sc-img .deal-badge { width: auto; right: auto; }
+
+/* every area opens like the home page */
+body.landing-on .rtop .searchbar.compact { visibility: hidden; }
+.start { margin: 0 0 8px; }
+.start-hero { margin-top: 2vh; }
+.start-hero h1 { margin: 0 0 18px; font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.12; letter-spacing: -.03em; }
+.start-hero h1 span { font-size: clamp(1.1rem, 2.6vw, 1.5rem); font-weight: 600; letter-spacing: -.01em; background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.start-modes { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 auto 16px; max-width: 900px; }
+.start-mode { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s; }
+.start-mode:hover { border-color: var(--accent); }
+.start-mode.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.start-search { display: flex; align-items: center; gap: 8px; max-width: 820px; margin: 0 auto; padding: 6px 6px 6px 18px; }
+.start-search .start-input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--fg); font: inherit; font-size: 1.05rem; padding: 12px 6px; }
+.start-search .start-where { flex: 1; min-width: 0; border-left: 1px solid var(--border); padding-left: 10px; }
+.start-search .start-where .start-input { width: 100%; box-sizing: border-box; }
+.start-search .start-input::-webkit-search-cancel-button { display: none; }
+.start-search .filters-btn { flex: none; height: 40px; }
+.start-search .go { flex: none; }
+.start-tiles.quick { flex-wrap: wrap; justify-content: center; overflow: visible; margin: 26px 0 8px; row-gap: 18px; }
+.start-tiles.quick > :first-child, .start-tiles.quick > :last-child { margin-left: 0; margin-right: 0; }
+.start-tiles .area-card { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.start-tiles .area-card .area-art { width: 132px; height: 132px; }
+@media (max-width: 899px) { .start-tiles.quick { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; margin-left: -16px; margin-right: -16px; padding: 4px 16px 10px; } }
+@media (max-width: 640px) { .start-search { flex-wrap: wrap; padding: 8px 10px; } .start-search .start-where { border-left: 0; padding-left: 0; flex-basis: 100%; } }
+
+/* the app store's displays */
+.ad-icon { flex: none; width: 56px; height: 56px; border-radius: 22%; object-fit: cover; background: var(--card-2); box-shadow: 0 1px 4px rgb(0 0 0 / .2); }
+.ad-icon.sm { width: 40px; height: 40px; }
+.ad-get { flex: none; padding: 5px 16px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .82rem; font-weight: 800; }
+.ad-story { position: relative; display: flex; align-items: stretch; justify-content: space-between; gap: 20px; min-height: 340px; margin: 4px 0 22px; padding: 30px 34px 0; border-radius: calc(var(--u-r, 16px) + 8px); overflow: hidden; color: #fff; text-decoration: none;
+  background: radial-gradient(120% 140% at 10% 0%, var(--accent), color-mix(in srgb, var(--accent-2) 70%, #000) 80%); box-shadow: 0 18px 40px -22px var(--accent); }
+.ad-story.skeleton { background: var(--card-2); }
+.ad-story-text { display: flex; flex-direction: column; justify-content: center; gap: 10px; max-width: 460px; padding-bottom: 30px; }
+.ad-story-text > small { font-size: .78rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.ad-story-text > b { font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.08; letter-spacing: -.03em; }
+.ad-story-sum { opacity: .92; line-height: 1.5; }
+.ad-story-app { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 10px 12px; border-radius: 18px; background: rgb(255 255 255 / .16); backdrop-filter: blur(8px); }
+.ad-story-app > span { display: grid; min-width: 0; flex: 1; }
+.ad-story-app small { opacity: .8; }
+.ad-story-app .ad-get { background: #fff; color: var(--accent); }
+.ad-story-shot { align-self: flex-end; width: 210px; max-width: 34%; border-radius: 26px 26px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / .35); object-fit: cover; }
+.ad-posters { gap: 14px; }
+.ad-poster { position: relative; flex: none; width: 190px; height: 330px; border-radius: calc(var(--u-r, 16px) + 2px); overflow: hidden; background: var(--card-2); color: #fff; text-decoration: none; box-shadow: var(--shadow); }
+.ad-poster.skeleton { box-shadow: none; }
+.ad-poster-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .4s; }
+.ad-poster:hover .ad-poster-bg { transform: scale(1.05); }
+.ad-poster-cap { position: absolute; inset: auto 0 0; display: flex; align-items: center; gap: 10px; padding: 36px 12px 12px; background: linear-gradient(180deg, transparent, rgb(0 0 0 / .78)); }
+.ad-poster-cap > span:last-child { display: grid; min-width: 0; }
+.ad-poster-cap strong { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-poster-cap small { opacity: .8; font-size: .75rem; }
+.ad-list3 { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, auto); grid-auto-columns: minmax(300px, 1fr); gap: 4px 28px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+.ad-l3 { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); color: var(--fg); text-decoration: none; }
+.ad-rank { flex: none; width: 20px; text-align: center; font-weight: 800; color: var(--muted); }
+.ad-l3-text { display: grid; flex: 1; min-width: 0; }
+.ad-l3-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+.ad-l3-text small { color: var(--muted); font-size: .78rem; }
+.ad-stars { color: #b45309 !important; }
+.ad-wides { gap: 14px; }
+.ad-wide { position: relative; flex: none; width: 360px; height: 180px; border-radius: calc(var(--u-r, 16px) + 2px); overflow: hidden; background: var(--card-2); color: #fff; text-decoration: none; box-shadow: var(--shadow); }
+.ad-wide img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s; }
+.ad-wide:hover img { transform: scale(1.05); }
+.ad-wide-cap { position: absolute; inset: auto 0 0; display: grid; padding: 28px 14px 12px; background: linear-gradient(180deg, transparent, rgb(0 0 0 / .8)); }
+.ad-wide-cap small { opacity: .85; }
+.ad-colls { gap: 14px; }
+.ad-coll { flex: none; display: flex; flex-direction: column; justify-content: space-between; gap: 18px; width: 230px; height: 150px; padding: 16px; border: 0; border-radius: calc(var(--u-r, 16px) + 2px); background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 55%, #000)); color: #fff; font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow); }
+.ad-coll:hover { transform: translateY(-3px); }
+.ad-coll b { font-size: 1.05rem; line-height: 1.2; }
+.ad-coll-icons { display: flex; }
+.ad-coll-icons .ad-icon { width: 44px; height: 44px; margin-right: -10px; border: 2px solid rgb(255 255 255 / .85); }
+@media (max-width: 760px) { .ad-story { flex-direction: column; padding: 22px 20px 0; } .ad-story-shot { align-self: center; width: 150px; max-width: none; } .ad-wide { width: 280px; height: 150px; } }
+.start-search .start-where:first-child { border-left: 0; padding-left: 0; }
+body.landing-on .shop-note { display: none; }
+.ad-poster, .ad-wide, .ad-coll { margin-right: 14px; }
+.ad-posters, .ad-wides, .ad-colls { gap: 0; }
+.ad-story-app > span:not(.ad-get) { display: grid; min-width: 0; flex: 1; }
+.ad-story-app > .ad-get { display: inline-block; flex: none; }

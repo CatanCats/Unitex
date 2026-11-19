@@ -160,11 +160,10 @@ function renderLanding(topic) {
   const mine = areaSearches(topic.id);
   const savedHere = saved.all().filter(s => s.topic === topic.id), viewedHere = viewedItems().filter(s => s.topic === topic.id);
   const rows = [...(mine[0] ? [[`Because you searched “${mine[0]}”`, mine[0], null]] : []), ...L.rows().map(([t, q, use]) => [t, q, use || L.use])];
-  const hero = SITE_HEROES[topic.id]?.(topic, L, cats);
   return el("div", { className: `landing site-${topic.id}` },
-    // The site's own search panel, or (Amazon) its picture cards; a plain title only where the site has neither.
-    hero || el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() }), filterButton(topic.id, "head-filters")),
-    siteCats(topic, L, cats),
+    // Opens like the home page: headline, the site's own sections, one big search, big category tiles.
+    startPage(topic, cats) || el("div", { className: "landing-head" }, el("h2", { textContent: L.title }), el("span", { textContent: L.sub() }), filterButton(topic.id, "head-filters")),
+    topic.id === "shopping" && siteCats(topic, L, cats),
     mine.length > 0 && el("div", { className: "landing-recent" }, el("span", { className: "row-label", textContent: "Your searches" }),
       ...mine.slice(0, 6).map(q => el("button", { type: "button", className: "chip", textContent: q, onclick: () => searchFor(q) }))),
     // Your own things first, like Amazon's "Keep shopping for" and "Your browsing history".
@@ -244,22 +243,88 @@ const scrollToId = id => () => document.getElementById(id)?.scrollIntoView({ beh
 const APP_CATEGORIES = [["📷", "Photo & video", "photo editor"], ["🎵", "Music & audio", "music player"], ["💬", "Social", "social"], ["✅", "Productivity", "productivity"], ["🎓", "Education", "learn"],
   ["💪", "Health & fitness", "workout"], ["🗺️", "Travel & maps", "maps"], ["💰", "Finance", "budget"], ["🎬", "Entertainment", "streaming"], ["🛍️", "Shopping", "shopping"], ["🔧", "Tools", "tools"], ["🧸", "Kids", "kids"]];
 const appTile = c => c && { title: c.card.name, sub: c.card.developer || c.card.category, image: c.card.icon, url: c.url, rating: c.card.rating, price: c.card.price, banner: c.card.banner && /header|capsule_6|616x353/.test(c.card.banner) ? c.card.banner : undefined };
-function appStore() {
+// ---------- the app store's different displays ----------
+// The stores don't show every shelf the same way, and neither does Unitex: a big "app of the day" story card (the App Store's Today
+// tab), tall poster cards with a screenshot (Google Play's editors' choice), three-row lists with a Get button (the App Store's
+// charts), wide banners (Steam and Play's featured games), collections with stacked icons, ranked charts and icon shelves with prices.
+// The pictures and ratings come from Apple's search, which any website may read.
+
+async function itunesRich(term, n = 12) {
+  const d = await getJson(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=software&country=${APP_COUNTRY[regionId] || "us"}&limit=${n}`, 9000);
+  return (d.results || []).map(a => ({ title: a.trackName, sub: a.primaryGenreName, dev: a.sellerName, icon: a.artworkUrl512 || a.artworkUrl100, shot: (a.screenshotUrls || [])[0], wide: (a.ipadScreenshotUrls || [])[0],
+    url: a.trackViewUrl, rating: a.averageUserRating ? +a.averageUserRating.toFixed(1) : undefined, count: a.userRatingCount || 0, price: a.formattedPrice || "Free", summary: short(String(a.description || "").replace(/\s+/g, " "), 150) })).filter(x => x.title && x.icon);
+}
+const ratingsOf = x => x.count || 0;
+const iconTag = (src, cls = "ad-icon") => src ? el("img", { className: cls, src, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }) : el("span", { className: cls });
+const getPill = x => el("span", { className: "ad-get", textContent: /^free$/i.test(x.price) || !x.price ? "Get" : x.price });
+
+// The App Store's Today card: one big story with a screenshot beside it.
+function storyCard(row, label = "App of the day") {
+  const x = row.items?.[0];
+  if (row.state === "wait") return el("div", { className: "skeleton ad-story" });
+  if (!x) return null;
+  return el("a", { className: "ad-story", href: x.url, rel: "noopener" },
+    el("span", { className: "ad-story-text" }, el("small", { textContent: label }), el("b", { textContent: x.title }), el("span", { className: "ad-story-sum", textContent: x.summary || x.sub }),
+      el("span", { className: "ad-story-app" }, iconTag(x.icon, "ad-icon sm"), el("span", {}, el("strong", { textContent: x.title }), el("small", { textContent: x.sub })), getPill(x))),
+    x.shot && el("img", { className: "ad-story-shot", src: x.shot, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }));
+}
+// Tall poster cards: the screenshot fills the card, the app sits on top at the bottom.
+function posterShelf(title, row, more) {
+  return el("section", { className: "store-shelf" }, el("div", { className: "landing-row-head" }, el("h3", { textContent: title }), more && el("button", { type: "button", className: "landing-all", textContent: "See all ›", onclick: more })),
+    row.state === "wait" ? el("div", { className: "landing-strip" }, ...Array.from({ length: 5 }, () => el("div", { className: "skeleton ad-poster" })))
+      : el("div", { className: "landing-strip ad-posters" }, ...row.items.filter(x => x.shot).slice(0, 10).map(x => el("a", { className: "ad-poster", href: x.url, rel: "noopener" },
+        el("img", { className: "ad-poster-bg", src: x.shot, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
+        el("span", { className: "ad-poster-cap" }, iconTag(x.icon, "ad-icon sm"), el("span", {}, el("strong", { textContent: x.title }), el("small", { textContent: x.sub })))))));
+}
+// The App Store's chart lists: three rows at a time, scrolling sideways.
+function list3Shelf(title, row, more) {
+  return el("section", { className: "store-shelf" }, el("div", { className: "landing-row-head" }, el("h3", { textContent: title }), more && el("button", { type: "button", className: "landing-all", textContent: "See all ›", onclick: more })),
+    row.state === "wait" ? el("p", { className: "hint", textContent: "Loading…" })
+      : el("div", { className: "ad-list3" }, ...row.items.slice(0, 18).map((x, n) => el("a", { className: "ad-l3", href: x.url, rel: "noopener" },
+        el("span", { className: "ad-rank", textContent: n + 1 }), iconTag(x.icon || x.image), el("span", { className: "ad-l3-text" }, el("strong", { textContent: x.title }), el("small", { textContent: x.dev || x.sub || "" }),
+          x.rating && el("small", { className: "ad-stars", textContent: `★ ${x.rating}` })), getPill({ price: x.price })))));
+}
+// Wide banners: Steam's capsules and Play's featured games.
+function wideShelf(title, row, more) {
+  const items = (row.items || []).filter(x => x.banner || x.wide || x.image).slice(0, 8);
+  return el("section", { className: "store-shelf" }, el("div", { className: "landing-row-head" }, el("h3", { textContent: title }), more && el("button", { type: "button", className: "landing-all", textContent: "See all ›", onclick: more })),
+    row.state === "wait" ? el("div", { className: "landing-strip" }, ...Array.from({ length: 3 }, () => el("div", { className: "skeleton ad-wide" })))
+      : el("div", { className: "landing-strip ad-wides" }, ...items.map(x => el("a", { className: "ad-wide", href: x.url, rel: "noopener" },
+        el("img", { src: x.banner || x.wide || x.image, alt: "", loading: "lazy", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
+        el("span", { className: "ad-wide-cap" }, el("strong", { textContent: x.title }), el("small", { textContent: [x.sub, x.price].filter(Boolean).join(" · ") }))))));
+}
+// Collections: a coloured card with stacked icons and a title.
+const APP_COLLECTIONS = [["Photo & video, made easy", "photo editor", "#7c3aed"], ["Budget and money", "budget", "#0f766e"], ["Learn a language", "language learning", "#2563eb"], ["Workouts at home", "home workout", "#db2777"],
+  ["Calm and sleep", "meditation sleep", "#4f46e5"], ["Read and listen", "audiobooks", "#b45309"]];
+function collectionShelf(title, rows, go) {
+  return el("section", { className: "store-shelf" }, el("div", { className: "landing-row-head" }, el("h3", { textContent: title })),
+    el("div", { className: "landing-strip ad-colls" }, ...APP_COLLECTIONS.map(([name, q, colour], n) => el("button", { type: "button", className: "ad-coll", style: `--c:${colour}`, onclick: go(q) },
+      el("span", { className: "ad-coll-icons" }, ...(rows[n].items || []).slice(0, 3).map(x => iconTag(x.icon, "ad-icon"))), el("b", { textContent: name })))));
+}
+
+function appStoreBody() {
   const redraw = () => { if (!query && topicId === "apps" && modeOn) drawCards(); };
   const helper = !!helperVersion();
   const free = shelfData("apps:free:" + regionId, () => helper ? appleChart("top-free").then(l => l.map(appTile)) : APP_SOURCES.appstore.run("free apps").then(l => l.map(appTile)), redraw);
   const paid = shelfData("apps:paid:" + regionId, () => helper ? appleChart("top-paid").then(l => l.map(appTile)) : APP_SOURCES.appstore.run("photo editor").then(l => l.map(appTile)), redraw);
   const steam = shelfData("apps:steam:" + regionId, () => helper ? steamTop().then(l => l.map(appTile)) : [], redraw);
   const oss = shelfData("apps:oss", () => helper ? APP_SOURCES.flathub.run("productivity").then(l => l.map(appTile)) : [], redraw);
+  // The rich displays read Apple's search (any website may): a story, editors' choice posters, and the collections' icons.
+  const story = shelfData("apps:story:" + regionId, () => itunesRich("photo editor", 10).then(l => l.sort((a, b) => ratingsOf(b) - ratingsOf(a))), redraw);
+  const editors = shelfData("apps:editors:" + regionId, async () => (await Promise.all(["meditation", "language learning", "budget", "home workout"].map(t => itunesRich(t, 8).catch(() => [])))).flatMap(l => l.filter(x => x.shot).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 3)), redraw);
+  const colls = APP_COLLECTIONS.map(([, q]) => shelfData("apps:coll:" + q + regionId, () => itunesRich(q, 4), redraw));
   const go = q => () => searchFor(q);
   return storeLayout([
     ["🏠 Discover", scrollToId("apps-top"), true], ["🏆 Top charts", scrollToId("apps-chart")], ["🎮 Games", () => { location.href = "search.html?tab=games"; }], ["🧩 Alternatives", () => { location.href = "search.html?tab=alternatives"; }],
     "Categories", ...APP_CATEGORIES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
-    el("div", { className: "store-head", id: "apps-top" }, el("h2", { textContent: "Apps and games" }), el("span", { textContent: "Google Play, the App Store, Steam, the Microsoft Store, F-Droid and Flathub" }), filterButton("apps", "head-filters")),
+    el("span", { id: "apps-top" }),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "apps")),
-    storeHero(steam.items.length ? steam : free, "app"),
-    storeShelf(helper ? "Top free iPhone apps" : "Popular free apps", free, "app", go("free apps")),
-    helper && storeShelf("Top sellers on Steam", steam, "app game", go("games")),
+    storyCard(story),
+    posterShelf("Editors' choice", editors, go("best rated apps")),
+    list3Shelf(helper ? "Top free iPhone apps" : "Popular free apps", free, go("free apps")),
+    collectionShelf("Collections", colls, go),
+    helper && wideShelf("Top sellers on Steam", steam, go("games")),
+    storeShelf("Top paid apps", paid, "app", go("paid apps")),
     storeChart("apps", helper ? ["Top free", "Top paid", "Steam"] : ["Free", "Photo"], helper ? [free, paid, steam] : [free, paid], "app", redraw),
     helper && storeShelf("Open source on Flathub", oss, "app", go("open source apps")));
 }
@@ -269,6 +334,11 @@ async function steamTop() {
     price: a.final_price ? `$${(a.final_price / 100).toFixed(2)}` : "Free to play", free: !a.final_price, game: true, developer: "Steam",
     platforms: Object.entries({ Windows: a.windows_available, Mac: a.mac_available, Linux: a.linux_available }).filter(([, on]) => on).map(([p]) => p) }, "Steam")).filter(Boolean);
 }
+
+// Each store opens with the area's start page (headline, sections, search, category tiles), then its shelves.
+const appStore = () => el("div", { className: "store-page" }, startPage(topicById("apps"), APP_CATEGORIES), appStoreBody());
+const gameStore = () => el("div", { className: "store-page" }, startPage(topicById("games"), GAME_GENRES), gameStoreBody());
+const altStore = () => el("div", { className: "store-page" }, startPage(topicById("opensource"), LANDINGS.opensource.cats), altStoreBody());
 
 // The game store, laid out like Steam's front page: featured banners, "On sale", "Top sellers", "New & trending", genres.
 // Steam's own lists need Unitex Helper; CheapShark's deals across Steam, GOG, Epic and Humble work from any website.
@@ -281,7 +351,7 @@ async function steamList(key) {
   return (d[key]?.items || []).filter(a => a.name && !/^steam (deck|frame|machine|controller)/i.test(a.name)).map(a => ({ title: a.name, url: `https://store.steampowered.com/app/${a.id}/`, image: a.header_image || a.small_capsule_image, banner: a.large_capsule_image || a.header_image,
     sub: a.discount_percent ? `-${a.discount_percent}% · was ${cur(a.original_price)}` : (a.release_date ? new Date(a.release_date * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""), price: cur(a.final_price) }));
 }
-function gameStore() {
+function gameStoreBody() {
   const redraw = () => { if (!query && topicId === "games" && modeOn) drawCards(); };
   const helper = !!helperVersion(), go = q => () => searchFor(q);
   const shark = k => shelfData("games:shark:" + k, () => sharkDeals(k).then(l => l.map(gameTile)), redraw);
@@ -291,7 +361,7 @@ function gameStore() {
   return storeLayout([
     ["🏠 Discover", scrollToId("games-top"), true], ["🏆 Top charts", scrollToId("games-chart")], ["🏷️ On sale", go("games on sale")], ["🆓 Free to play", go("free games")], ["🤝 Co-op", go("co-op games")],
     "Genres", ...GAME_GENRES.map(([e, name, q]) => [`${e} ${name}`, go(q)])],
-    el("div", { className: "store-head", id: "games-top" }, el("h2", { textContent: "Games" }), el("span", { textContent: helper ? "Steam, GOG, Epic, Humble, Google Play and the App Store" : "Prices across Steam, GOG, Epic and Humble" }), filterButton("games", "head-filters")),
+    el("span", { id: "games-top" }),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "games")),
     storeHero(best.items.length ? best : sale, "app game"),
     storeShelf("On sale now", sale, "app game", go("games on sale"), false),
@@ -310,19 +380,14 @@ function altShelfFor(product) {
   const e = ALTERNATIVES.find(x => x.names.some(n => n.toLowerCase() === product.toLowerCase()));
   return e ? { state: "done", items: e.alts.map(altTile) } : null;
 }
-function altStore() {
+function altStoreBody() {
   const redraw = () => { if (!query && topicId === "opensource" && modeOn) drawCards(); };
   const helper = !!helperVersion(), go = q => () => searchFor(q);
-  const hero = el("form", { className: "alt-hero", onsubmit(e) { e.preventDefault(); const v = formValues(this); if (v.replaces) heroSubmit("opensource", v); } },
-    el("h2", { textContent: "Find a free alternative to any app" }),
-    el("p", { textContent: "Open-source replacements for the software you pay for, with licences and where they run." }),
-    el("div", { className: "alt-box" }, heroInput("replaces", "Which app do you want to replace? e.g. Photoshop, Notion, Spotify"), filterButton("opensource", "alt-filters"), el("button", { type: "submit", className: "alt-btn", textContent: "Find alternatives" })),
-    el("div", { className: "alt-popular" }, el("b", { textContent: "Popular:" }), ...ALT_POPULAR.map(n => el("button", { type: "button", textContent: n, onclick: go(`open source alternative to ${n}`) }))));
   const seenAlt = new Set(), popular = { state: "done", items: ALTERNATIVES.map(e => e.alts[0]).filter(a => !seenAlt.has(a[0]) && seenAlt.add(a[0])).slice(0, 18).map(altTile) };
   const oss = helper ? shelfData("alts:flathub", () => APP_SOURCES.flathub.run("productivity").then(l => l.map(appTile)), redraw) : null;
   const shelves = [["Instead of Photoshop", "Photoshop"], ["Instead of Microsoft Office", "Microsoft Office"], ["Instead of Slack", "Slack"], ["Instead of Notion", "Notion"], ["Instead of Spotify", "Spotify"]]
     .map(([t, p]) => { const row = altShelfFor(p); return row && storeShelf(t, row, "app", go(`open source alternative to ${p}`)); });
-  return el("div", { className: "alt-page" }, hero,
+  return el("div", { className: "alt-page" },
     el("nav", { className: "site-circles", ariaLabel: "Categories" }, ...LANDINGS.opensource.cats.map(([e, label, q]) => el("button", { type: "button", onclick: go(q) }, el("span", { className: "circle", textContent: e, ariaHidden: "true" }), el("span", { textContent: label })))),
     tilesRow("Recently viewed", viewedItems().filter(s => s.topic === "opensource")),
     storeShelf("Popular open-source apps", popular, "app", go("open source apps")),
@@ -390,84 +455,6 @@ let heroDeal = "buy"; // realestate.com.au's Buy / Rent / Share tab
 const CAR_MAKES_TOP = ["Toyota", "Mazda", "Ford", "Hyundai", "Kia", "Mitsubishi", "Volkswagen", "Nissan", "Subaru", "Holden", "Honda", "Tesla", "BMW", "Mercedes-Benz", "Audi", "MG", "BYD", "Isuzu", "Suzuki", "Lexus", "Jeep", "Volvo", "Land Rover", "Porsche"];
 const AU_STATE_NAMES = [["NSW", "New South Wales"], ["VIC", "Victoria"], ["QLD", "Queensland"], ["WA", "Western Australia"], ["SA", "South Australia"], ["TAS", "Tasmania"], ["ACT", "ACT"], ["NT", "Northern Territory"]];
 
-const SITE_HEROES = {
-  // realestate.com.au: a rounded photo with "Properties to call home" and a white card: tabs, a suburb box, Search.
-  houses(topic, L) {
-    const tabs = [["buy", "Buy"], ["rent", "Rent"], ["share", "Share"]];
-    const f = el("form", { className: "rea-card", onsubmit(e) { e.preventDefault(); heroSubmit("houses", { deal: heroDeal, ...formValues(this) }); } },
-      el("div", { className: "rea-tabs", role: "tablist" }, ...tabs.map(([d, t]) => el("button", { type: "button", role: "tab", className: d === heroDeal ? "on" : "", ariaSelected: String(d === heroDeal), textContent: t, onclick() { heroDeal = d; for (const b of this.parentElement.children) { b.classList.toggle("on", b === this); b.ariaSelected = String(b === this); } } }))),
-      el("div", { className: "rea-row" }, el("span", { className: "rea-icon", textContent: "⌕", ariaHidden: "true" }), heroWhere("Search suburb, postcode or street address", recentPlaces()[0] || ""),
-        filterButton("houses", "rea-filters"), el("button", { type: "submit", className: "rea-search", textContent: "Search" })));
-    // A drawn sky and rooftops (realestate.com.au uses a suburb photo; a listing's own photo is often an empty kitchen).
-    return el("section", { className: "rea-hero" }, el("h2", { textContent: "Properties to call home" }), f);
-  },
-  // SEEK: a navy band, "What" and "Where" boxes and the pink SEEK button.
-  jobs() {
-    return el("form", { className: "seek-hero", onsubmit(e) { e.preventDefault(); heroSubmit("jobs", formValues(this)); } },
-      el("label", { className: "seek-field" }, el("span", { textContent: "What" }), heroInput("what", "Enter keywords, e.g. barista or registered nurse")),
-      el("label", { className: "seek-field" }, el("span", { textContent: "Where" }), heroWhere("Enter suburb, city, or region", recentPlaces()[0] || "")),
-      el("button", { type: "submit", className: "seek-btn", textContent: "SEEK" }),
-      el("div", { className: "seek-more" }, filterButton("jobs", "link")));
-  },
-  // carsales: a car photo with a white "Find your next car" card: Make, Model, Body type, Location, and a blue button.
-  cars(topic, L) {
-    const photo = rowPicture(topic, L.rows()[0][1]);
-    const sel = (name, first, opts) => el("select", { name, className: "cs-select", ariaLabel: first }, el("option", { value: "", textContent: first }), ...opts.map(o => Array.isArray(o) ? el("option", { value: o[0], textContent: o[1] }) : el("option", { value: o, textContent: o })));
-    const card = el("form", { className: "cs-card", onsubmit(e) { e.preventDefault(); const v = formValues(this); heroSubmit("cars", { deal: "used", ...v, where: v.state ? AU_STATE_NAMES.find(s => s[0] === v.state)?.[1] : undefined }); } },
-      el("div", { className: "cs-head" }, el("h2", { textContent: "Find your next car" }), filterButton("cars", "link")),
-      el("div", { className: "cs-row" },
-        el("label", {}, el("span", { textContent: "Make" }), sel("make", "All makes", CAR_MAKES_TOP)),
-        el("label", {}, el("span", { textContent: "Model" }), heroInput("model", "All models", "cs-select")),
-        el("label", {}, el("span", { textContent: "Body type" }), sel("body", "All body types", ["Sedan", "Hatchback", "SUV", "Ute", "Wagon", "Van", "Coupe", "Convertible"])),
-        el("label", {}, el("span", { textContent: "Location" }), sel("state", "All states", AU_STATE_NAMES)),
-        el("button", { type: "submit", className: "cs-btn", textContent: "Show cars" })),
-      // carsales' row of car shapes under the boxes.
-      el("div", { className: "cs-bodies" }, ...[["🚗", "New cars", "new car for sale"], ["⚡", "EV", "used electric car for sale"], ["🔋", "Hybrid", "used hybrid car for sale"], ["🚙", "SUV", "used suv for sale"],
-        ["🛻", "Ute", "used ute for sale"], ["🚘", "Hatch", "used hatchback for sale"], ["🏔️", "Offroad 4x4", "used 4x4 for sale"]].map(([e, t, q]) =>
-        el("button", { type: "button", className: "cs-body", onclick: () => searchFor(q) }, el("span", { className: "cs-body-icon", textContent: e, ariaHidden: "true" }), t))));
-    return el("section", { className: "cs-hero" }, el("div", { className: "cs-photo", style: bg(photo) }), card);
-  },
-  // Gumtree: a dark purple bar with "I'm looking for…" and a green button, then its category links.
-  marketplace(topic, L, cats) {
-    return el("section", { className: "gt-hero" },
-      el("form", { className: "gt-search", onsubmit(e) { e.preventDefault(); heroSubmit("marketplace", formValues(this)); } },
-        heroInput("what", "I'm looking for…"), heroWhere("Where", recentPlaces()[0] || ""), filterButton("marketplace", "gt-filters"), el("button", { type: "submit", className: "gt-btn", textContent: "Search" })),
-      el("nav", { className: "gt-cats" }, ...cats.map(([, label, q]) => el("button", { type: "button", textContent: label, onclick: () => searchFor(q) }))));
-  },
-  // taste.com.au: a light blue panel, "Find recipes, fast", a search box and Trending chips, food on either side.
-  recipes(topic, L, cats) {
-    const food = [rowPicture(topic, L.rows()[0][1]), rowPicture(topic, L.rows()[1][1])];
-    return el("section", { className: "taste-hero" },
-      food[0] && el("img", { className: "taste-food left", src: food[0], alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
-      food[1] && el("img", { className: "taste-food right", src: food[1], alt: "", referrerPolicy: "no-referrer", onerror() { this.remove(); } }),
-      el("form", { className: "taste-panel", onsubmit(e) { e.preventDefault(); heroSubmit("recipes", formValues(this)); } },
-        el("h2", { textContent: "Find recipes, fast" }),
-        el("div", { className: "taste-box" }, el("span", { textContent: "⌕", ariaHidden: "true" }), heroInput("what", "Search by recipe, ingredient or keyword")),
-        el("div", { className: "taste-trending" }, el("b", { textContent: "Trending" }), ...cats.slice(0, 4).map(([, t, q]) => el("button", { type: "button", textContent: t, onclick: () => searchFor(q) })), filterButton("recipes", "taste-filters"))));
-  },
-  // IMDb: black, a big featured picture with its title, and "Up next" beside it.
-  movies(topic, L) {
-    const shows = loadRow(topic, L.rows()[0][1]).items;
-    const [top, ...next] = shows;
-    if (!top) return el("section", { className: "imdb-hero skeleton" });
-    const poster = c => c.card.poster || c.image;
-    return el("section", { className: "imdb-hero" },
-      el("a", { className: "imdb-feature", href: top.url, style: bg(top.card.big || top.image), rel: "noopener" },
-        el("img", { className: "imdb-poster", src: poster(top), alt: "", referrerPolicy: "no-referrer" }),
-        el("span", { className: "imdb-feature-text" }, el("b", { textContent: top.card.name }), el("small", { textContent: [top.card.network, top.card.rating && `★ ${top.card.rating}`].filter(Boolean).join(" · ") }))),
-      el("div", { className: "imdb-next" }, el("h3", { textContent: "Up next" }),
-        ...next.slice(0, 3).map(c => el("a", { className: "imdb-next-item", href: c.url, rel: "noopener" },
-          el("img", { src: poster(c), alt: "", loading: "lazy", referrerPolicy: "no-referrer" }),
-          el("span", {}, el("b", { textContent: c.card.name }), el("small", { textContent: [c.card.network, (c.card.genres || []).slice(0, 2).join(", ")].filter(Boolean).join(" · ") }))))));
-  },
-  // Eventbrite: a big banner with stacked highlighted words, a search for what and where, then category circles.
-  events() {
-    return el("section", { className: "eb-hero" },
-      el("div", { className: "eb-banner" }, el("span", { className: "eb-kicker", textContent: "GET INTO IT" }), el("b", { textContent: "FROM LIVE MUSIC" }), el("b", { textContent: "TO WEEKEND MARKETS" })),
-      el("form", { className: "eb-search", onsubmit(e) { e.preventDefault(); heroSubmit("events", formValues(this)); } },
-        heroInput("what", "Search events"), heroWhere(recentPlaces()[0] || "Choose a location", recentPlaces()[0] || ""), filterButton("events", "eb-filters"), el("button", { type: "submit", className: "eb-btn", ariaLabel: "Search", textContent: "⌕" })));
-  },
-};
 // How each site shows its categories: Amazon's picture cards, Eventbrite's circles, IMDb's chips…
 const SITE_CATS = {
   shopping: "amazon", marketplace: null, houses: "pills", cars: null, jobs: "pills", recipes: "circles", movies: "imdb", events: "circles",
